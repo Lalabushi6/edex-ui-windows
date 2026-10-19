@@ -1,0 +1,5 @@
+{
+    "name": "Tron Disrupted",
+    "colors": { "r": 170, "g": 207, "b": 209, "black": "#000000", "light_black": "#05080d", "grey": "#1a2a2c" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "bar", "foreground": "#aacfd1", "background": "#05080d", "cursor": "#aacfd1", "selectionBackground": "rgba(170,207,209,0.3)" }
+}

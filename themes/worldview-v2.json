@@ -1,0 +1,7 @@
+{
+    "name": "Worldview v2.0",
+    "author": "Aniruddh",
+    "description": "A deep-space satellite operations terminal. Earth seen from orbit — abyssal black depths, ocean-blue panel chrome, and vivid teal-cyan readouts. Clean, global, alive.",
+    "colors": { "r": 0, "g": 210, "b": 190, "black": "#020c10", "light_black": "#041e2b", "grey": "#0a3545" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "bar", "foreground": "#00d2be", "background": "#041e2b", "cursor": "#00ffea", "selectionBackground": "rgba(0,210,190,0.25)" }
+}

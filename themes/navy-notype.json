@@ -1,0 +1,5 @@
+{
+    "name": "Navy Notype",
+    "colors": { "r": 20, "g": 119, "b": 205, "black": "#282a36", "light_black": "#222430", "grey": "#222430" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "block", "foreground": "#87b7cc", "background": "#222430", "cursor": "#87b7cc", "selectionBackground": "rgba(239,240,235,0.3)" }
+}

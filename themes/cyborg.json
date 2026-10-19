@@ -1,0 +1,5 @@
+{
+    "name": "Cyborg",
+    "colors": { "r": 95, "g": 215, "b": 215, "black": "#011f1f", "light_black": "#0a3333", "grey": "#034747" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "block", "foreground": "#a3c2c2", "background": "#0a3333", "cursor": "#5cffff", "selectionBackground": "#ffff5c" }
+}

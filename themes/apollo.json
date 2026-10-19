@@ -1,0 +1,5 @@
+{
+    "name": "Apollo",
+    "colors": { "r": 235, "g": 235, "b": 235, "black": "#000000", "light_black": "#191919", "grey": "#262827" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "block", "foreground": "#ebebeb", "background": "#191919", "cursor": "#ebebeb", "selectionBackground": "rgba(235,235,235,0.3)" }
+}
