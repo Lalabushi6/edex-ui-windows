@@ -49,11 +49,42 @@ function layout() {
   };
 }
 
+// Panels are placed immediately, but their contents are built one or two at
+// a time in idle frames, so startup never spends one long block building
+// every widget at once.
+const queue = [];
+let pumping = null;
+const idle = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ timeRemaining: () => 8, didTimeout: true }), 16));
+
+function build(job) {
+  const { id, def, panel, entry } = job;
+  if (entry.cancelled) return;
+  try { entry.instance = def.create(panel) || null; } catch (e) {
+    console.error(`widget ${id} failed`, e);
+    panel.body.append(h("div", { class: "empty" }, "Widget failed to load"));
+  }
+  entry.pending = false;
+}
+
+function pump() {
+  if (pumping || !queue.length) return;
+  pumping = idle((deadline) => {
+    pumping = null;
+    let built = 0;
+    while (queue.length && (built === 0 || deadline.timeRemaining() > 6)) {
+      build(queue.shift());
+      built++;
+    }
+    pump();
+  }, { timeout: 250 });
+}
+
 function render() {
   const plan = layout();
   const wanted = new Set([...plan.left, ...plan.right]);
   for (const [id, entry] of mounted) {
     if (wanted.has(id)) continue;
+    entry.cancelled = true;
     try { entry.instance?.destroy?.(); } catch (e) { console.error(e); }
     entry.el.remove();
     mounted.delete(id);
@@ -65,15 +96,15 @@ function render() {
       if (!entry) {
         const def = defs.get(id);
         const panel = createPanel(def);
-        let instance = null;
-        try { instance = def.create(panel) || null; } catch (e) { console.error(`widget ${id} failed`, e); panel.body.append(h("div", { class: "empty" }, "Widget failed to load")); }
-        entry = { el: panel.el, instance };
+        entry = { el: panel.el, instance: null, pending: true, cancelled: false };
         mounted.set(id, entry);
         wireDrag(panel);
+        queue.push({ id, def, panel, entry });
       }
       col.append(entry.el); // append moves existing nodes into order
     }
   }
+  pump();
 }
 
 function saveOrder() {

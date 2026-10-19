@@ -304,3 +304,14 @@ select.input option { background: var(--bg); color: var(--c); }
 .switch:checked::after { transform: translateX(1.15rem); background: var(--c); }
 
 input[type="range"] { accent-color: var(--c); }
+.btn.sm { padding: .1rem .45rem; font-size: .72rem; }
+
+/* Eco profile (and the OS "reduce motion" preference): decorative
+   transitions and glows off, so idle repaints stay near zero. */
+html.eco .panel { animation: none; }
+html.eco .core > i, html.eco .bar > i, html.eco .dots > i { transition: none; }
+html.eco .dots > i.on { box-shadow: none; }
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .core > i, .bar > i, .dots > i { transition: none; }
+}

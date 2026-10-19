@@ -37,8 +37,29 @@
 .status-sep { width: 1px; height: 1.3rem; background: var(--c-30); margin: 0 .3rem; }
 .status-item { display: inline-flex; align-items: center; gap: .3rem; padding: 0 .35rem; height: 1.9rem; font-size: .95rem; color: var(--c-90); border: 1px solid transparent; background: transparent; white-space: nowrap; }
 button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
-.status-clock { font-size: 1.2rem; letter-spacing: .1em; min-width: 4.6rem; justify-content: center; }
+.status-clock { font-size: 1.2rem; letter-spacing: .1em; min-width: 4.6rem; justify-content: center; cursor: pointer; }
+.status-clock.open, .icon-btn.open { background: var(--c-12); border-color: var(--c-35); }
 .vol-slider { width: 5.5rem; height: 1rem; }
+
+/* ── Popovers (brightness, calendar) ────────────────────────────────────── */
+.popover { position: fixed; z-index: 400; padding: .55rem .65rem; border: 1px solid var(--c-50); background: var(--bg); box-shadow: 0 12px 40px rgb(0 0 0 / .7); }
+.bright-pop { display: flex; align-items: center; gap: .55rem; }
+.bright-pop .ico { width: 1.2rem; height: 1.2rem; color: var(--c-70); }
+.bright-slider { width: 11rem; }
+.bright-label { min-width: 2.6rem; text-align: right; font-variant-numeric: tabular-nums; font-size: .9rem; }
+
+.calendar { width: 17.5rem; user-select: none; }
+.cal-headbar { display: flex; align-items: center; gap: .3rem; margin-bottom: .45rem; }
+.cal-title { flex: 1; text-align: center; font-family: var(--font-ui); font-size: .85rem; letter-spacing: .14em; }
+.cal-grid { display: grid; grid-template-columns: 1.6rem repeat(7, 1fr); gap: 2px; text-align: center; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.cal-head { font-size: .7rem; color: var(--c-50); padding: .15rem 0; }
+.cal-wk { font-size: .66rem; color: var(--c-35); align-self: center; }
+.cal-day { padding: .28rem 0; border: 1px solid transparent; }
+.cal-day.weekend { color: var(--c-70); }
+.cal-day.other { color: var(--c-30); }
+.cal-day.today { background: var(--c); color: var(--bg); font-weight: 600; }
+.cal-day:not(.today):hover { border-color: var(--c-35); }
+.cal-footer { margin-top: .5rem; padding-top: .4rem; border-top: 1px solid var(--c-20); font-size: .74rem; color: var(--c-70); text-align: center; }
 
 /* ── Dock ───────────────────────────────────────────────────────────────── */
 #dock {
@@ -117,7 +138,8 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 
 .cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(1.05rem, 1fr)); gap: 2px; height: 2.2rem; margin: .35rem 0; align-items: end; }
 .core { position: relative; height: 100%; background: var(--c-12); }
-.core > i { position: absolute; inset: auto 0 0 0; height: 0; background: var(--c-70); transition: height .45s ease; }
+/* Scaled rather than resized, so the per-core animation stays on the compositor. */
+.core > i { position: absolute; inset: 0; background: var(--c-70); transform: scaleY(0); transform-origin: 50% 100%; transition: transform .45s ease; }
 
 .dots { display: grid; grid-template-columns: repeat(40, 1fr); gap: 2px; margin: .4rem 0; }
 .dots > i { aspect-ratio: 1; background: var(--c-12); border-radius: 50%; transition: background .4s; }
@@ -140,6 +162,28 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .top-table tr:hover td { background: var(--c-06); }
 
 .net-graph-legend { display: flex; justify-content: space-between; font-size: .76rem; color: var(--c-70); }
+
+/* Weather */
+.wx-now { display: flex; align-items: center; gap: .6rem; }
+.wx-icon .ico { width: 2.4rem; height: 2.4rem; color: var(--c); }
+.wx-temp { font-family: var(--font-ui); font-size: 1.9rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.wx-text { display: flex; flex-direction: column; min-width: 0; gap: .1rem; }
+.wx-cond { font-size: .9rem; letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-detail { font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-days { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .3rem; margin-top: .55rem; }
+.wx-day { display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .3rem .1rem; border: 1px solid var(--c-12); font-size: .74rem; white-space: nowrap; }
+.wx-day .ico { width: 1.25rem; height: 1.25rem; color: var(--c-90); }
+
+/* Timer / stopwatch */
+.timer-modes, .timer-presets { display: flex; gap: .3rem; flex-wrap: wrap; }
+.timer-face { font-family: var(--font-ui); font-size: clamp(1.6rem, 13cqi, 3rem); text-align: center; letter-spacing: .08em; line-height: 1.1; padding: .35rem 0 .25rem; font-variant-numeric: tabular-nums; }
+.timer-face.done { color: var(--warn); }
+.timer-bar { margin-bottom: .45rem; }
+.timer-bar > i { transition: none; }
+.timer-actions { display: flex; gap: .4rem; justify-content: center; margin-top: .45rem; }
+.timer-actions .btn { min-width: 5.5rem; }
+.timer-laps { display: flex; flex-direction: column; margin-top: .4rem; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.timer-lap { display: grid; grid-template-columns: 4rem 1fr auto; gap: .4rem; padding: .12rem 0; border-bottom: 1px solid var(--c-06); }
 
 .globe-endpoint { display: flex; justify-content: space-between; gap: .5rem; font-weight: 300; font-size: .9rem; letter-spacing: .08em; color: var(--c-50); }
 .globe-endpoint .v { color: var(--c-50); }

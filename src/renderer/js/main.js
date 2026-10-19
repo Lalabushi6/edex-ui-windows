@@ -3,8 +3,9 @@
 import { $ } from "./core/dom.js";
 import * as settings from "./core/settings.js";
 import { applyTheme } from "./core/theme.js";
-import { setWindowVisible } from "./core/poll.js";
-import { emit } from "./core/bus.js";
+import { setWindowVisible, configure, profile, onSchedulingChange } from "./core/poll.js";
+import { onBattery } from "./core/live.js";
+import { emit, markBooted } from "./core/bus.js";
 import { command, initHotkeys } from "./core/commands.js";
 import { toast, cleanError, closeMenu } from "./core/ui.js";
 import { mountWidgets } from "./widgets/registry.js";
@@ -12,6 +13,7 @@ import "./widgets/system.js";
 import "./widgets/tools.js";
 import "./widgets/globe.js";
 import "./widgets/media.js";
+import "./widgets/utility.js";
 import { player } from "./media/player.js";
 import { Workspace } from "./workspace/workspace.js";
 import { initTopbar } from "./shell/topbar.js";
@@ -29,6 +31,15 @@ function applyLayout() {
   const app = $("#app");
   app.classList.toggle("no-left", !settings.get("showLeftColumn"));
   app.classList.toggle("no-right", !settings.get("showRightColumn"));
+}
+
+function applyPerformance() {
+  configure({ profile: settings.get("perfProfile") || "auto", throttle: settings.get("throttleUnfocused") !== false });
+}
+
+// Eco also switches off decorative CSS animation (scanlines, glows, pulses).
+function applyProfileClass() {
+  document.documentElement.classList.toggle("eco", profile().name === "eco");
 }
 
 function toggleLauncher(opts) {
@@ -69,6 +80,14 @@ async function registerCommands() {
   cmd("app.devtools", "Toggle developer tools", () => api.app.devtools(), { keys: "Ctrl+Shift+I", icon: "code" });
   cmd("app.quit", "Quit eDEX", () => api.app.quit(), { icon: "close", keywords: "exit close" });
   cmd("apps.refresh", "Refresh installed apps", async () => { await loadAppsCached(true); dock?.refresh(); toast("App list refreshed", { level: "ok" }); }, { icon: "apps", keywords: "rescan start menu" });
+  cmd("shell.snip", "Screen snip", () => api.shell.snip().catch((e) => toast(cleanError(e), { level: "warn" })), { icon: "snip", keywords: "screenshot capture snipping tool print screen" });
+  cmd("perf.cycle", "Cycle performance profile", () => {
+    const order = ["auto", "performance", "balanced", "eco"];
+    const next = order[(order.indexOf(settings.get("perfProfile") || "auto") + 1) % order.length];
+    settings.set({ perfProfile: next });
+    toast(`Performance profile: ${next[0].toUpperCase()}${next.slice(1)}`, { timeout: 1800 });
+  }, { icon: "gauge", keywords: "eco battery power saver speed performance" });
+  cmd("settings.performance", "Performance settings", () => openSettings("performance"), { icon: "gauge", keywords: "eco gpu throttle resource usage" });
   cmd("taskmgr.open", "Windows Task Manager", () => api.shell.taskManager().catch((e) => toast(cleanError(e), { level: "warn" })), { icon: "process" });
   cmd("player.open", "Media player", () => workspace.openMedia(), { keys: "Ctrl+Shift+M", icon: "audio", keywords: "music video playlist play songs" });
   cmd("player.toggle", "Media player: play / pause", () => player().toggle(), { icon: "playpause", keywords: "music pause resume" });
@@ -102,8 +121,13 @@ async function main() {
 
   settings.watch(["uiScale", "showLeftColumn", "showRightColumn"], applyLayout);
   settings.watch("theme", (id) => applyTheme(id).catch(() => {}));
-  api.app.onVisibility(({ visible }) => {
-    setWindowVisible(visible);
+  onSchedulingChange(applyProfileClass);
+  applyPerformance();
+  settings.watch(["perfProfile", "throttleUnfocused"], applyPerformance);
+  // Auto profile: Eco on battery or with Windows battery saver on.
+  onBattery((b) => configure({ battery: !!b.hasBattery && (!b.ac || !!b.saver) }));
+  api.app.onVisibility(({ visible, focused }) => {
+    setWindowVisible(visible, focused);
     if (!visible) closeMenu();
   });
   api.app.onNotice(({ level, message }) => toast(message, { level, timeout: 6000 }));
@@ -125,6 +149,7 @@ async function main() {
   window.addEventListener("drop", (e) => e.preventDefault());
 
   await boot;
+  markBooted();
   showGreeting($("#workspace"));
   workspace.focus();
 }

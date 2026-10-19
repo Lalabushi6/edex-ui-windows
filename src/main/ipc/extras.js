@@ -4,8 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const si = require("systeminformation");
-const { app, clipboard } = require("electron");
+const { app, clipboard, Notification } = require("electron");
 const { cached } = require("../lib/cache");
 const { JsonStore } = require("../lib/store");
 const { handle, asString } = require("./util");
@@ -48,8 +47,20 @@ const PING_HOSTS = [
   { city: "Moscow", lat: 55.8, lon: 37.6, url: "https://www.rbc.ru" }
 ];
 
-function withTimeout(promise, ms, fallback) {
-  return Promise.race([promise.catch(() => fallback), new Promise((r) => setTimeout(() => r(fallback), ms))]);
+// Round-trip time to a site: a HEAD request timed to the response headers.
+function checkSite(url, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const start = process.hrtime.bigint();
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+    const req = https.request(url, { method: "HEAD", timeout: timeoutMs, headers: { "User-Agent": "eDEX-UI" } }, (res) => {
+      res.resume();
+      done(Number(process.hrtime.bigint() - start) / 1e6);
+    });
+    req.on("error", () => done(null));
+    req.on("timeout", () => { req.destroy(); done(null); });
+    req.end();
+  });
 }
 
 function registerNetwork({ settings }) {
@@ -69,30 +80,107 @@ function registerNetwork({ settings }) {
   }, 15 * 60 * 1000);
 
   const pings = cached(() => Promise.all(PING_HOSTS.map(async (h) => {
-    const r = await withTimeout(si.inetChecksite(h.url), 8000, null);
-    return { city: h.city, lat: h.lat, lon: h.lon, ms: r && r.ok !== false && r.ms >= 0 ? r.ms : null };
+    const ms = await checkSite(h.url);
+    return { city: h.city, lat: h.lat, lon: h.lon, ms: ms === null ? null : Math.round(ms) };
   })), 2 * 60 * 1000);
 
   const latency = cached(async () => {
-    const r = await withTimeout(si.inetChecksite("https://www.google.com"), 8000, null);
-    return r && r.ms >= 0 ? r.ms : null;
+    const ms = await checkSite("https://www.google.com");
+    return ms === null ? null : Math.round(ms);
   }, 30000);
+
+  // Current conditions and a short forecast from Open-Meteo (no API key),
+  // for the coordinates of the public-IP lookup.
+  const weather = cached(async () => {
+    const g = await geo();
+    const q = new URLSearchParams({
+      latitude: g.lat.toFixed(3),
+      longitude: g.lon.toFixed(3),
+      current: "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day",
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+      timezone: "auto",
+      forecast_days: "4"
+    });
+    const w = await fetchJson(`https://api.open-meteo.com/v1/forecast?${q}`);
+    if (!w?.current) throw new Error("Weather lookup failed");
+    return {
+      place: [g.city, g.country].filter(Boolean).join(", "),
+      current: {
+        temp: w.current.temperature_2m, feels: w.current.apparent_temperature, humidity: w.current.relative_humidity_2m,
+        code: w.current.weather_code, wind: w.current.wind_speed_10m, day: w.current.is_day === 1
+      },
+      daily: (w.daily?.time || []).map((date, i) => ({
+        date, code: w.daily.weather_code[i], max: w.daily.temperature_2m_max[i], min: w.daily.temperature_2m_min[i],
+        rain: w.daily.precipitation_probability_max?.[i] ?? null
+      }))
+    };
+  }, 20 * 60 * 1000);
 
   handle("net:geo", () => (allowed() ? geo().catch(() => null) : null));
   handle("net:pings", () => (allowed() ? pings() : []));
   handle("net:latency", () => (allowed() ? latency() : null));
+  handle("net:weather", () => (allowed() ? weather().catch(() => null) : null));
+}
+
+// ── Timer alarms ────────────────────────────────────────────────────────────
+// Countdown timers are scheduled here rather than in the page: a hidden
+// window's timers are throttled (up to a minute late), the main process's
+// are not. When one fires, a Windows notification is shown and the
+// interface is told so it can play the alarm.
+function registerAlarms({ windows }) {
+  const alarms = new Map(); // id -> timeout
+  const fire = (id, label) => {
+    alarms.delete(id);
+    windows.send("alarm:fired", { id, label });
+    try {
+      if (Notification.isSupported()) {
+        const n = new Notification({ title: "eDEX-UI timer", body: label ? `${label} — time is up` : "Time is up", silent: false });
+        n.on("click", () => windows.show());
+        n.show();
+      }
+    } catch (_) {}
+  };
+  handle("alarm:set", (_e, opts = {}) => {
+    const id = asString(opts.id, "alarm id", 64);
+    const ms = Math.round(Number(opts.inMs));
+    if (!Number.isFinite(ms) || ms < 0 || ms > 7 * 86400000) throw new Error("Invalid alarm time");
+    clearTimeout(alarms.get(id));
+    const label = typeof opts.label === "string" ? opts.label.slice(0, 80) : "";
+    alarms.set(id, setTimeout(() => fire(id, label), ms));
+    return true;
+  });
+  handle("alarm:clear", (_e, id) => {
+    const key = asString(id, "alarm id", 64);
+    clearTimeout(alarms.get(key));
+    return alarms.delete(key);
+  });
+  return { stop() { for (const t of alarms.values()) clearTimeout(t); alarms.clear(); } };
 }
 
 // ── Clipboard history ───────────────────────────────────────────────────────
 // Text only and in memory only: nothing copied is ever written to disk.
-function registerClipboard({ settings, windows }) {
+function registerClipboard({ settings, windows, bridge }) {
   let history = [];
   let last = "";
   let timer = null;
+  let lastSeq = null;
+  let seqSupported = true;
 
   const broadcast = () => windows.send("clip:changed", history);
 
-  const poll = () => {
+  // The clipboard's change counter is checked first; the text is only read
+  // when it moved. Reading the clipboard can block on apps that render
+  // their data lazily, so it should not happen every second for nothing.
+  const poll = async () => {
+    if (seqSupported) {
+      let seq = null;
+      try { seq = await bridge.call("clipSeq", {}, 3000); } catch (_) { seqSupported = false; }
+      if (seq === "0") seqSupported = false;
+      else if (seq !== null) {
+        if (seq === lastSeq) return;
+        lastSeq = seq;
+      }
+    }
     let text = "";
     try { text = clipboard.readText(); } catch (_) { return; }
     if (!text || text === last || text.length > 100000) return;
@@ -107,7 +195,7 @@ function registerClipboard({ settings, windows }) {
     timer = null;
     if (settings.get("clipboardHistory")) {
       try { last = clipboard.readText(); } catch (_) {}
-      timer = setInterval(poll, 1000);
+      timer = setInterval(() => { poll().catch(() => {}); }, 1000);
     } else if (history.length) {
       history = [];
       broadcast();
@@ -309,4 +397,4 @@ function registerThemes() {
   });
 }
 
-module.exports = { registerNetwork, registerClipboard, registerNotes, registerThemes, normalizeTheme };
+module.exports = { registerNetwork, registerClipboard, registerNotes, registerThemes, registerAlarms, normalizeTheme };

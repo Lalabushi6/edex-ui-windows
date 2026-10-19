@@ -6,9 +6,18 @@ const SOUNDS = ["alarm", "denied", "error", "expand", "folder", "granted", "info
 const GAIN = { stdin: 0.35, stdout: 0.3, keyboard: 0.6, scan: 0.5, theme: 0.6 };
 
 let ctx = null;
+let suspendTimer = null;
 const buffers = new Map();
 const loading = new Map();
 const lastPlayed = new Map();
+
+// A running AudioContext keeps Windows' audio engine mixing silence (a
+// constant trickle of CPU), so it is suspended a few seconds after the last
+// sound and resumed on the next one.
+function scheduleSuspend() {
+  clearTimeout(suspendTimer);
+  suspendTimer = setTimeout(() => { ctx?.suspend().catch(() => {}); }, 4000);
+}
 
 function load(name) {
   if (buffers.has(name)) return Promise.resolve(buffers.get(name));
@@ -31,8 +40,10 @@ export async function play(name) {
   if (now - (lastPlayed.get(name) || 0) < 45) return;
   lastPlayed.set(name, now);
   try {
-    ctx = ctx || new AudioContext();
+    ctx = ctx || new AudioContext({ latencyHint: "playback" });
+    clearTimeout(suspendTimer);
     if (ctx.state === "suspended") await ctx.resume();
+    scheduleSuspend();
     const buffer = await load(name);
     if (!buffer) return;
     const source = ctx.createBufferSource();

@@ -12,7 +12,8 @@ const COLUMNS = [
   { key: "pid", label: "PID", width: "6rem", num: true },
   { key: "cpu", label: "CPU", width: "7rem", num: true },
   { key: "mem", label: "Memory", width: "8rem", num: true },
-  { key: "path", label: "Path", width: "38%" }
+  { key: "threads", label: "Threads", width: "6rem", num: true },
+  { key: "path", label: "Path", width: "34%" }
 ];
 
 export class ProcessesTab {
@@ -84,10 +85,32 @@ export class ProcessesTab {
 
   async refresh() {
     if (!this.el.classList.contains("active")) return;
-    const data = await api.sys.processes();
+    const data = await api.sys.processes({ paths: true });
     this.list = data.list.filter((p) => p.pid !== 0);
-    setText(this.stats, `${this.list.length} processes`);
+    setText(this.stats, `${this.list.length} processes${data.threads ? ` · ${data.threads.toLocaleString()} threads` : ""}`);
     this.render();
+  }
+
+  // Rows are keyed by PID and reused between refreshes: only changed text is
+  // written and existing rows are moved, never rebuilt.
+  row(p) {
+    let r = this.rows.get(p.pid);
+    if (!r) {
+      const cells = [h("td"), h("td", { class: "num" }, String(p.pid)), h("td", { class: "num pm-heat" }), h("td", { class: "num" }), h("td", { class: "num" }), h("td", { class: "muted" })];
+      r = { tr: h("tr", { dataset: { pid: p.pid } }, ...cells), cells, heat: -1 };
+      this.rows.set(p.pid, r);
+    }
+    const [name, , cpu, mem, threads, path] = r.cells;
+    setText(name, p.name);
+    setText(cpu, `${p.cpu.toFixed(1)}%`);
+    const heat = Math.min(100, Math.round(p.cpu));
+    if (heat !== r.heat) { r.heat = heat; cpu.style.setProperty("--w", `${heat}%`); }
+    setText(mem, p.memBytes ? fmt.bytes(p.memBytes) : `${p.mem.toFixed(1)}%`);
+    setText(threads, p.threads ?? "");
+    setText(path, p.path || "");
+    if (r.tr.title !== (p.path || "")) r.tr.title = p.path || "";
+    r.tr.classList.toggle("sel", p.pid === this.selectedPid);
+    return r.tr;
   }
 
   render() {
@@ -98,17 +121,14 @@ export class ProcessesTab {
       const va = a[this.sort] ?? "", vb = b[this.sort] ?? "";
       return (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))) * dir;
     });
-    const frag = document.createDocumentFragment();
-    for (const p of rows.slice(0, 400)) {
-      const cpuCell = h("td", { class: "num pm-heat", style: { "--w": `${Math.min(100, p.cpu)}%` } }, `${p.cpu.toFixed(1)}%`);
-      frag.append(h("tr", { dataset: { pid: p.pid }, class: p.pid === this.selectedPid ? "sel" : "", title: p.path || "" },
-        h("td", null, p.name),
-        h("td", { class: "num" }, String(p.pid)),
-        cpuCell,
-        h("td", { class: "num" }, p.memRss ? fmt.bytes(p.memRss * 1024) : `${p.mem.toFixed(1)}%`),
-        h("td", { class: "muted" }, p.path || "")));
-    }
-    this.tbody.replaceChildren(frag);
+    this.rows ||= new Map();
+    const shown = rows.slice(0, 400);
+    const live = new Set(shown.map((p) => p.pid));
+    for (const pid of this.rows.keys()) if (!live.has(pid)) this.rows.delete(pid);
+    const trs = shown.map((p) => this.row(p));
+    const kids = this.tbody.children;
+    const same = kids.length === trs.length && trs.every((tr, i) => kids[i] === tr);
+    if (!same) this.tbody.replaceChildren(...trs);
     this.endBtn.disabled = !this.list.some((p) => p.pid === this.selectedPid);
   }
 

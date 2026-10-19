@@ -3,9 +3,10 @@
 // and links to reference cities with their latency. Falls back to a light
 // canvas point-cloud globe when WebGL is unavailable.
 import { h, setText } from "../core/dom.js";
-import { poll, appActive } from "../core/poll.js";
+import { poll, appActive, animationFps, onSchedulingChange, profile } from "../core/poll.js";
+import { onLive } from "../core/live.js";
 import { accent, accentHex, currentTheme } from "../core/theme.js";
-import { on } from "../core/bus.js";
+import { on, booted } from "../core/bus.js";
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { defineWidget } from "./registry.js";
@@ -78,8 +79,10 @@ async function createEncomGlobe(stage) {
     maxPins: 300,
     maxMarkers: 100
   });
-  // three r66 fixes the pixel ratio at construction; render crisply on HiDPI.
-  globe.renderer.devicePixelRatio = window.devicePixelRatio || 1;
+  // three r66 fixes the pixel ratio at construction; render crisply on HiDPI,
+  // but never above 2x (and 1x in Eco), which quadruples the fill cost.
+  const pixelRatio = () => Math.min(window.devicePixelRatio || 1, profile().name === "eco" ? 1 : 2);
+  globe.renderer.devicePixelRatio = pixelRatio();
   globe.renderer.setSize(w, height);
   stage.prepend(globe.domElement);
 
@@ -95,14 +98,16 @@ async function createEncomGlobe(stage) {
     try { globe.tick(); } catch (e) { console.warn("globe tick", e); }
     schedule();
   };
+  // Frame rate follows the performance profile and drops while eDEX is in
+  // the background; the loop stops entirely when hidden or scrolled away.
   function schedule() {
     if (timer || destroyed || !running || !visible || !appActive()) return;
-    timer = setTimeout(() => requestAnimationFrame(loop), 1000 / 30);
+    timer = setTimeout(() => requestAnimationFrame(loop), 1000 / animationFps(30));
   }
 
   const io = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; schedule(); });
   io.observe(stage);
-  const ro = new ResizeObserver(() => {
+  const resize = () => {
     const r = stage.getBoundingClientRect();
     if (!globe.camera || r.width < 20 || r.height < 20) return;
     globe.width = r.width;
@@ -110,14 +115,29 @@ async function createEncomGlobe(stage) {
     globe.camera.aspect = r.width / r.height;
     globe.camera.updateProjectionMatrix();
     globe.renderer.setSize(r.width, r.height);
-  });
+  };
+  const ro = new ResizeObserver(resize);
   ro.observe(stage);
-  const wake = poll(() => schedule(), 2000);
+  const offSched = onSchedulingChange(() => {
+    const ratio = pixelRatio();
+    if (globe.renderer.devicePixelRatio !== ratio) { globe.renderer.devicePixelRatio = ratio; resize(); }
+    schedule();
+  });
 
+  // ENCOM's marker removal animates connected splines back in and breaks if
+  // a marker is removed while still drawing, so markers are only rebuilt
+  // when the location or the set of reachable cities actually changes, and
+  // child markers go before the one they connect to.
+  let signature = "";
   const apply = (geo, cities) => {
+    const next = geo ? `${geo.lat},${geo.lon}|${cities.filter((c) => c.ms !== null).map((c) => c.city).join(",")}` : "";
+    if (next === signature) return;
+    signature = next;
     globe.pins.forEach((p) => p.remove());
     globe.pins = [];
-    globe.markers.forEach((m) => m.remove());
+    for (let i = globe.markers.length - 1; i >= 0; i--) {
+      try { globe.markers[i].remove(); } catch (_) {}
+    }
     globe.markers = [];
     if (!geo) return;
     globe.addPin(geo.lat, geo.lon, "", 1.2);
@@ -156,7 +176,7 @@ async function createEncomGlobe(stage) {
       clearTimeout(timer);
       io.disconnect();
       ro.disconnect();
-      wake.stop();
+      offSched();
       // Release the WebGL context now rather than waiting for GC; Chromium
       // caps live contexts and theme switches rebuild the globe.
       try {
@@ -241,15 +261,15 @@ function createPointCloudGlobe(stage) {
   };
   function schedule() {
     if (timer || destroyed || !visible || !appActive()) return;
-    timer = setTimeout(() => requestAnimationFrame(frame), 50);
+    timer = setTimeout(() => requestAnimationFrame(frame), 1000 / animationFps(20));
   }
-  const wake = poll(() => { last = performance.now(); schedule(); }, 2000);
+  const offSched = onSchedulingChange(() => { last = performance.now(); schedule(); });
   const offTheme = on("theme", draw);
   schedule();
   return {
     kind: "canvas",
     setData(g, c) { geo = g; cities = c; draw(); },
-    destroy() { destroyed = true; clearTimeout(timer); ro.disconnect(); io.disconnect(); wake.stop(); offTheme(); canvas.remove(); }
+    destroy() { destroyed = true; clearTimeout(timer); ro.disconnect(); io.disconnect(); offSched(); offTheme(); canvas.remove(); }
   };
 }
 
@@ -293,7 +313,12 @@ defineWidget({
       })();
       return building;
     };
-    build();
+    // Building the hex-tile globe is the single heaviest thing the interface
+    // does (~200 ms of main-thread work), so it waits until the boot sequence
+    // has finished and the page is idle.
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
+    building = booted.then(() => new Promise((resolve) => idle(resolve, { timeout: 2000 })))
+      .then(() => (disposed ? null : build()));
 
     // The original rebuilt the globe on theme change; colours are baked into
     // its textures, so do the same.
@@ -302,7 +327,7 @@ defineWidget({
       clearTimeout(themeTimer);
       themeTimer = setTimeout(() => building.then(build), 150);
     });
-    const offNet = on("net-state", (n) => stage.classList.toggle("offline", !n.online));
+    const offNet = onLive(({ net: n }) => stage.classList.toggle("offline", !n.online));
 
     const lookups = poll(async () => {
       if (!settings.get("allowNetworkGeolocation")) {

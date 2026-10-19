@@ -3,10 +3,12 @@
 import { h, setText } from "../core/dom.js";
 import { icon, LOGO_SVG } from "../core/icons.js";
 import { poll } from "../core/poll.js";
+import { onLive, onBattery } from "../core/live.js";
 import * as settings from "../core/settings.js";
-import { on } from "../core/bus.js";
-import { toast, contextMenu, cleanError } from "../core/ui.js";
+import { emit } from "../core/bus.js";
+import { toast, contextMenu, popover, cleanError } from "../core/ui.js";
 import { openLauncher } from "./launcher.js";
+import { buildCalendar } from "./calendar.js";
 import { runCommand } from "../core/commands.js";
 
 const api = window.edex;
@@ -55,27 +57,48 @@ export function initTopbar(root) {
   }, { passive: false });
   const volPoll = poll(() => api.media.volume().then(showVolume), 5000);
 
+  // Brightness (laptop panels only; hidden when the display has no control).
+  const brightBtn = h("button", { class: "icon-btn status-bright", type: "button", title: "Display brightness", hidden: true }, icon("sun"));
+  const brightness = brightnessControl(brightBtn);
+
+  const snipBtn = h("button", { class: "icon-btn", type: "button", title: "Screen snip (Win+Shift+S)", onclick: () => runCommand("shell.snip") }, icon("snip"));
+
   // Network + battery + clock
   const net = h("span", { class: "status-item", title: "Network" }, icon("wifi"));
-  on("net-state", (n) => {
+  let netSig = "";
+  const offNet = onLive(({ net: n }) => {
+    const sig = `${n.online}|${n.type}|${n.iface}|${n.ip4}`;
+    if (sig === netSig) return;
+    netSig = sig;
     net.replaceChildren(icon(n.online ? "wifi" : "offline"), h("span", null, n.online ? (n.type === "wireless" ? "WI-FI" : "LAN") : "OFFLINE"));
     net.title = n.online ? `${n.iface} · ${n.ip4}` : "Offline";
+    emit("net-state", n);
   });
   const battery = h("span", { class: "status-item", hidden: true });
-  const batPoll = poll(async () => {
-    const b = await api.sys.battery();
+  const offBattery = onBattery((b) => {
     battery.hidden = !b.hasBattery;
     if (!b.hasBattery) return;
     battery.replaceChildren(icon(b.charging ? "bolt" : "battery"), h("span", null, `${Math.round(b.percent)}%`));
-    battery.title = b.charging ? "Charging" : (b.ac ? "Plugged in" : "On battery");
+    battery.title = `${b.charging ? "Charging" : (b.ac ? "Plugged in" : "On battery")}${b.saver ? " · battery saver on" : ""}`;
     battery.classList.toggle("warn-text", !b.ac && b.percent <= 15);
-  }, 30000);
-  const clock = h("span", { class: "status-item status-clock" });
+  });
+  const clock = h("button", { class: "status-item status-clock", type: "button", title: "Calendar" });
+  let clockFmt = null;
+  let clockFmt24 = null;
   const clockPoll = poll(() => {
-    const now = new Date();
-    setText(clock, now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: !settings.get("clock24h") }));
-    clock.title = now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  }, 5000);
+    const h24 = !!settings.get("clock24h");
+    if (clockFmt24 !== h24) {
+      clockFmt = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: !h24 });
+      clockFmt24 = h24;
+    }
+    setText(clock, clockFmt.format(new Date()));
+  }, 5000, { fixed: true });
+  settings.watch("clock24h", () => clockPoll.kick());
+  clock.addEventListener("click", () => {
+    if (clock.classList.contains("open")) return;
+    clock.classList.add("open");
+    popover(clock, () => buildCalendar(), { className: "calendar-pop", onClose: () => clock.classList.remove("open") });
+  });
 
   const settingsBtn = h("button", { class: "icon-btn", type: "button", title: "Settings (Ctrl+,)", onclick: () => runCommand("settings.open") }, icon("gear"));
   const powerBtn = h("button", { class: "icon-btn", type: "button", title: "Power", onclick: (e) => powerMenu(e) }, icon("power"));
@@ -83,13 +106,69 @@ export function initTopbar(root) {
   root.append(brand, pill, h("div", { class: "status" },
     media("prev", "prev", "Previous track"), media("playpause", "playpause", "Play / pause"), media("next", "next", "Next track"),
     h("span", { class: "status-sep" }),
-    volIcon, volSlider, volLabel,
+    volIcon, volSlider, volLabel, brightBtn,
     h("span", { class: "status-sep" }),
-    net, battery, clock,
+    snipBtn, net, battery, clock,
     h("span", { class: "status-sep" }),
     settingsBtn, powerBtn));
 
-  return { stop() { volPoll.stop(); batPoll.stop(); clockPoll.stop(); } };
+  return { stop() { volPoll.stop(); brightness.stop(); offNet(); offBattery(); clockPoll.stop(); } };
+}
+
+// The brightness button opens a slider; the wheel over it nudges by 5%.
+// Writes go through one at a time (a WMI call each) and the latest value wins.
+function brightnessControl(btn) {
+  let level = null;
+  let pending = null;
+  let writing = false;
+  let slider = null;
+  let label = null;
+  const show = (v) => {
+    if (v === null || v === undefined) { btn.hidden = true; return; }
+    level = v;
+    btn.hidden = false;
+    btn.title = `Display brightness ${v}%`;
+    if (slider && document.activeElement !== slider) slider.value = String(v);
+    if (label) setText(label, `${v}%`);
+  };
+  const write = async (v) => {
+    pending = v;
+    if (writing) return;
+    writing = true;
+    while (pending !== null) {
+      const next = pending;
+      pending = null;
+      try { show(await api.display.setBrightness(next)); } catch (e) { toast(cleanError(e), { level: "warn" }); break; }
+    }
+    writing = false;
+  };
+  // Brightness rarely changes behind our back; a slow refresh catches
+  // keyboard brightness keys and adaptive brightness.
+  const p = poll(() => api.display.brightness().then(show), 60000);
+  btn.addEventListener("wheel", (e) => {
+    if (level === null) return;
+    e.preventDefault();
+    const next = Math.max(0, Math.min(100, level + (e.deltaY < 0 ? 5 : -5)));
+    show(next);
+    write(next);
+  }, { passive: false });
+  btn.addEventListener("click", () => {
+    if (level === null || btn.classList.contains("open")) return;
+    btn.classList.add("open");
+    popover(btn, () => {
+      slider = h("input", { class: "bright-slider", type: "range", min: 0, max: 100, step: 1, value: String(level), "aria-label": "Brightness" });
+      label = h("span", { class: "bright-label" }, `${level}%`);
+      slider.addEventListener("input", () => {
+        const v = Number(slider.value);
+        level = v;
+        setText(label, `${v}%`);
+        write(v);
+      });
+      setTimeout(() => slider?.focus(), 0);
+      return h("div", { class: "bright-pop" }, icon("sun"), slider, label);
+    }, { onClose: () => { btn.classList.remove("open"); slider = null; label = null; } });
+  });
+  return { stop: () => p.stop() };
 }
 
 export function powerMenu(e) {

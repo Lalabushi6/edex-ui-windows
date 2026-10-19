@@ -25,7 +25,8 @@ function packageDir(name) {
 
 const VENDOR_DIRS = {
   xterm: packageDir("@xterm/xterm"),
-  "xterm-fit": packageDir("@xterm/addon-fit")
+  "xterm-fit": packageDir("@xterm/addon-fit"),
+  "xterm-webgl": packageDir("@xterm/addon-webgl")
 };
 
 function registerSchemes() {

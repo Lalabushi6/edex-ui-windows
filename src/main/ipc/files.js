@@ -9,7 +9,6 @@ const { app, shell, dialog, nativeImage } = require("electron");
 const { spawn } = require("child_process");
 const paths = require("../lib/paths");
 const { cached } = require("../lib/cache");
-const { iconFor } = require("../lib/icons");
 const { handle, on, asString, asStringList } = require("./util");
 
 const MAX_TEXT_BYTES = 16 * 1024 * 1024;
@@ -45,7 +44,7 @@ function trustedShortcutDirs() {
   return dirs;
 }
 
-function registerFiles({ windows, bridge }) {
+function registerFiles({ windows, bridge, icons }) {
   const listCache = new Map();
   const LIST_TTL = 1500;
 
@@ -265,12 +264,14 @@ function registerFiles({ windows, bridge }) {
 
   handle("fs:icons", async (_e, targets) => {
     const out = {};
+    const wanted = [];
     for (const raw of (Array.isArray(targets) ? targets.slice(0, 200) : [])) {
       if (typeof raw !== "string" || !raw) continue;
       const usable = ICON_EXTS.has(path.extname(raw).toLowerCase()) && !paths.isSensitive(raw) && !paths.isUncPath(raw);
-      out[raw] = usable ? await iconFor(raw) : null;
+      if (usable) wanted.push(raw);
+      else out[raw] = null;
     }
-    return out;
+    return Object.assign(out, await icons.get(wanted));
   });
 
   // Drag files out of eDEX into other applications.
