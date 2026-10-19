@@ -22,6 +22,39 @@ taskbar.
 Drag a widget by its title bar to reorder it or move it to the other column.
 Hide widgets or whole columns in Settings → Layout.
 
+### Layout presets and regions
+
+Settings → **Layout** rearranges the whole screen. Presets (also in the
+launcher as "Layout: …"):
+
+| Preset | Arrangement |
+|---|---|
+| **Shell** (default) | Top bar, dock, panels either side of the workspace |
+| **Original eDEX-UI** | No top bar or dock; file browser and on-screen keyboard along the bottom |
+| **Keyboard left** | The same with keyboard and file browser swapped |
+| **Panels left / right** | Both panel columns together on one side with the file browser under them; terminal full height |
+| **Focus** | Just the workspace, top bar and dock |
+
+Then fine-tune each part: top bar, dock, left / right columns, keyboard, which
+side the panel columns sit on, column width, the file browser (off, bottom
+strip or under the panels) and its width, and the order of the bottom strip.
+With the top bar and dock hidden, `Ctrl+Shift+Space` opens the launcher,
+`Ctrl+,` settings and `Ctrl+Shift+A` switches windows.
+
+**File browser panel** — eDEX-UI's filesystem module: it shows the active
+terminal's folder (PowerShell and Command Prompt prompts, or shells that send
+the standard current-directory sequences) and lists name, type, size and
+date. Clicking a folder changes the terminal's directory when the shell is
+waiting at a prompt (otherwise the panel browses on its own); clicking a
+file previews or opens it. **Show drives** lists drives; the footer shows the
+drive's usage and toggles for icon view, hidden files and following the
+terminal. Right-click for more.
+
+To get the classic orange look: pick the **Ember** theme (Settings →
+Appearance) and the **Original eDEX-UI** preset. Themes marked with a layout
+icon (the original's *disrupted*, *notype*, *typeleft*, *fulltype* variants)
+also move the panels; turn that off with "Themes can change the layout".
+
 ## 3. Modes
 
 | Mode | Behaviour |
@@ -258,13 +291,16 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
   with Windows, hotkeys, web search engine, sounds.
-- **Appearance**: themes, custom accent colour (saved as your own theme),
-  interface scale, clock format, temperature unit, boot screen and boot
-  logo / ASCII art (see section 10).
+- **Appearance**: themes, the theme editor (every colour, fonts, terminal
+  palette, globe, layout hints and theme CSS, with live preview), theme
+  import / export, custom CSS, interface scale, clock format, temperature
+  unit, boot screen and boot logo / ASCII art (see section 10). Details in
+  [THEME_GUIDE.md](THEME_GUIDE.md).
 - **Terminal**: default shell, font size, cursor, scrollback, copy on select.
 - **Keyboard**: on-screen keyboard, layout, custom layouts folder and import,
   password mode (see section 9).
-- **Layout**: columns, widgets, on-screen keyboard.
+- **Layout**: presets, every region, panel side and widths, file browser,
+  widgets (see section 2).
 - **Files**: hidden items, delete confirmation, default view, history.
 - **Performance**: profile, background slow-down, GPU terminal, eDEX's own
   resource use (see section 12).

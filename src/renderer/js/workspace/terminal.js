@@ -6,7 +6,7 @@ import { icon } from "../core/icons.js";
 import { terminalTheme, terminalFont, terminalCursorStyle } from "../core/theme.js";
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
-import { on } from "../core/bus.js";
+import { on, emit } from "../core/bus.js";
 import { toast, contextMenu, copyText, cleanError } from "../core/ui.js";
 
 const api = window.edex;
@@ -110,6 +110,7 @@ export class TerminalTab {
       const info = await api.term.spawn({ shell: this.shell, cwd: this.cwd, cols: this.term.cols, rows: this.term.rows });
       this.ptyId = info.id;
       this.shell = info.shell;
+      if (info.cwd) this.cwd = info.cwd;
       this.alive = true;
       sessions.set(info.id, this);
       if (!this.customLabel) this.setLabel(info.shellName);
@@ -195,6 +196,34 @@ export class TerminalTab {
 
   receive(data) {
     this.term?.write(data);
+    this.watchPrompt(data);
+  }
+
+  // Tracks the shell's working directory (for the file browser panel):
+  // OSC 7 / OSC 9;9 "current directory" sequences when the shell sends them,
+  // otherwise the PowerShell or cmd prompt ("PS C:\path>" / "C:\path>") at
+  // the end of the output. `atPrompt` is true while the shell waits for a
+  // command, so the panel only types `cd` when it is safe to.
+  watchPrompt(data) {
+    let found = null;
+    if (data.includes("\x1b]")) {
+      const osc = /\x1b\](?:7;file:\/\/[^/\x07\x1b]*(\/[^\x07\x1b]*)|9;9;"?([^"\x07\x1b]+)"?)(?:\x07|\x1b\\)/g;
+      for (const m of data.matchAll(osc)) {
+        found = m[1] ? decodeURIComponent(m[1]).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\") : m[2];
+      }
+    }
+    this.promptTail = ((this.promptTail || "") + data).slice(-600);
+    const clean = this.promptTail
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+      .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
+      .replace(/\x1b[()][0-9A-Za-z]|\x1b[=>78]/g, "");
+    const prompt = /(?:^|[\r\n])(?:PS )?([A-Za-z]:\\[^\r\n<>|"*?]*?)> ?$/.exec(clean);
+    this.atPrompt = !!prompt;
+    const cwd = found || prompt?.[1];
+    if (!cwd) return;
+    const changed = cwd.toLowerCase() !== String(this.cwd || "").toLowerCase();
+    this.cwd = cwd;
+    emit("terminal-cwd", { tab: this, cwd, changed });
   }
 
   exited(code) {
@@ -261,6 +290,7 @@ export class TerminalTab {
 
   activate() {
     clearTimeout(this.gpuReleaseTimer);
+    if (this.cwd) emit("terminal-cwd", { tab: this, cwd: this.cwd, changed: true });
     requestAnimationFrame(() => {
       this.fitNow();
       this.term?.focus();

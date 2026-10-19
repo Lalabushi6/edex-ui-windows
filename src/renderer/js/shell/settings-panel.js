@@ -4,13 +4,15 @@ import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { currentTheme } from "../core/theme.js";
-import { openModal, toast, prompt, cleanError } from "../core/ui.js";
+import { openModal, toast, prompt, cleanError, contextMenu } from "../core/ui.js";
 import { profile, onSchedulingChange } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import { widgetDefs } from "../widgets/registry.js";
 import { runCommand } from "../core/commands.js";
 import { autoLayoutId, openLayoutsFolder, importLayouts } from "./keyboard.js";
 import { describeLogo, openBootLogoEditor, previewBootTitle } from "./boot-art.js";
+import { openThemeEditor, openCssEditor, importThemes, exportTheme, deleteTheme, openThemesFolder } from "./theme-studio.js";
+import { PRESETS, computeGrid, applyPreset } from "../core/layout.js";
 
 const api = window.edex;
 
@@ -58,6 +60,24 @@ function range(key, min, max, suffix = "") {
   el.addEventListener("input", () => { label.textContent = `${el.value}${suffix}`; });
   el.addEventListener("change", () => settings.set({ [key]: Number(el.value) }));
   return h("span", { style: { display: "flex", alignItems: "center", gap: ".5rem" } }, el, label);
+}
+
+// A miniature of a layout preset, drawn from the same grid the app uses.
+const SKETCH_LABEL = { top: "", left: "SYS", right: "NET", work: "TERMINAL", files: "FILES", bottom: "FILES · KEYBOARD", dock: "" };
+function layoutSketch(values) {
+  const v = { showKeyboard: settings.get("showKeyboard"), ...Object.fromEntries(["showTopbar", "showDock", "showLeftColumn", "showRightColumn", "columnsSide", "filesPanel", "bottomOrder"].map((k) => [k, settings.get(k)])), ...values };
+  const g = computeGrid(v);
+  const ROW = { top: "5px", main: g.kinds.includes("files") ? "2.2fr" : "1fr", files: "1fr", bottom: "15px", dock: "6px" };
+  const areas = [...new Set(g.areas.replace(/"/g, " ").split(/\s+/).filter(Boolean))];
+  const bottomLabel = g.files === "bottom" && g.keyboard ? (v.bottomOrder === "keyboard-left" ? "KEYS · FILES" : "FILES · KEYS") : g.files === "bottom" ? "FILES" : "KEYBOARD";
+  return h("span", {
+    class: "sketch",
+    style: {
+      gridTemplateColumns: g.cols.map((c) => (c === "work" ? "2.6fr" : "1fr")).join(" "),
+      gridTemplateRows: g.kinds.map((k) => ROW[k]).join(" "),
+      gridTemplateAreas: g.areas
+    }
+  }, ...areas.map((a) => h("span", { class: `sketch-${a}`, style: { gridArea: a } }, a === "bottom" ? bottomLabel : SKETCH_LABEL[a])));
 }
 
 // Boot logo: a title or ASCII art, edited in its own dialog.
@@ -181,26 +201,30 @@ async function buildPage(id) {
     const renderThemes = () => grid.replaceChildren(...themes.map((t) => h("button", {
       class: `theme-card${settings.get("theme") === t.id ? " active" : ""}`, type: "button",
       onclick: () => { settings.set({ theme: t.id }); renderThemes(); }
-    }, h("span", { class: "theme-swatch", style: { background: `rgb(${t.rgb.join(",")})`, color: `rgb(${t.rgb.join(",")})` } }), h("span", { class: "ellipsis" }, t.name))));
+    }, h("span", { class: "theme-swatch", style: { background: `rgb(${t.rgb.join(",")})`, color: `rgb(${t.rgb.join(",")})` } }), h("span", { class: "ellipsis grow" }, t.name),
+    t.hasLayout && h("span", { class: "theme-badge", title: "Also changes the layout (Settings → Layout → Themes can change the layout)" }, icon("layout")))));
     renderThemes();
-    const color = h("input", { type: "color", value: `#${currentTheme().rgb.map((v) => v.toString(16).padStart(2, "0")).join("")}`, style: { width: "3rem", height: "2rem", background: "transparent", border: "0" } });
-    const saveCustom = h("button", { class: "btn", type: "button" }, "Save as theme");
-    saveCustom.addEventListener("click", async () => {
-      const name = await prompt({ title: "Save custom theme", placeholder: "My theme" });
-      if (!name) return;
-      const hex = color.value.replace("#", "");
-      const rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-      const base = currentTheme();
-      try {
-        const newId = await api.themes.save(name, { rgb, black: base.black, lightBlack: base.lightBlack, grey: base.grey });
-        settings.set({ theme: newId });
-        toast("Theme saved", { level: "ok" });
-        themes.splice(0, themes.length, ...(await api.themes.list()));
-        renderThemes();
-      } catch (e) { toast(cleanError(e), { level: "warn" }); }
+    // Right-click a theme to export it (or delete one of your own).
+    grid.addEventListener("contextmenu", (e) => {
+      const card = e.target.closest(".theme-card");
+      if (!card) return;
+      const t = themes[[...grid.children].indexOf(card)];
+      if (!t) return;
+      contextMenu(e, [
+        { label: "Use", icon: "palette", run: () => { settings.set({ theme: t.id }); renderThemes(); } },
+        { label: "Export…", icon: "external", run: () => exportTheme(t.id) },
+        t.custom && { label: "Delete…", icon: "trash", danger: true, run: async () => { if (await deleteTheme(t)) openPanel?.show("appearance"); } }
+      ]);
     });
+    const btns = (...items) => h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } }, ...items);
     page.push(h("h3", null, "Theme"), grid,
-      row("Custom accent", "Pick a colour and save it as your own theme.", h("span", { style: { display: "flex", gap: ".5rem", alignItems: "center" } }, color, saveCustom)),
+      row("Theme editor", "Every colour, the interface and terminal fonts, terminal palette, globe colours, layout and theme CSS, with a live preview. Saves as your own theme.",
+        btns(h("button", { class: "btn primary", type: "button", onclick: () => openThemeEditor() }, icon("palette"), "Edit theme…"))),
+      row("Import themes", "eDEX-UI theme files (.json) — the original's format works as is. Right-click a theme above to export it.",
+        btns(h("button", { class: "btn", type: "button", onclick: async () => { await importThemes(); openPanel?.show("appearance"); } }, icon("download"), "Import…"),
+          h("button", { class: "btn", type: "button", onclick: () => openThemesFolder() }, icon("folder"), "Folder"))),
+      row("Custom CSS", "Your own styles, applied on top of any theme (hooks for every region, panel and key are listed in the editor).",
+        btns(h("button", { class: "btn", type: "button", onclick: () => openCssEditor() }, icon("code"), "Edit CSS…"))),
       h("h3", null, "Display"),
       row("Interface scale", "Size of text and controls.", range("uiScale", 70, 160, "%")),
       row("24-hour clock", null, toggle("clock24h")),
@@ -257,10 +281,32 @@ async function buildPage(id) {
       });
       return row(w.title, w.column === "left" ? "Left column" : "Right column", el);
     });
-    page.push(h("h3", null, "Columns"),
-      row("Left column", "System telemetry.", toggle("showLeftColumn")),
-      row("Right column", "Network and tools.", toggle("showRightColumn")),
-      row("On-screen keyboard", "Ctrl+Shift+K", toggle("showKeyboard")),
+    const current = settings.get("layoutPreset");
+    const cards = h("div", { class: "preset-grid" }, ...Object.entries(PRESETS).map(([name, p]) => h("button", {
+      class: `preset-card${current === name ? " active" : ""}`, type: "button", title: p.desc,
+      onclick: () => { applyPreset(name); setTimeout(() => openPanel?.show("layout"), 50); }
+    }, layoutSketch(p.values), h("span", { class: "preset-name" }, p.label), h("span", { class: "preset-desc" }, p.desc))));
+    const rerender = () => setTimeout(() => openPanel?.show("layout"), 50);
+    const live = (el) => { el.addEventListener("change", rerender); return el; };
+    page.push(h("h3", null, "Presets"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, current === "custom" ? "Custom arrangement — pick a preset to start over." : "Pick an arrangement, then fine-tune it below."),
+      cards,
+      h("h3", null, "Regions"),
+      row("Top bar", "Search, media, volume, status, clock and power. When hidden: Ctrl+Shift+Space launcher, Ctrl+, settings.", live(toggle("showTopbar"))),
+      row("Dock", "Pinned apps and open windows. When hidden: Ctrl+Shift+A switches windows.", live(toggle("showDock"))),
+      row("Left column", "System telemetry.", live(toggle("showLeftColumn"))),
+      row("Right column", "Network and tools.", live(toggle("showRightColumn"))),
+      row("On-screen keyboard", "Ctrl+Shift+K", live(toggle("showKeyboard"))),
+      h("h3", null, "Arrangement"),
+      row("Panel columns", "Either side of the workspace, or both together on one side (like eDEX-UI's “disrupted” themes).", live(select("columnsSide", [["split", "Either side"], ["left", "Both on the left"], ["right", "Both on the right"]]))),
+      row("Column width", null, range("columnWidth", 70, 160, "%")),
+      row("File browser", "eDEX-UI's filesystem panel: in the bottom strip beside the keyboard, or under the panel columns.", live(select("filesPanel", [["off", "Hidden"], ["bottom", "Bottom strip"], ["column", "Under the panel columns"]]))),
+      row("File browser width", "Share of the bottom strip when the keyboard is shown too.", range("filesWidth", 25, 70, "%")),
+      row("Bottom strip order", null, live(select("bottomOrder", [["files-left", "Files left, keyboard right"], ["keyboard-left", "Keyboard left, files right"]]))),
+      row("Themes can change the layout", "Some themes (the original's disrupted / notype / typeleft / fulltype variants) move the panels, file browser or keyboard.", toggle("themeLayouts")),
+      h("h3", null, "File browser"),
+      row("Follow the terminal", "Show the active terminal's folder; clicking a folder changes the shell's directory when it is at a prompt.", toggle("filesFollowTerminal")),
+      row("View", null, select("filesView", [["list", "List"], ["grid", "Icons"]])),
       h("h3", null, "Widgets"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Drag a widget by its title bar to reorder it or move it to the other column."),
       ...widgets,

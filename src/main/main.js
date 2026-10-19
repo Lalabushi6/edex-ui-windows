@@ -91,7 +91,7 @@ function start() {
     clip = registerClipboard({ settings, windows, bridge });
     notes = registerNotes();
     alarms = registerAlarms({ windows });
-    registerThemes();
+    registerThemes({ windows });
     registerMedia({ windows });
     keyboards = registerKeyboards({ windows });
 

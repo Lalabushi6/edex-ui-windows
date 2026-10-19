@@ -27,5 +27,8 @@
         "marker": "#ebebeb",
         "pin": "#ebebeb",
         "satellite": "#ebebeb"
+    },
+    "layout": {
+        "filesPanel": "bottom"
     }
 }

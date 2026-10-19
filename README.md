@@ -56,6 +56,16 @@ telemetry from one surface — without dropping back to the Windows desktop.
   (Auto / Performance / Balanced / Eco; Auto switches to Eco on battery) set
   refresh rates and animation frame rates, and Settings → Performance shows
   eDEX's own CPU and memory use.
+- **Rearrangeable**: layout presets including the original eDEX-UI
+  arrangement (terminal on top, file browser and keyboard along the bottom,
+  no top bar or dock) and both panel columns on one side; every region can
+  be shown, hidden or moved, with an eDEX-style file browser panel that
+  follows the terminal's folder.
+- **Customisable look**: a theme editor with live preview (colours,
+  interface and terminal fonts, terminal palette, globe, layout hints, theme
+  CSS), import / export of eDEX-UI themes, a custom CSS stylesheet with
+  documented hooks, and the bundled **Ember** theme for the classic orange
+  look.
 - **Two modes**: *Desktop* (full screen, sits behind your apps, so it acts as
   your desktop) and *Overlay* (always on top, summoned and dismissed by hotkey).
 - Tray icon, single instance, start with Windows, session restore of tabs,

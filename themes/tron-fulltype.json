@@ -27,5 +27,8 @@
         "marker": "#aacfd1",
         "pin": "#aacfd1",
         "satellite": "#aacfd1"
+    },
+    "layout": {
+        "filesPanel": "off"
     }
 }

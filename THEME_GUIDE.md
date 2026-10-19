@@ -3,11 +3,22 @@
 Themes use the original [eDEX-UI](https://github.com/GitSquared/edex-ui)
 theme format, so themes made for eDEX-UI work here too.
 
-## Quick way
+## Quick way: the theme editor
 
-Settings → Appearance → **Custom accent**: pick a colour and click
-**Save as theme**. It is stored in `%APPDATA%\eDEX-UI\themes\` and
-appears in the theme list immediately.
+Settings → Appearance → **Edit theme…** (or "Theme editor" in the launcher)
+edits every part of a theme with a live preview: accent, backgrounds and grid
+colour, the interface and terminal fonts, cursor, terminal colours and ANSI
+palette filter, globe colours, layout hints and theme CSS. **Start from**
+loads any theme as a starting point; hold **Peek** to see the whole interface
+behind the dialog. **Save theme** writes it to `%APPDATA%\eDEX-UI\themes\`
+and switches to it; Cancel puts your current theme back.
+
+**Import…** copies eDEX-UI theme files in (they work as is); right-click a
+theme in Settings → Appearance to export it, or delete one of your own (it
+goes to the Recycle Bin).
+
+For changes no theme field covers, Settings → Appearance → **Custom CSS**
+applies your own stylesheet on top of every theme (see "Custom CSS" below).
 
 ## Theme files
 
@@ -57,10 +68,31 @@ replaces a built-in one with the same file name). The file name without
 | `colors.red` … `colors.brightWhite` | Optional explicit 16-colour terminal palette (`red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright*` versions). Only used when `red` is present. |
 | `terminal.foreground` / `background` / `cursor` / `cursorAccent` / `selection` | Terminal colours |
 | `terminal.cursorStyle` | `block`, `bar` or `underline` (applies when Settings → Terminal → Cursor style is "From theme") |
-| `terminal.fontFamily` | `Fira Mono` or `Fira Code` (applies when the terminal font setting is "From theme") |
+| `terminal.fontFamily` | `Fira Mono`, `Fira Code`, `Cascadia Mono`, `Cascadia Code` or `Consolas` (applies when the terminal font setting is "From theme") |
 | `terminal.colorFilter` | See below |
 | `globe.base` / `marker` / `pin` / `satellite` | Colours of the world-view globe's land tiles, connection markers, pins and satellites |
-| `cssvars` | Kept for compatibility; the interface always uses the bundled United Sans |
+| `cssvars.font_main` | Interface font: `United Sans Medium` (bundled, default), `Fira Mono`, `Fira Code`, or a Windows font — `Segoe UI`, `Bahnschrift`, `Consolas`, `Cascadia Mono`, `Cascadia Code`, `Courier New`, `Lucida Console`, `OCR A Extended` |
+| `css` | *(this app)* A stylesheet applied while the theme is active, e.g. `".panel-title { letter-spacing: .2em; }"` — same hooks as Custom CSS |
+| `layout` | *(this app)* Layout hints applied with the theme (see below) |
+
+### Layout hints
+
+A theme can move parts of the screen while it is active (users can turn this
+off in Settings → Layout → "Themes can change the layout"):
+
+```json
+"layout": { "columnsSide": "left", "filesPanel": "column", "bottomOrder": "files-left" }
+```
+
+| Key | Values |
+|---|---|
+| `columnsSide` | `split` (panels either side), `left` or `right` (both panel columns together) |
+| `filesPanel` | `off`, `bottom` (beside the keyboard) or `column` (under the panel columns) |
+| `bottomOrder` | `files-left` or `keyboard-left` |
+
+The bundled *disrupted*, *notype*, *typeleft* and *fulltype* themes use these
+to reproduce the original's layout variants. Imported eDEX-UI themes that
+only have `injectCSS` for those variants are recognised and translated.
 
 ### Terminal colours and `colorFilter`
 
@@ -84,14 +116,33 @@ each standard colour in order:
 | `whiten(x)` / `blacken(x)` | Add white / black (HWB) |
 | `mix(x)` | Blend `x` (0–1) of the accent colour into the result |
 
+### Custom CSS
+
+Settings → Appearance → **Custom CSS** (or a theme's `css` field) can style
+anything. Useful hooks:
+
+| Hook | What |
+|---|---|
+| `--rgb` (accent as `r g b`), `--c`, `--c-70`, `--c-50`, `--c-20`, `--bg`, `--bg-deep`, `--grey`, `--font-ui`, `--font-mono`, `--col-w`, `--gap` | Theme variables |
+| `#topbar`, `#col-left`, `#col-right`, `#work`, `#workspace`, `#bottom`, `#filepanel`, `#keyboard`, `#dock` | Screen regions |
+| `.panel`, `.panel-title`, `#w-clock`, `#w-cpu`, `#w-globe` … | Widgets (one id per widget) |
+| `.tab`, `.tab.active`, `.pane`, `.xterm` | Workspace tabs and terminals |
+| `.kb-key`, `.kb-key.mod`, `.kb-key.space`, `.kb-key.down` | On-screen keyboard |
+| `.fp-item`, `.fp-name`, `.fp-bar` | File browser |
+| `#app[data-side=left]`, `#app[data-files=bottom]`, `html.eco` | Layout and performance state |
+
+The editor previews as you type; if something breaks, clear it and save.
+
 ### Not supported
 
-`injectCSS` from eDEX-UI themes is ignored: it targets the original app's
-page layout, which is different here.
+`injectCSS` from eDEX-UI themes is not injected: it targets the original
+app's page, which is different here (its layout variants are translated into
+layout hints instead, see above). `@import` is removed from theme and custom
+CSS.
 
-Values are validated; anything that is not a plain colour (for example
-`url(...)` or text containing `;` or `{`) is ignored.
+Colour values are validated; anything that is not a plain colour (for
+example `url(...)` or text containing `;` or `{`) is ignored.
 
-Themes are re-read about once a minute, so new files show up without a
-restart. The older `styles` format (`"--color_r"`, `"--color_g"`,
-`"--color_b"`, `"--color_light_black"`, `"--color_grey"`) is still accepted.
+New theme files show up the next time the theme list is shown. The older
+`styles` format (`"--color_r"`, `"--color_g"`, `"--color_b"`,
+`"--color_light_black"`, `"--color_grey"`) is still accepted.

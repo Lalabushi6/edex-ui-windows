@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const { app, clipboard, Notification } = require("electron");
+const { app, clipboard, dialog, shell, Notification } = require("electron");
 const { cached } = require("../lib/cache");
 const { JsonStore } = require("../lib/store");
 const { handle, asString } = require("./util");
@@ -261,8 +261,43 @@ const HEX = /^#[0-9a-f]{3,8}$/i;
 const COLOR = /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\(\s*[\d.%\s,/]+\))$/i;
 const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
   "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite"];
-const TERMINAL_FONTS = new Set(["Fira Mono", "Fira Code"]);
+const TERMINAL_FONTS = new Set(["Fira Mono", "Fira Code", "Cascadia Mono", "Cascadia Code", "Consolas"]);
 const FILTER_FUNCS = new Set(["negate", "grayscale", "lighten", "darken", "saturate", "desaturate", "whiten", "blacken", "rotate", "mix"]);
+// Interface fonts: the bundled ones plus fonts that ship with Windows.
+// eDEX-UI themes name the bundled one "United Sans Medium".
+const UI_FONTS = {
+  "united sans medium": "United Sans", "united sans": "United Sans", "fira mono": "Fira Mono", "fira code": "Fira Code",
+  "segoe ui": "Segoe UI", "bahnschrift": "Bahnschrift", "consolas": "Consolas", "cascadia mono": "Cascadia Mono",
+  "cascadia code": "Cascadia Code", "courier new": "Courier New", "lucida console": "Lucida Console", "ocr a extended": "OCR A Extended"
+};
+const LAYOUT_HINTS = {
+  columnsSide: ["split", "left", "right"],
+  filesPanel: ["off", "bottom", "column"],
+  bottomOrder: ["files-left", "keyboard-left"]
+};
+
+// Theme CSS is injected as a stylesheet: capped, and without @import (the
+// CSP would block remote loads anyway).
+function themeCss(css) {
+  return typeof css === "string" ? css.slice(0, 30000).replace(/@import[^;]*;?/gi, "") : "";
+}
+
+function layoutHints(raw) {
+  const out = {};
+  if (raw.layout && typeof raw.layout === "object") {
+    for (const [k, values] of Object.entries(LAYOUT_HINTS)) if (values.includes(raw.layout[k])) out[k] = raw.layout[k];
+    return Object.keys(out).length ? out : null;
+  }
+  // The original's layout variants are written as injectCSS for its own
+  // markup; their intent is translated into layout hints instead.
+  if (typeof raw.injectCSS !== "string") return null;
+  const s = raw.injectCSS.replace(/\s+/g, "");
+  if (/mod_column_right\{left:/.test(s) || /#main_shell\{position:relative;left:/.test(s)) { out.columnsSide = "left"; out.filesPanel = "column"; }
+  if (/section#keyboard\{display:none/.test(s)) out.filesPanel = "bottom";
+  if (/section#filesystem\{display:none/.test(s)) out.filesPanel = "off";
+  if (/section#keyboard\{right:/.test(s) || /section#filesystem\{left:5\d/.test(s)) { out.bottomOrder = "keyboard-left"; out.filesPanel = out.filesPanel || "bottom"; }
+  return Object.keys(out).length ? out : null;
+}
 
 // Accepts both the original eDEX-UI theme format (colors / cssvars / terminal
 // / globe) and the older `styles` variant, and returns only validated values.
@@ -320,6 +355,7 @@ function normalizeTheme(id, raw) {
       if (VAR_KEY.test(k) && s.length <= 128 && !BAD_VALUE.test(s)) extra[k] = s;
     }
   }
+  const fontMain = typeof raw.cssvars?.font_main === "string" ? UI_FONTS[raw.cssvars.font_main.trim().toLowerCase()] : null;
   return {
     id,
     name: typeof raw.name === "string" ? raw.name.slice(0, 64) : id,
@@ -331,14 +367,19 @@ function normalizeTheme(id, raw) {
     terminal,
     colorFilter,
     globe,
-    extra
+    extra,
+    fonts: { ui: fontMain || "United Sans" },
+    css: themeCss(raw.css),
+    layout: layoutHints(raw)
   };
 }
 
-function registerThemes() {
+function registerThemes({ windows }) {
   const builtinDir = path.join(__dirname, "..", "..", "..", "themes");
   const userDir = path.join(app.getPath("userData"), "themes");
 
+  // id -> normalised theme (+ custom flag and source file). Built-ins win a
+  // name clash; imports are renamed so that never happens.
   const catalog = cached(async () => {
     const out = new Map();
     for (const [dir, custom] of [[builtinDir, false], [userDir, true]]) {
@@ -350,7 +391,7 @@ function registerThemes() {
         if (out.has(id)) continue;
         try {
           const raw = JSON.parse((await fs.promises.readFile(path.join(dir, f), "utf8")).replace(/^﻿/, ""));
-          out.set(id, { ...normalizeTheme(id, raw), custom });
+          out.set(id, { ...normalizeTheme(id, raw), custom, file: path.join(dir, f) });
         } catch (e) {
           console.warn(`[themes] skipping ${f}: ${e.message}`);
         }
@@ -359,21 +400,43 @@ function registerThemes() {
     return out;
   }, 60000);
 
-  handle("themes:list", async () => [...(await catalog()).values()]
-    .map(({ id, name, author, rgb, custom }) => ({ id, name, author, rgb, custom }))
-    .sort((a, b) => a.name.localeCompare(b.name)));
+  // Re-read on every listing so themes dropped into the folder by hand show up.
+  handle("themes:list", async () => {
+    catalog.invalidate();
+    return [...(await catalog()).values()]
+      .map(({ id, name, author, rgb, custom, layout }) => ({ id, name, author, rgb, custom, hasLayout: !!layout }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
 
-  handle("themes:get", async (_e, id) => (await catalog()).get(id) || (await catalog()).get("tron") || null);
+  handle("themes:get", async (_e, id) => {
+    const t = (await catalog()).get(id) || (await catalog()).get("tron") || null;
+    if (!t) return null;
+    const { file, ...theme } = t;
+    return theme;
+  });
 
+  handle("themes:folder", async () => {
+    await fs.promises.mkdir(userDir, { recursive: true });
+    return userDir;
+  });
+
+  // Writes a theme in the eDEX-UI format (plus this app's `css` and
+  // `layout` keys) from the theme editor's values.
   handle("themes:save", async (_e, name, theme) => {
     const safeName = String(name || "").replace(/[^a-zA-Z0-9 _-]/g, "").trim().slice(0, 48);
     if (!safeName) throw new Error("Theme name is required");
     const id = `custom-${safeName.toLowerCase().replace(/\s+/g, "-")}`;
     const t = theme && typeof theme === "object" ? theme : {};
     const clamp = (n) => Math.min(255, Math.max(0, Math.round(Number(n) || 0)));
-    const rgb = Array.isArray(t.rgb) ? t.rgb.map(clamp) : [0, 255, 0];
+    const color = (v, fallback) => (typeof v === "string" && COLOR.test(v.trim()) ? v.trim() : fallback);
+    const rgb = Array.isArray(t.rgb) ? t.rgb.slice(0, 3).map(clamp) : [0, 255, 0];
     const hex = `#${rgb.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
     const lightBlack = HEX.test(t.lightBlack || "") ? t.lightBlack : "#05080d";
+    const term = t.terminal && typeof t.terminal === "object" ? t.terminal : {};
+    const gl = t.globe && typeof t.globe === "object" ? t.globe : {};
+    const uiFont = UI_FONTS[String(t.uiFont || "").toLowerCase()] || "United Sans";
+    const filters = (Array.isArray(t.colorFilter) ? t.colorFilter : [])
+      .map((s) => String(s).trim()).filter((s) => /^([a-z]+)\(\s*(-?[\d.]*)\s*\)$/i.test(s) && FILTER_FUNCS.has(s.split("(")[0])).slice(0, 12);
     const out = {
       name: safeName,
       author: "You",
@@ -383,18 +446,87 @@ function registerThemes() {
         light_black: lightBlack,
         grey: HEX.test(t.grey || "") ? t.grey : "#262828"
       },
-      cssvars: { font_main: "United Sans Medium", font_main_light: "United Sans Light" },
-      terminal: {
-        fontFamily: "Fira Mono", cursorStyle: "block", foreground: hex, background: lightBlack,
-        cursor: hex, cursorAccent: hex, selection: `rgba(${rgb.join(",")},0.3)`
+      cssvars: {
+        font_main: uiFont === "United Sans" ? "United Sans Medium" : uiFont,
+        font_main_light: uiFont === "United Sans" ? "United Sans Light" : uiFont
       },
-      globe: { base: "#000000", marker: hex, pin: hex, satellite: hex }
+      terminal: {
+        fontFamily: TERMINAL_FONTS.has(term.fontFamily) ? term.fontFamily : "Fira Mono",
+        cursorStyle: ["block", "bar", "underline"].includes(term.cursorStyle) ? term.cursorStyle : "block",
+        foreground: color(term.foreground, hex),
+        background: color(term.background, lightBlack),
+        cursor: color(term.cursor, hex),
+        cursorAccent: color(term.cursorAccent, lightBlack),
+        selection: color(term.selection, `rgba(${rgb.join(",")},0.3)`),
+        ...(filters.length ? { colorFilter: filters } : {})
+      },
+      globe: {
+        base: color(gl.base, "#000000"), marker: color(gl.marker, hex), pin: color(gl.pin, hex), satellite: color(gl.satellite, hex)
+      }
     };
+    const css = themeCss(t.css);
+    if (css.trim()) out.css = css;
+    const layout = layoutHints({ layout: t.layout || {} });
+    if (layout) out.layout = layout;
     await fs.promises.mkdir(userDir, { recursive: true });
     await fs.promises.writeFile(path.join(userDir, `${id}.json`), JSON.stringify(out, null, 2), "utf8");
     catalog.invalidate();
     return id;
   });
-}
 
+  // Copies eDEX-UI theme files into the themes folder after checking them.
+  handle("themes:import", async () => {
+    const { canceled, filePaths } = await windows.withDialog((win) => dialog.showOpenDialog(win, {
+      title: "Import themes",
+      filters: [{ name: "eDEX-UI theme", extensions: ["json"] }],
+      properties: ["openFile", "multiSelections"]
+    }));
+    if (canceled || !filePaths.length) return { imported: [], errors: [] };
+    await fs.promises.mkdir(userDir, { recursive: true });
+    const existing = await catalog();
+    const imported = [];
+    const errors = [];
+    for (const src of filePaths.slice(0, 50)) {
+      const base = path.basename(src);
+      try {
+        const st = await fs.promises.stat(src);
+        if (st.size > 512 * 1024) throw new Error("file is larger than 512 KB");
+        const raw = JSON.parse((await fs.promises.readFile(src, "utf8")).replace(/^﻿/, ""));
+        if (!raw || typeof raw !== "object" || (!raw.colors && !raw.styles)) throw new Error("not an eDEX-UI theme (no colors)");
+        let id = base.replace(/\.json$/i, "").replace(/[^\w.-]/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60) || "imported";
+        const builtIn = existing.get(id) && !existing.get(id).custom;
+        if (builtIn) id = `imported-${id}`;
+        normalizeTheme(id, raw);
+        await fs.promises.writeFile(path.join(userDir, `${id}.json`), JSON.stringify(raw, null, 2), "utf8");
+        imported.push(id);
+      } catch (e) {
+        errors.push({ file: base, message: e.message });
+      }
+    }
+    catalog.invalidate();
+    return { imported, errors };
+  });
+
+  handle("themes:export", async (_e, id) => {
+    const entry = (await catalog()).get(String(id));
+    if (!entry) throw new Error("Unknown theme");
+    const { canceled, filePath } = await windows.withDialog((win) => dialog.showSaveDialog(win, {
+      title: "Export theme",
+      defaultPath: path.join(app.getPath("documents"), `${entry.id}.json`),
+      filters: [{ name: "eDEX-UI theme", extensions: ["json"] }]
+    }));
+    if (canceled || !filePath) return null;
+    await fs.promises.copyFile(entry.file, filePath);
+    return filePath;
+  });
+
+  // Custom themes only; the file goes to the Recycle Bin.
+  handle("themes:remove", async (_e, id) => {
+    const entry = (await catalog()).get(String(id));
+    if (!entry || !entry.custom) throw new Error("Only your own themes can be deleted");
+    await shell.trashItem(entry.file);
+    catalog.invalidate();
+    return true;
+  });
+}
 module.exports = { registerNetwork, registerClipboard, registerNotes, registerThemes, registerAlarms, normalizeTheme };

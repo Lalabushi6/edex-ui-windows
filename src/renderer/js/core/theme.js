@@ -1,5 +1,6 @@
 import { emit } from "./bus.js";
 import * as settings from "./settings.js";
+import { setThemeLayout } from "./layout.js";
 
 let current = {
   id: "tron", rgb: [170, 207, 209], black: "#000000", lightBlack: "#05080d", grey: "#262828",
@@ -22,17 +23,55 @@ export function accentHex() {
 export async function applyTheme(id) {
   const theme = await window.edex.themes.get(id);
   if (!theme) return null;
+  applyThemeData(theme);
+  return theme;
+}
+
+const UI_FALLBACK = '"United Sans", "Segoe UI", sans-serif';
+let appliedExtra = [];
+
+// Applies a theme object (as returned by themes:get). The theme editor uses
+// `preview` for live edits: everything updates except the globe, which is
+// only rebuilt for real theme changes (it bakes colours into textures).
+export function applyThemeData(theme, { preview = false } = {}) {
   current = theme;
   const root = document.documentElement.style;
   root.setProperty("--rgb", theme.rgb.join(" "));
   root.setProperty("--bg", theme.lightBlack);
   root.setProperty("--bg-deep", theme.black);
   root.setProperty("--grey", theme.grey);
+  const ui = theme.fonts?.ui;
+  root.setProperty("--font-ui", ui && ui !== "United Sans" ? `"${ui}", ${UI_FALLBACK}` : UI_FALLBACK);
+  for (const key of appliedExtra) root.removeProperty(key);
+  appliedExtra = [];
   for (const [key, value] of Object.entries(theme.extra || {})) {
-    if (!["--color_r", "--color_g", "--color_b"].includes(key)) root.setProperty(key, value);
+    if (["--color_r", "--color_g", "--color_b"].includes(key)) continue;
+    root.setProperty(key, value);
+    appliedExtra.push(key);
   }
-  emit("theme", theme);
-  return theme;
+  let style = document.getElementById("theme-css");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "theme-css";
+    // Before the user's own CSS, so custom CSS always wins.
+    document.head.insertBefore(style, document.getElementById("user-css"));
+  }
+  style.textContent = theme.css || "";
+  setThemeLayout(theme.layout || null);
+  emit("theme", { ...theme, preview });
+}
+
+// "rotate(180) saturate(0.5), mix(0.7)" → filter steps, as themes store them.
+export function parseFilter(text) {
+  const steps = [];
+  for (const m of String(text || "").matchAll(/([a-z]+)\(\s*(-?[\d.]*)\s*\)/gi)) {
+    steps.push({ func: m[1].toLowerCase(), arg: m[2] === "" ? null : Number(m[2]) });
+  }
+  return steps.slice(0, 12);
+}
+
+export function formatFilter(steps) {
+  return (steps || []).map((s) => `${s.func}(${s.arg ?? ""})`).join(" ");
 }
 
 // ── Colour maths for the terminal palette ───────────────────────────────────
