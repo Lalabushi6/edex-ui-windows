@@ -33,6 +33,9 @@ const P = {
   pause: '<path d="M8 5v14M16 5v14"/>',
   playpause: '<path d="M4 5l9 7-9 7zM16 6v12M20 6v12"/>',
   next: '<path d="M5 5l10 7-10 7zM19 5v14"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  shuffle: '<path d="M16 4h4v4M4 20L20 4M20 16v4h-4M15 15l5 5M4 4l5 5"/>',
+  repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   prev: '<path d="M19 5L9 12l10 7zM5 5v14"/>',
   volume: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
   mute: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>',
@@ -76,6 +79,13 @@ const P = {
   bookmark: '<path d="M6 3h12v18l-6-4-6 4z"/>',
   snapshot: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'
 };
+
+// The eDEX-UI logo (ring, square and "e"), drawn in the theme colour.
+export const LOGO_SVG = '<svg viewBox="0 0 459.04 459.04" aria-hidden="true"><g transform="translate(126.89 109.98)">' +
+  '<circle cx="102.63" cy="119.53" r="222" fill="none" stroke="currentColor" stroke-width="14" opacity=".45"/>' +
+  '<path fill="currentColor" d="m-30.735-13.833v266.73h266.74v-266.73zm15.997 15.997h234.74v234.74h-234.74z"/>' +
+  '<g transform="matrix(3.7504 0 0 3.7504 -344.72 -397.96)" fill="currentColor"><path d="m108.83 159.42-7.4083-7.4083v-28.046l7.4083-7.4083h20.902l7.4083 7.4083v16.922h-26.576v7.6387l2.4995 2.5815h13.328l1.7691-2.1032v-4.7438h8.9792v8.6327l-6.4382 6.5264zm1.8168-26.434h17.432v-6.1964l-2.2474-2.4113h-12.931l-2.2536 2.9032z"/></g>' +
+  "</g></svg>";
 
 export function iconSvg(name, cls = "") {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.file}</svg>`;

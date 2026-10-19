@@ -29,22 +29,33 @@
 <body>
   <div id="app">
     <header id="topbar"></header>
-    <aside id="col-left" class="column" aria-label="System panels"></aside>
-    <main id="workspace"></main>
-    <aside id="col-right" class="column" aria-label="Network and tools"></aside>
+    <aside id="col-left" class="side" aria-label="System panels">
+      <div class="col-title"><span>PANEL</span><span>SYSTEM</span></div>
+      <div class="column" id="col-left-body"></div>
+    </aside>
+    <section id="work">
+      <div class="col-title"><span id="work-title-a">TERMINAL</span><span id="work-title-b">MAIN SHELL</span></div>
+      <main id="workspace" class="frame"></main>
+    </section>
+    <aside id="col-right" class="side" aria-label="Network and tools">
+      <div class="col-title"><span>PANEL</span><span>NETWORK</span></div>
+      <div class="column" id="col-right-body"></div>
+    </aside>
     <section id="keyboard" aria-label="On-screen keyboard"></section>
     <footer id="dock"></footer>
   </div>
   <div id="toasts" aria-live="polite"></div>
+  <!-- Keeps the media element attached to the document (so playback
+       continues) while the media player tab is closed or hidden. -->
+  <div id="media-host" hidden></div>
 
   <div id="boot">
-    <div class="boot-inner">
-      <div class="boot-logo" id="boot-logo">eDEX</div>
+    <div class="boot-log" id="boot-log"></div>
+    <div class="boot-title" id="boot-title" hidden>
+      <h1 id="boot-logo" data-text="eDEX-UI">eDEX-UI</h1>
       <div class="boot-sub" id="boot-sub">WINDOWS EDITION</div>
-      <div class="boot-log" id="boot-log"></div>
-      <div class="boot-bar"><i id="boot-bar"></i></div>
-      <div class="boot-skip">PRESS ANY KEY TO SKIP</div>
     </div>
+    <div class="boot-skip">PRESS ANY KEY TO SKIP</div>
   </div>
 
   <script type="module" src="js/main.js"></script>

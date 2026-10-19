@@ -2,11 +2,31 @@
     "name": "Cyberpunk Red",
     "author": "Manus AI",
     "description": "A dark red cyberpunk theme.",
-    "styles": {
-        "--color_r": "255",
-        "--color_g": "0",
-        "--color_b": "0",
-        "--color_grey": "#1a0000",
-        "--color_light_black": "#000"
+    "colors": {
+        "r": 255,
+        "g": 0,
+        "b": 0,
+        "black": "#000000",
+        "light_black": "#000",
+        "grey": "#1a0000"
+    },
+    "cssvars": {
+        "font_main": "United Sans Medium",
+        "font_main_light": "United Sans Light"
+    },
+    "terminal": {
+        "fontFamily": "Fira Mono",
+        "cursorStyle": "block",
+        "foreground": "#ff0000",
+        "background": "#000",
+        "cursor": "#ff0000",
+        "cursorAccent": "#ff0000",
+        "selection": "rgba(255,0,0,0.3)"
+    },
+    "globe": {
+        "base": "#000000",
+        "marker": "#ff0000",
+        "pin": "#ff0000",
+        "satellite": "#ff0000"
     }
 }

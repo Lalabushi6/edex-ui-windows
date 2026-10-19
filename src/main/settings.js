@@ -35,7 +35,7 @@ const workspace = () => (v, d) => {
   if (v === null) return null;
   if (!v || !Array.isArray(v.tabs)) return d;
   const tabs = v.tabs.slice(0, 16).map((t) => ({
-    type: ["terminal", "files", "processes"].includes(t?.type) ? t.type : "terminal",
+    type: ["terminal", "files", "processes", "media"].includes(t?.type) ? t.type : "terminal",
     shell: typeof t?.shell === "string" ? t.shell.slice(0, 32) : undefined,
     cwd: typeof t?.cwd === "string" ? t.cwd.slice(0, 1024) : undefined,
     label: typeof t?.label === "string" ? t.label.slice(0, 32) : undefined
@@ -80,7 +80,8 @@ const SCHEMA = {
   defaultShell: [str(32), "powershell"],
   termFontSize: [int(8, 32), 14],
   termScrollback: [int(100, 100000), 5000],
-  termCursorStyle: [oneOf("block", "bar", "underline"), "block"],
+  termFontFamily: [oneOf("theme", "Fira Mono", "Fira Code", "Cascadia Mono", "Consolas"), "theme"],
+  termCursorStyle: [oneOf("theme", "block", "bar", "underline"), "theme"],
   termCursorBlink: [bool(), true],
   termCopyOnSelect: [bool(), false],
 
@@ -98,6 +99,14 @@ const SCHEMA = {
   pinnedApps: [strList(40, 2048), []],
   quickLinks: [links(), []],
   webSearchUrl: [str(512), "https://www.google.com/search?q=%s"],
+
+  // Media player
+  mediaPlaylist: [strList(2000, 1024), []],
+  mediaIndex: [int(0, 1999), 0],
+  mediaPosition: [int(0, 864000), 0],
+  mediaVolume: [int(0, 100), 80],
+  mediaShuffle: [bool(), false],
+  mediaRepeat: [oneOf("off", "all", "one"), "off"],
 
   // Network & privacy
   allowNetworkGeolocation: [bool(), true],

@@ -101,7 +101,37 @@ Hold `Ctrl` to force copy or `Shift` to force move.
 Right-click for Open with…, Open terminal here, Pin to sidebar, Add to quick
 links, Show in Windows Explorer and Properties.
 
-## 8. Global shortcuts
+## 8. Media player
+
+Open it with `Ctrl+Shift+M`, the tab menu (⌄ → Media player), the launcher
+("media player"), or the **Media** widget. Add music and video by:
+
+- dragging files or folders onto the player,
+- **Add files** / **Add folder** in the playlist header,
+- right-clicking files in the explorer → **Play in media player** or
+  **Add to playlist** (folders: **Play folder in media player**),
+- the **Media player** button in the quick-look viewer.
+
+| Action | Keys / mouse |
+|---|---|
+| Play / pause | `Space` or the ▶ button |
+| Seek ±5 s | `←` / `→` (or drag the progress line) |
+| Previous / next track | `Shift+←` / `Shift+→` |
+| Volume | `↑` / `↓`, the volume wedge, or the mouse wheel over it |
+| Mute | `M` |
+| Fullscreen | `F` or double-click the picture |
+| Play a track | double-click it (or select and press `Enter`) |
+| Remove a track | `Del`, or right-click → Remove |
+| Reorder | drag tracks in the playlist |
+
+Shuffle and repeat (off → all → one) are on the control bar. MP3 titles,
+artists and cover art are read from the file's tags. The playlist, volume
+and position are remembered; playback keeps going when you switch tabs or
+close the player tab, and Windows' media keys and media overlay control it.
+Formats are whatever Chromium plays: MP3, AAC/M4A, FLAC, WAV, Ogg/Opus,
+MP4 (H.264), WebM and most MKV files.
+
+## 9. Global shortcuts
 
 | Keys | Action |
 |---|---|
@@ -114,6 +144,7 @@ links, Show in Windows Explorer and Properties.
 | `Ctrl+Tab`, `Ctrl+1…9` | Switch tabs |
 | `Ctrl+Shift+F` | Find files |
 | `Ctrl+Shift+K` | On-screen keyboard |
+| `Ctrl+Shift+M` | Media player |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |
 | `F1` | Shortcut sheet |
@@ -121,7 +152,7 @@ links, Show in Windows Explorer and Properties.
 The two global hotkeys can be changed in Settings → General. If another app
 already owns one, eDEX shows a notice at startup.
 
-## 9. Settings
+## 10. Settings
 
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
@@ -138,7 +169,7 @@ Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
 run.
 
-## 10. Privacy and network
+## 11. Privacy and network
 
 With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 
@@ -151,7 +182,7 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 Turn it off and eDEX makes no outbound requests. Clipboard history is kept in
 memory only and can be disabled.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 - **A hotkey does nothing**: another app owns it — pick a new one in Settings → General.
 - **Dock shows "Window list unavailable"**: the native helper uses Windows

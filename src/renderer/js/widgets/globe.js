@@ -1,19 +1,178 @@
-// World view: a rotating point-cloud globe with your approximate location and
-// latency to reference cities. Renders at ~20 fps only while on screen.
+// World view: the original eDEX-UI ENCOM globe (hex-tile continents, orbiting
+// satellites, pins and connected markers) showing your approximate location
+// and links to reference cities with their latency. Falls back to a light
+// canvas point-cloud globe when WebGL is unavailable.
 import { h, setText } from "../core/dom.js";
 import { poll, appActive } from "../core/poll.js";
-import { accent } from "../core/theme.js";
+import { accent, accentHex, currentTheme } from "../core/theme.js";
+import { on } from "../core/bus.js";
 import * as settings from "../core/settings.js";
+import * as sfx from "../core/audio.js";
 import { defineWidget } from "./registry.js";
 
 const api = window.edex;
 const RAD = Math.PI / 180;
 
+// ── ENCOM loader ────────────────────────────────────────────────────────────
+let encomPromise = null;
+let tilesPromise = null;
+
+function loadEncom() {
+  encomPromise ||= new Promise((resolve, reject) => {
+    if (window.ENCOM?.Globe) { resolve(window.ENCOM); return; }
+    const script = document.createElement("script");
+    script.src = "lib/encom-globe.js";
+    script.onload = () => (window.ENCOM?.Globe ? resolve(window.ENCOM) : reject(new Error("ENCOM globe did not register")));
+    script.onerror = () => reject(new Error("ENCOM globe failed to load"));
+    document.head.append(script);
+  });
+  return encomPromise;
+}
+
+function loadTiles() {
+  tilesPromise ||= fetch("assets/misc/grid.json").then((r) => r.json()).then((d) => d.tiles);
+  return tilesPromise;
+}
+
+function webglAvailable() {
+  try {
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
+  } catch (_) {
+    return false;
+  }
+}
+
+function measured(el) {
+  return new Promise((resolve) => {
+    const check = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 20 && r.height > 20) { ro.disconnect(); resolve({ w: Math.round(r.width), h: Math.round(r.height) }); }
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    check();
+  });
+}
+
+async function createEncomGlobe(stage) {
+  if (!webglAvailable()) throw new Error("WebGL unavailable");
+  const [ENCOM, tiles] = await Promise.all([loadEncom(), loadTiles()]);
+  const { w, h: height } = await measured(stage);
+  const theme = currentTheme();
+  const colors = theme.globe || {};
+  const acc = accentHex();
+  const globe = new ENCOM.Globe(w, height, {
+    font: "United Sans",
+    data: [],
+    tiles,
+    baseColor: colors.base || acc,
+    markerColor: colors.marker || acc,
+    pinColor: colors.pin || acc,
+    satelliteColor: colors.satellite || acc,
+    scale: 1.1,
+    viewAngle: 0.63,
+    dayLength: 45000,
+    introLinesDuration: 2000,
+    introLinesColor: colors.marker || acc,
+    maxPins: 300,
+    maxMarkers: 100
+  });
+  // three r66 fixes the pixel ratio at construction; render crisply on HiDPI.
+  globe.renderer.devicePixelRatio = window.devicePixelRatio || 1;
+  globe.renderer.setSize(w, height);
+  stage.prepend(globe.domElement);
+
+  let running = false;
+  let destroyed = false;
+  let visible = true;
+  let timer = null;
+  let pending = null;
+
+  const loop = () => {
+    timer = null;
+    if (destroyed) return;
+    try { globe.tick(); } catch (e) { console.warn("globe tick", e); }
+    schedule();
+  };
+  function schedule() {
+    if (timer || destroyed || !running || !visible || !appActive()) return;
+    timer = setTimeout(() => requestAnimationFrame(loop), 1000 / 30);
+  }
+
+  const io = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; schedule(); });
+  io.observe(stage);
+  const ro = new ResizeObserver(() => {
+    const r = stage.getBoundingClientRect();
+    if (!globe.camera || r.width < 20 || r.height < 20) return;
+    globe.width = r.width;
+    globe.height = r.height;
+    globe.camera.aspect = r.width / r.height;
+    globe.camera.updateProjectionMatrix();
+    globe.renderer.setSize(r.width, r.height);
+  });
+  ro.observe(stage);
+  const wake = poll(() => schedule(), 2000);
+
+  const apply = (geo, cities) => {
+    globe.pins.forEach((p) => p.remove());
+    globe.pins = [];
+    globe.markers.forEach((m) => m.remove());
+    globe.markers = [];
+    if (!geo) return;
+    globe.addPin(geo.lat, geo.lon, "", 1.2);
+    const home = globe.addMarker(geo.lat, geo.lon, "", false, 1.2);
+    for (const c of cities) {
+      if (c.ms === null) continue;
+      globe.addPin(c.lat, c.lon, "", 1.1 + Math.min(0.15, c.ms / 4000));
+      globe.addMarker(c.lat, c.lon, "", home, 1.2);
+    }
+  };
+
+  globe.init(theme.lightBlack, () => {
+    if (destroyed) return;
+    running = true;
+    schedule();
+    sfx.play("scan");
+  });
+  // Same constellation layout as eDEX-UI: two staggered rings of three.
+  const constellation = [];
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 3; j++) {
+      constellation.push({ lat: 50 * i - 30 + 15 * Math.random(), lon: 120 * j - 120 + 30 * i, altitude: Math.random() * 0.4 + 1.3 });
+    }
+  }
+  globe.addConstellation(constellation);
+  if (pending) apply(...pending);
+
+  return {
+    kind: "encom",
+    setData(geo, cities) {
+      if (!globe.scene) { pending = [geo, cities]; return; }
+      apply(geo, cities);
+    },
+    destroy() {
+      destroyed = true;
+      clearTimeout(timer);
+      io.disconnect();
+      ro.disconnect();
+      wake.stop();
+      // Release the WebGL context now rather than waiting for GC; Chromium
+      // caps live contexts and theme switches rebuild the globe.
+      try {
+        const gl = globe.domElement.getContext("webgl") || globe.domElement.getContext("experimental-webgl");
+        gl?.getExtension("WEBGL_lose_context")?.loseContext();
+      } catch (_) {}
+      globe.domElement.remove();
+    }
+  };
+}
+
+// ── Fallback: canvas point cloud ────────────────────────────────────────────
 function unit(lat, lon) {
   const p = lat * RAD, l = lon * RAD;
   return [Math.cos(p) * Math.sin(l), Math.sin(p), Math.cos(p) * Math.cos(l)];
 }
-
 const CLOUD = (() => {
   const pts = [];
   for (let lat = -78; lat <= 78; lat += 6) {
@@ -23,189 +182,147 @@ const CLOUD = (() => {
   return pts;
 })();
 
-const GRATICULE = (() => {
-  const lines = [];
-  for (let lat = -60; lat <= 60; lat += 30) {
-    const line = [];
-    for (let lon = -180; lon <= 180; lon += 4) line.push(unit(lat, lon));
-    lines.push(line);
+function createPointCloudGlobe(stage) {
+  const canvas = h("canvas");
+  stage.prepend(canvas);
+  const ctx = canvas.getContext("2d");
+  let geo = null;
+  let cities = [];
+  let rotation = 0;
+  let timer = null;
+  let visible = true;
+  let destroyed = false;
+  let W = 0, H = 0, dpr = 1;
+  const cosT = Math.cos(-0.32), sinT = Math.sin(-0.32);
+  const resize = () => {
+    dpr = window.devicePixelRatio || 1;
+    const r = canvas.getBoundingClientRect();
+    W = canvas.width = Math.round(r.width * dpr);
+    H = canvas.height = Math.round(r.height * dpr);
+  };
+  const ro = new ResizeObserver(resize);
+  ro.observe(canvas);
+  const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; schedule(); });
+  io.observe(canvas);
+  const project = (v, R, cx, cy) => {
+    const cr = Math.cos(rotation), sr = Math.sin(rotation);
+    const x = v[0] * cr + v[2] * sr;
+    const z0 = -v[0] * sr + v[2] * cr;
+    return [cx + x * R, cy - (v[1] * cosT - z0 * sinT) * R, v[1] * sinT + z0 * cosT];
+  };
+  const draw = () => {
+    if (!W || !H) return;
+    ctx.clearRect(0, 0, W, H);
+    const R = Math.min(W, H) * 0.44, cx = W / 2, cy = H / 2, s = 1.3 * dpr;
+    for (const v of CLOUD) {
+      const [x, y, z] = project(v, R, cx, cy);
+      if (z <= 0) continue;
+      ctx.fillStyle = accent(0.15 + z * 0.6);
+      ctx.fillRect(x - s / 2, y - s / 2, s, s);
+    }
+    const marks = [...cities.filter((c) => c.ms !== null), ...(geo ? [{ lat: geo.lat, lon: geo.lon, home: true }] : [])];
+    for (const c of marks) {
+      const [x, y, z] = project(unit(c.lat, c.lon), R, cx, cy);
+      if (z <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(x, y, (c.home ? 3.4 : 2.2) * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = accent(c.home ? 1 : 0.7);
+      ctx.fill();
+    }
+  };
+  let last = performance.now();
+  const frame = () => {
+    timer = null;
+    const now = performance.now();
+    rotation += ((now - last) / 45000) * Math.PI * 2;
+    last = now;
+    draw();
+    schedule();
+  };
+  function schedule() {
+    if (timer || destroyed || !visible || !appActive()) return;
+    timer = setTimeout(() => requestAnimationFrame(frame), 50);
   }
-  for (let lon = -180; lon < 180; lon += 30) {
-    const line = [];
-    for (let lat = -84; lat <= 84; lat += 4) line.push(unit(lat, lon));
-    lines.push(line);
-  }
-  return lines;
-})();
-
-function slerp(a, b, t) {
-  const dot = Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
-  const omega = Math.acos(dot);
-  if (omega < 1e-4) return a;
-  const s = Math.sin(omega);
-  const k1 = Math.sin((1 - t) * omega) / s, k2 = Math.sin(t * omega) / s;
-  return [a[0] * k1 + b[0] * k2, a[1] * k1 + b[1] * k2, a[2] * k1 + b[2] * k2];
+  const wake = poll(() => { last = performance.now(); schedule(); }, 2000);
+  const offTheme = on("theme", draw);
+  schedule();
+  return {
+    kind: "canvas",
+    setData(g, c) { geo = g; cities = c; draw(); },
+    destroy() { destroyed = true; clearTimeout(timer); ro.disconnect(); io.disconnect(); wake.stop(); offTheme(); canvas.remove(); }
+  };
 }
 
+// ── Widget ──────────────────────────────────────────────────────────────────
 defineWidget({
   id: "globe",
   order: 2,
   title: "World View",
   column: "right",
   create(panel) {
-    const canvas = h("canvas", { class: "globe-canvas" });
+    const coords = h("span", { class: "v" }, "0.0000, 0.0000");
+    const offline = h("div", { class: "globe-offline" }, "OFFLINE");
+    const stage = h("div", { class: "globe-stage" }, offline);
     const refs = {};
     const info = h("div", { class: "globe-info" });
     for (const [k, label] of [["loc", "Location"], ["ip", "Public IP"], ["org", "Provider"], ["peers", "Peers"]]) {
       refs[k] = h("span", { class: "v" }, "--");
       info.append(h("div", null, h("span", { class: "label" }, label), refs[k]));
     }
-    panel.body.append(h("div", { class: "globe-wrap" }, canvas), info);
-    const ctx = canvas.getContext("2d");
+    panel.setSub("GLOBAL NETWORK MAP");
+    panel.body.append(h("div", { class: "globe-endpoint" }, h("span", null, "ENDPOINT LAT/LON"), coords), stage, info);
+
     let geo = null;
     let cities = [];
-    let rotation = 0;
-    let visible = true;
-    let timer = null;
-    let W = 0, H = 0, dpr = 1;
-    const tilt = -0.32;
-    const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+    let engine = null;
+    let building = null;
+    let disposed = false;
 
-    const resize = () => {
-      dpr = window.devicePixelRatio || 1;
-      const r = canvas.getBoundingClientRect();
-      W = canvas.width = Math.round(r.width * dpr);
-      H = canvas.height = Math.round(r.height * dpr);
-    };
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-    const io = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; schedule(); });
-    io.observe(canvas);
-
-    const project = (v, R, cx, cy) => {
-      const cr = Math.cos(rotation), sr = Math.sin(rotation);
-      const x = v[0] * cr + v[2] * sr;
-      const z0 = -v[0] * sr + v[2] * cr;
-      const y = v[1] * cosT - z0 * sinT;
-      const z = v[1] * sinT + z0 * cosT;
-      return [cx + x * R, cy - y * R, z];
-    };
-
-    const draw = (t) => {
-      if (!W || !H) return;
-      ctx.clearRect(0, 0, W, H);
-      const R = Math.min(W, H) * 0.44;
-      const cx = W / 2, cy = H / 2;
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.strokeStyle = accent(0.35);
-      ctx.lineWidth = dpr;
-      ctx.stroke();
-      const glow = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 1.08);
-      glow.addColorStop(0, accent(0));
-      glow.addColorStop(1, accent(0.08));
-      ctx.fillStyle = glow;
-      ctx.fill();
-
-      ctx.strokeStyle = accent(0.13);
-      for (const line of GRATICULE) {
-        ctx.beginPath();
-        let pen = false;
-        for (const v of line) {
-          const [x, y, z] = project(v, R, cx, cy);
-          if (z > 0) { pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true; } else pen = false;
+    const build = () => {
+      building = (async () => {
+        engine?.destroy();
+        engine = null;
+        try {
+          engine = await createEncomGlobe(stage);
+        } catch (e) {
+          console.warn("ENCOM globe unavailable, using canvas fallback:", e.message);
+          engine = createPointCloudGlobe(stage);
         }
-        ctx.stroke();
-      }
-
-      const s = 1.3 * dpr;
-      for (const v of CLOUD) {
-        const [x, y, z] = project(v, R, cx, cy);
-        if (z <= 0) continue;
-        ctx.fillStyle = accent(0.15 + z * 0.6);
-        ctx.fillRect(x - s / 2, y - s / 2, s, s);
-      }
-
-      const home = geo ? unit(geo.lat, geo.lon) : null;
-      if (home) {
-        for (const c of cities) {
-          if (c.ms === null) continue;
-          const target = unit(c.lat, c.lon);
-          ctx.beginPath();
-          let pen = false;
-          for (let i = 0; i <= 32; i++) {
-            const k = i / 32;
-            const p = slerp(home, target, k);
-            const lift = 1 + 0.12 * Math.sin(Math.PI * k);
-            const [x, y, z] = project([p[0] * lift, p[1] * lift, p[2] * lift], R, cx, cy);
-            if (z > -0.05) { pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true; } else pen = false;
-          }
-          ctx.strokeStyle = accent(c.ms < 120 ? 0.5 : 0.22);
-          ctx.lineWidth = dpr;
-          ctx.stroke();
-        }
-      }
-      for (const c of cities) {
-        const [x, y, z] = project(unit(c.lat, c.lon), R, cx, cy);
-        if (z <= 0) continue;
-        ctx.beginPath();
-        ctx.arc(x, y, 2.4 * dpr, 0, Math.PI * 2);
-        if (c.ms === null) { ctx.strokeStyle = accent(0.4); ctx.stroke(); }
-        else { ctx.fillStyle = accent(c.ms < 120 ? 1 : c.ms < 300 ? 0.7 : 0.4); ctx.fill(); }
-      }
-      if (home) {
-        const [x, y, z] = project(home, R, cx, cy);
-        if (z > 0) {
-          const pulse = (t / 1600) % 1;
-          ctx.beginPath();
-          ctx.arc(x, y, (3 + pulse * 12) * dpr, 0, Math.PI * 2);
-          ctx.strokeStyle = accent(0.8 * (1 - pulse));
-          ctx.lineWidth = 1.2 * dpr;
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(x, y, 3.2 * dpr, 0, Math.PI * 2);
-          ctx.fillStyle = accent(1);
-          ctx.fill();
-        }
-      }
+        if (disposed) { engine.destroy(); return; }
+        engine.setData(geo, cities);
+      })();
+      return building;
     };
+    build();
 
-    let last = performance.now();
-    const frame = () => {
-      timer = null;
-      const now = performance.now();
-      rotation += ((now - last) / 60000) * Math.PI * 2;
-      last = now;
-      draw(now);
-      schedule();
-    };
-    function schedule() {
-      if (timer || !visible || !appActive()) return;
-      timer = setTimeout(() => requestAnimationFrame(frame), 50);
-    }
-    // Resume after the window was hidden.
-    const wake = poll(() => { last = performance.now(); schedule(); }, 2000);
+    // The original rebuilt the globe on theme change; colours are baked into
+    // its textures, so do the same.
+    let themeTimer = null;
+    const offTheme = on("theme", () => {
+      clearTimeout(themeTimer);
+      themeTimer = setTimeout(() => building.then(build), 150);
+    });
+    const offNet = on("net-state", (n) => stage.classList.toggle("offline", !n.online));
 
     const lookups = poll(async () => {
       if (!settings.get("allowNetworkGeolocation")) {
         geo = null;
         cities = [];
+        setText(coords, "(LOOKUPS OFF)");
+        for (const k of Object.keys(refs)) setText(refs[k], "--");
         setText(refs.loc, "Lookups disabled");
-        setText(refs.ip, "--");
-        setText(refs.org, "--");
-        setText(refs.peers, "--");
-        panel.setSub("OFFLINE MODE");
+        engine?.setData(null, []);
         return;
       }
       geo = await api.net.geo();
       if (geo) {
+        setText(coords, `${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}`);
         setText(refs.loc, [geo.city, geo.country].filter(Boolean).join(", "));
         setText(refs.ip, geo.ip || "--");
         setText(refs.org, geo.org || "--");
         refs.org.title = geo.org || "";
-        panel.setSub(`${geo.lat.toFixed(2)}, ${geo.lon.toFixed(2)}`);
       } else {
+        setText(coords, "UNKNOWN");
         setText(refs.loc, "Unavailable");
       }
       cities = await api.net.pings();
@@ -213,18 +330,19 @@ defineWidget({
       const avg = ok.length ? Math.round(ok.reduce((a, c) => a + c.ms, 0) / ok.length) : null;
       setText(refs.peers, `${ok.length}/${cities.length}${avg !== null ? ` · ${avg} ms` : ""}`);
       refs.peers.title = cities.map((c) => `${c.city}: ${c.ms === null ? "timeout" : `${Math.round(c.ms)} ms`}`).join("\n");
+      engine?.setData(geo, cities);
     }, 120000);
     const unwatch = settings.watch("allowNetworkGeolocation", () => lookups.kick());
 
-    schedule();
     return {
       destroy() {
-        clearTimeout(timer);
-        ro.disconnect();
-        io.disconnect();
-        wake.stop();
+        disposed = true;
+        clearTimeout(themeTimer);
+        offTheme();
+        offNet();
         lookups.stop();
         unwatch();
+        engine?.destroy();
       }
     };
   }

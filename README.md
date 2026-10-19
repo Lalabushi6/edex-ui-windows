@@ -1,8 +1,9 @@
 # eDEX-UI — Windows Edition
 
-A full-screen, sci-fi desktop shell for Windows. Launch apps, switch windows,
-browse and open files, run terminals and watch live system telemetry from one
-surface — without dropping back to the Windows desktop.
+A full-screen, sci-fi desktop shell for Windows in the style of
+[eDEX-UI](https://github.com/GitSquared/edex-ui). Launch apps, switch windows,
+browse and open files, play media, run terminals and watch live system
+telemetry from one surface — without dropping back to the Windows desktop.
 
 ## Features
 
@@ -21,16 +22,26 @@ surface — without dropping back to the Windows desktop.
 - **Quick-look viewer**: images, audio, video, PDF and text, with in-place
   editing of text files (`Ctrl+S`).
 - **Process manager**: sortable, filterable, end process.
+- **The eDEX-UI look**: the original's grid backdrop, "PANEL / SYSTEM"
+  captions, ruled modules, slanted shell tabs, clipped-corner frames, logo,
+  kernel-log boot sequence with the glitching title, and terminal colours
+  tinted to the theme.
+- **World view**: the original ENCOM hex-tile globe with orbiting satellites,
+  your location pin and connection arcs to reference cities (with latency);
+  falls back to a canvas globe without WebGL.
+- **Media player** (`Ctrl+Shift+M`): playlist with drag-to-reorder, shuffle
+  and repeat, MP3 tags and cover art, video playback, spectrum visualizer,
+  resume where you left off, Windows media keys, and a "Now playing" widget.
+  Playback continues when the tab is closed.
 - **Telemetry widgets**: clock with world clocks, system, CPU (per core), memory,
-  GPU utilisation, drives and disk I/O, top processes, network traffic, and a
-  world-view globe with latency to reference cities.
+  GPU utilisation, drives and disk I/O, top processes and network traffic.
 - **Tools**: notes (auto-saved), clipboard history (memory only), quick links.
 - **Top bar**: media keys, master volume slider, network, battery, clock,
   settings and power menu (lock, sleep, sign out, restart, shut down).
 - **Two modes**: *Desktop* (full screen, sits behind your apps, so it acts as
   your desktop) and *Overlay* (always on top, summoned and dismissed by hotkey).
 - Tray icon, single instance, start with Windows, session restore of tabs,
-  24 themes plus your own, drag-to-reorder widgets, interface scaling.
+  the original eDEX-UI themes (with globe colours and colour filters) plus your\n  own, drag-to-reorder widgets, interface scaling.
 
 ## Getting started
 
@@ -64,16 +75,18 @@ src/main/            Electron main process
   settings.js        typed settings schema, validation, v1 migration
   tray.js            tray icon and menu
   preload.js         the renderer's only bridge (window.edex)
-  ipc/               terminal, system, files, desktop (apps/windows/media/power), extras
+  ipc/               terminal, system, files, desktop (apps/windows/media keys/power), media player, extras
   lib/               protocols, path policy, cache, JSON store, icon lookup
   native/bridge.ps1  long-lived PowerShell helper for Win32 APIs
 src/renderer/        UI (ES modules served from app://edex)
   js/core/           DOM builder, settings, theme, commands/hotkeys, polling, UI kit
   js/widgets/        side-column widgets
-  js/workspace/      tabs: terminal, explorer, process manager
+  js/workspace/      tabs: terminal, explorer, process manager, media player
   js/shell/          top bar, dock, launcher, settings, viewer, keyboard, boot
-themes/              built-in themes (JSON)
-scripts/             check.js, make-icons.js
+  js/media/          media player engine
+  lib/encom-globe.js the ENCOM globe (from eDEX-UI)
+themes/              built-in themes (JSON, eDEX-UI format)
+scripts/             check.js
 ```
 
 ## Security model
@@ -99,3 +112,13 @@ scripts/             check.js, make-icons.js
 falling back to ipinfo.io) and checks latency to google.com and twelve public
 sites. Turn this off under Settings → Privacy. Clipboard history is never
 written to disk.
+
+## Credits and license
+
+The look, themes, logo, boot sequence and globe come from
+[eDEX-UI](https://github.com/GitSquared/edex-ui) by Gabriel "Squared" SAILLARD
+and contributors (GPL-3.0); the globe is their fork of Rob Scanlon's ENCOM
+Globe (MIT). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+This project is licensed under the GNU General Public License v3.0 — see
+[LICENSE](LICENSE).

@@ -169,28 +169,62 @@ function registerNotes() {
 const VAR_KEY = /^--[a-z0-9_-]{1,48}$/i;
 const BAD_VALUE = /[;{}<>]|url\s*\(|expression\s*\(|@import/i;
 const HEX = /^#[0-9a-f]{3,8}$/i;
+// A plain colour: hex, rgb()/rgba() or hsl()/hsla() with numeric arguments.
+const COLOR = /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\(\s*[\d.%\s,/]+\))$/i;
+const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+  "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite"];
+const TERMINAL_FONTS = new Set(["Fira Mono", "Fira Code"]);
+const FILTER_FUNCS = new Set(["negate", "grayscale", "lighten", "darken", "saturate", "desaturate", "whiten", "blacken", "rotate", "mix"]);
 
+// Accepts both the original eDEX-UI theme format (colors / cssvars / terminal
+// / globe) and the older `styles` variant, and returns only validated values.
 function normalizeTheme(id, raw) {
   const clamp = (n) => Math.min(255, Math.max(0, Math.round(Number(n) || 0)));
+  const color = (v, fallback = null) => (typeof v === "string" && COLOR.test(v.trim()) ? v.trim() : fallback);
   let r = 0, g = 255, b = 0, black = "#000000", lightBlack = "#05080d", grey = "#262828";
+  const ansi = {};
   if (raw.colors) {
     r = clamp(raw.colors.r); g = clamp(raw.colors.g); b = clamp(raw.colors.b);
     if (HEX.test(raw.colors.black || "")) black = raw.colors.black;
     if (HEX.test(raw.colors.light_black || "")) lightBlack = raw.colors.light_black;
     if (HEX.test(raw.colors.grey || "")) grey = raw.colors.grey;
+    // Only explicit ANSI palettes; `black` doubles as a background shade in
+    // most themes, so it counts as a palette entry only when `red` is set too.
+    if (raw.colors.red) for (const name of ANSI) { const c = color(raw.colors[name]); if (c) ansi[name] = c; }
   } else if (raw.styles) {
     r = clamp(raw.styles["--color_r"]); g = clamp(raw.styles["--color_g"]); b = clamp(raw.styles["--color_b"]);
     if (HEX.test(raw.styles["--color_light_black"] || "")) lightBlack = raw.styles["--color_light_black"];
     if (HEX.test(raw.styles["--color_grey"] || "")) grey = raw.styles["--color_grey"];
   }
-  const terminal = {};
-  if (raw.terminal && typeof raw.terminal === "object") {
-    for (const [k, v] of Object.entries(raw.terminal)) {
-      if (!/^[a-zA-Z]{1,32}$/.test(k) || k === "fontFamily") continue;
-      const s = String(v);
-      if (s.length <= 64 && !BAD_VALUE.test(s)) terminal[k] = s;
+  const accentHex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+
+  const t = raw.terminal && typeof raw.terminal === "object" ? raw.terminal : {};
+  const terminal = {
+    foreground: color(t.foreground),
+    background: color(t.background),
+    cursor: color(t.cursor),
+    cursorAccent: color(t.cursorAccent),
+    selectionBackground: color(t.selection) || color(t.selectionBackground),
+    cursorStyle: ["block", "bar", "underline"].includes(t.cursorStyle) ? t.cursorStyle : null,
+    fontFamily: TERMINAL_FONTS.has(t.fontFamily) ? t.fontFamily : null
+  };
+  const colorFilter = [];
+  if (Array.isArray(t.colorFilter)) {
+    for (const step of t.colorFilter.slice(0, 12)) {
+      const m = /^([a-z]+)\(\s*(-?[\d.]*)\s*\)$/i.exec(String(step));
+      if (!m || !FILTER_FUNCS.has(m[1])) continue;
+      colorFilter.push({ func: m[1], arg: m[2] === "" ? null : Number(m[2]) });
     }
   }
+
+  const gl = raw.globe && typeof raw.globe === "object" ? raw.globe : {};
+  const globe = {
+    base: color(gl.base, "#000000"),
+    marker: color(gl.marker, accentHex),
+    pin: color(gl.pin, accentHex),
+    satellite: color(gl.satellite, accentHex)
+  };
+
   const extra = {};
   if (raw.styles) {
     for (const [k, v] of Object.entries(raw.styles)) {
@@ -205,7 +239,10 @@ function normalizeTheme(id, raw) {
     description: typeof raw.description === "string" ? raw.description.slice(0, 256) : "",
     rgb: [r, g, b],
     black, lightBlack, grey,
+    ansi,
     terminal,
+    colorFilter,
+    globe,
     extra
   };
 }
@@ -247,15 +284,23 @@ function registerThemes() {
     const t = theme && typeof theme === "object" ? theme : {};
     const clamp = (n) => Math.min(255, Math.max(0, Math.round(Number(n) || 0)));
     const rgb = Array.isArray(t.rgb) ? t.rgb.map(clamp) : [0, 255, 0];
+    const hex = `#${rgb.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    const lightBlack = HEX.test(t.lightBlack || "") ? t.lightBlack : "#05080d";
     const out = {
       name: safeName,
       author: "You",
       colors: {
         r: rgb[0], g: rgb[1], b: rgb[2],
         black: HEX.test(t.black || "") ? t.black : "#000000",
-        light_black: HEX.test(t.lightBlack || "") ? t.lightBlack : "#05080d",
+        light_black: lightBlack,
         grey: HEX.test(t.grey || "") ? t.grey : "#262828"
-      }
+      },
+      cssvars: { font_main: "United Sans Medium", font_main_light: "United Sans Light" },
+      terminal: {
+        fontFamily: "Fira Mono", cursorStyle: "block", foreground: hex, background: lightBlack,
+        cursor: hex, cursorAccent: hex, selection: `rgba(${rgb.join(",")},0.3)`
+      },
+      globe: { base: "#000000", marker: hex, pin: hex, satellite: hex }
     };
     await fs.promises.mkdir(userDir, { recursive: true });
     await fs.promises.writeFile(path.join(userDir, `${id}.json`), JSON.stringify(out, null, 2), "utf8");

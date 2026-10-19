@@ -102,6 +102,12 @@ contextBridge.exposeInMainWorld("edex", {
     setVolume: invoke("media:setVolume"),
     setMute: invoke("media:setMute")
   },
+  player: {
+    pickFiles: invoke("media:pickFiles"),
+    pickFolder: invoke("media:pickFolder"),
+    scan: invoke("media:scan"),
+    tags: invoke("media:tags")
+  },
   power: { action: invoke("power:action") },
   shell: {
     openExternal: invoke("shell:openExternal"),
