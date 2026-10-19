@@ -56,11 +56,11 @@ function registerFiles({ windows, bridge, icons }) {
     type: "warning", defaultId: 0, cancelId: 0, noLink: true, ...options
   }));
 
-  async function listDir(dirPath) {
+  async function listDir(dirPath, fresh = false) {
     const dir = await paths.forRead(dirPath);
     const key = dir.toLowerCase();
     const hit = listCache.get(key);
-    if (hit && Date.now() - hit.at < LIST_TTL) return hit.value;
+    if (!fresh && hit && Date.now() - hit.at < LIST_TTL) return hit.value;
 
     let dirents;
     try {
@@ -116,7 +116,9 @@ function registerFiles({ windows, bridge, icons }) {
     return out.filter((p) => fs.existsSync(p.path));
   });
 
-  handle("fs:list", (_e, dir) => listDir(asString(dir, "path")));
+  // `fresh` skips the short listing cache (the file panel re-reads a folder
+  // right after a shell command that may have changed it).
+  handle("fs:list", (_e, dir, opts) => listDir(asString(dir, "path"), !!opts?.fresh));
 
   handle("fs:stat", async (_e, target) => {
     const p = await paths.forRead(asString(target, "path"));

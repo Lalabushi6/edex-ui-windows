@@ -22,17 +22,24 @@ import { openLauncher, launcherIsOpen, closeLauncher, preloadLauncher, loadAppsC
 import { openSettings } from "./shell/settings-panel.js";
 import { openHelp, openFileSearch, runBoot, showGreeting } from "./shell/extras.js";
 import { initKeyboard, openLayoutsFolder, importLayouts } from "./shell/keyboard.js";
+import { initLayout, applyPreset, PRESETS } from "./core/layout.js";
+import { initFilePanel } from "./shell/filepanel.js";
+import { openThemeEditor, openCssEditor, initCustomCss } from "./shell/theme-studio.js";
 
 const api = window.edex;
 let workspace;
 let dock;
 let keyboard;
 
-function applyLayout() {
-  document.documentElement.style.setProperty("--ui-scale", String(settings.get("uiScale") / 100));
-  const app = $("#app");
-  app.classList.toggle("no-left", !settings.get("showLeftColumn"));
-  app.classList.toggle("no-right", !settings.get("showRightColumn"));
+// Without the top bar and dock the launcher and settings stay reachable by
+// hotkey; say so once when they are first hidden.
+function hintHiddenChrome() {
+  const hidden = settings.get("showTopbar") === false || settings.get("showDock") === false;
+  let shown = false;
+  try { shown = localStorage.getItem("edex.chromeHint") === "1"; } catch (_) {}
+  if (!hidden || shown) return;
+  try { localStorage.setItem("edex.chromeHint", "1"); } catch (_) {}
+  toast("Top bar / dock hidden: Ctrl+Shift+Space opens the launcher, Ctrl+, settings, Ctrl+Shift+A switches windows", { timeout: 7000 });
 }
 
 function applyPerformance() {
@@ -83,6 +90,15 @@ async function registerCommands() {
   cmd("settings.keyboard", "Keyboard settings", () => openSettings("keyboard"), { icon: "keyboard", keywords: "on-screen keyboard layout azerty qwertz dvorak colemak" });
   cmd("layout.left", "Toggle left column", () => settings.set({ showLeftColumn: !settings.get("showLeftColumn") }), { icon: "layout", keywords: "panel sidebar hide show" });
   cmd("layout.right", "Toggle right column", () => settings.set({ showRightColumn: !settings.get("showRightColumn") }), { icon: "layout", keywords: "panel sidebar hide show" });
+  cmd("layout.topbar", "Toggle top bar", () => settings.set({ showTopbar: settings.get("showTopbar") === false }), { icon: "layout", keywords: "status bar header hide show" });
+  cmd("layout.dock", "Toggle dock", () => settings.set({ showDock: settings.get("showDock") === false }), { icon: "layout", keywords: "taskbar windows hide show" });
+  cmd("layout.files", "Toggle file browser panel", () => settings.set({ filesPanel: settings.get("filesPanel") === "off" ? (settings.get("columnsSide") === "split" ? "bottom" : "column") : "off" }), { icon: "folder", keywords: "filesystem panel bottom edex" });
+  for (const [name, preset] of Object.entries(PRESETS)) {
+    cmd(`layout.preset.${name}`, `Layout: ${preset.label}`, () => applyPreset(name), { icon: "layout", keywords: `layout preset arrangement ${preset.desc}` });
+  }
+  cmd("settings.layout", "Layout settings", () => openSettings("layout"), { icon: "layout", keywords: "arrange columns panels topbar dock" });
+  cmd("settings.theme", "Theme editor", () => openThemeEditor(), { icon: "palette", keywords: "colours colors fonts theme customise customize css" });
+  cmd("settings.css", "Edit custom CSS", () => openCssEditor(), { icon: "code", keywords: "style css customise customize" });
   cmd("mode.toggle", "Switch desktop / overlay mode", () => settings.set({ mode: settings.get("mode") === "overlay" ? "desktop" : "overlay" }), { icon: "window", keywords: "overlay desktop hud always on top" });
   cmd("app.hide", "Hide eDEX", () => api.app.hide(), { icon: "minimize", keywords: "show desktop minimize" });
   cmd("app.reload", "Reload interface", () => api.app.reload(), { icon: "refresh" });
@@ -124,12 +140,13 @@ async function registerCommands() {
 
 async function main() {
   await settings.loadSettings();
-  applyLayout();
+  initLayout();
+  initCustomCss();
   await applyTheme(settings.get("theme")).catch(() => applyTheme("tron"));
   const boot = runBoot();
 
-  settings.watch(["uiScale", "showLeftColumn", "showRightColumn"], applyLayout);
   settings.watch("theme", (id) => applyTheme(id).catch(() => {}));
+  settings.watch(["showTopbar", "showDock"], hintHiddenChrome);
   onSchedulingChange(applyProfileClass);
   applyPerformance();
   settings.watch(["perfProfile", "throttleUnfocused"], applyPerformance);
@@ -152,6 +169,7 @@ async function main() {
   workspace = new Workspace($("#workspace"));
   await registerCommands();
   keyboard = initKeyboard($("#keyboard"), () => workspace.activeTerminal());
+  initFilePanel($("#filepanel"), () => workspace.activeTerminal());
   await workspace.init();
   preloadLauncher();
   window.addEventListener("dragover", (e) => e.preventDefault());

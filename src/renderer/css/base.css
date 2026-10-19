@@ -27,7 +27,9 @@
   --ui-scale: 1;
   --gap: .55rem;
   --radius: 0;
-  --col-w: clamp(250px, 19vw, 420px);
+  --col-scale: 1;
+  --col-w: calc(clamp(250px, 19vw, 420px) * var(--col-scale));
+  --files-w: 42%;
   --clip: 1rem;
   color-scheme: dark;
 }
@@ -71,6 +73,8 @@ input, textarea, [contenteditable] { user-select: text; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── App grid ───────────────────────────────────────────────────────────── */
+/* The default arrangement; core/layout.js rewrites the template from the
+   layout settings (regions shown, columns side, file panel position). */
 #app {
   position: relative;
   z-index: 1;
@@ -83,20 +87,25 @@ input, textarea, [contenteditable] { user-select: text; }
   grid-template-areas:
     "top top top"
     "left work right"
-    "kbd kbd kbd"
+    "bottom bottom bottom"
     "dock dock dock";
 }
-#app.no-left { grid-template-columns: minmax(0, 1fr) var(--col-w); grid-template-areas: "top top" "work right" "kbd kbd" "dock dock"; }
-#app.no-right { grid-template-columns: var(--col-w) minmax(0, 1fr); grid-template-areas: "top top" "left work" "kbd kbd" "dock dock"; }
-#app.no-left.no-right { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "work" "kbd" "dock"; }
-#app.no-left #col-left, #app.no-right #col-right { display: none; }
 
 #topbar { grid-area: top; }
 #col-left { grid-area: left; }
 #work { grid-area: work; }
 #col-right { grid-area: right; }
-#keyboard { grid-area: kbd; }
+#bottom { grid-area: bottom; }
 #dock { grid-area: dock; }
+
+/* Bottom strip: file browser and keyboard side by side (eDEX-UI's layout). */
+#bottom { display: flex; gap: calc(var(--gap) * 2); min-width: 0; align-items: stretch; }
+#bottom.keyboard-left { flex-direction: row-reverse; }
+/* The keyboard sets the strip's height; the file list scrolls within it
+   (size containment stops a long listing from growing the strip). */
+#bottom > #filepanel { flex: 0 0 var(--files-w); min-width: 0; contain: size; }
+#bottom > #keyboard { flex: 1 1 0; min-width: 0; }
+#bottom.files-only > #filepanel { flex: 1 1 auto; contain: none; height: 30vh; }
 
 .side, #work { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: .45rem; }
 

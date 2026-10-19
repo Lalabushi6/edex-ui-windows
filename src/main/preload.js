@@ -31,7 +31,11 @@ contextBridge.exposeInMainWorld("edex", {
   themes: {
     list: invoke("themes:list"),
     get: invoke("themes:get"),
-    save: invoke("themes:save")
+    save: invoke("themes:save"),
+    folder: invoke("themes:folder"),
+    import: invoke("themes:import"),
+    export: invoke("themes:export"),
+    remove: invoke("themes:remove")
   },
   term: {
     shells: invoke("term:shells"),

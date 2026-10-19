@@ -1,0 +1,32 @@
+{
+  "name": "Ember",
+  "author": "eDEX-UI Windows",
+  "description": "Warm orange on charcoal, after the popular orange eDEX-UI setups.",
+  "colors": {
+    "r": 214,
+    "g": 124,
+    "b": 76,
+    "black": "#0d0c0b",
+    "light_black": "#1b1a19",
+    "grey": "#2b2927"
+  },
+  "cssvars": {
+    "font_main": "United Sans Medium",
+    "font_main_light": "United Sans Light"
+  },
+  "terminal": {
+    "fontFamily": "Fira Mono",
+    "cursorStyle": "block",
+    "foreground": "#e3e0dc",
+    "background": "#1b1a19",
+    "cursor": "#d67c4c",
+    "cursorAccent": "#1b1a19",
+    "selection": "rgba(214,124,76,0.3)"
+  },
+  "globe": {
+    "base": "#000000",
+    "marker": "#d67c4c",
+    "pin": "#d67c4c",
+    "satellite": "#d67c4c"
+  }
+}

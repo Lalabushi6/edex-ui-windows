@@ -42,5 +42,8 @@
         "marker": "#f3f99d",
         "pin": "#eff0eb",
         "satellite": "#ff5c57"
+    },
+    "layout": {
+        "filesPanel": "bottom"
     }
 }

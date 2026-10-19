@@ -323,7 +323,9 @@ defineWidget({
     // The original rebuilt the globe on theme change; colours are baked into
     // its textures, so do the same.
     let themeTimer = null;
-    const offTheme = on("theme", () => {
+    const offTheme = on("theme", (t) => {
+      // Live edits in the theme editor skip the (heavy) rebuild until saved.
+      if (t?.preview) return;
       clearTimeout(themeTimer);
       themeTimer = setTimeout(() => building.then(build), 150);
     });
