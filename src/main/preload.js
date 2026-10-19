@@ -139,6 +139,13 @@ contextBridge.exposeInMainWorld("edex", {
     load: invoke("notes:load"),
     save: invoke("notes:save")
   },
+  kb: {
+    list: invoke("kb:list"),
+    get: invoke("kb:get"),
+    folder: invoke("kb:folder"),
+    import: invoke("kb:import"),
+    onChange: subscribe("kb:changed")
+  },
   alarm: {
     set: invoke("alarm:set"),
     clear: invoke("alarm:clear"),

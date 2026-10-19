@@ -232,6 +232,13 @@ export class TerminalTab {
     this.term.paste(text);
   }
 
+  // Key presses from the on-screen keyboard: sent exactly as if typed
+  // (control and escape sequences intact), unlike paste().
+  sendKeys(data) {
+    if (!this.term || !data) return;
+    this.term.input(data, true);
+  }
+
   zoom(delta) {
     settings.set({ termFontSize: Math.max(8, Math.min(32, settings.get("termFontSize") + delta)) });
   }

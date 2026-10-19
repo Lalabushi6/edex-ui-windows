@@ -60,6 +60,15 @@ for (const f of themes) {
   catch (e) { failures.push(`Invalid theme JSON ${rel(f)}: ${e.message}`); }
 }
 
+const { normalizeLayout, LAYOUT_ID } = require(path.join(root, "src", "main", "lib", "kb-layout.js"));
+const keyboards = walk(path.join(root, "keyboards"), (f) => f.endsWith(".json"));
+for (const f of keyboards) {
+  const id = path.basename(f, ".json");
+  if (!LAYOUT_ID.test(id)) failures.push(`Keyboard layout file name not allowed: ${rel(f)}`);
+  try { normalizeLayout(JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, ""))); }
+  catch (e) { failures.push(`Invalid keyboard layout ${rel(f)}: ${e.message}`); }
+}
+
 const bridge = path.join(root, "src", "main", "native", "bridge.ps1");
 const bytes = fs.readFileSync(bridge);
 const bad = bytes.findIndex((b) => b > 127);
@@ -69,4 +78,4 @@ if (failures.length) {
   console.error(failures.join("\n\n"));
   process.exit(1);
 }
-console.log(`OK: ${mainFiles.length} main files, ${rendererFiles.length} renderer modules, ${themes.length} themes.`);
+console.log(`OK: ${mainFiles.length} main files, ${rendererFiles.length} renderer modules, ${themes.length} themes, ${keyboards.length} keyboard layouts.`);

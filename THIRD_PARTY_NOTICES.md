@@ -9,7 +9,9 @@ eDEX-UI Windows Edition builds on the following work.
 - License: GNU General Public License v3.0
 
 Used here: the theme files in `themes/` (colour, font, terminal and globe
-values), the logo and application icons (`build/icon.*`,
+values), the on-screen keyboard layouts in `keyboards/` (by eDEX-UI and its
+contributors; `en-WORKMAN.json` had its missing closing brace restored), the
+keyboard's dead-key tables and arrow icons, the logo and application icons (`build/icon.*`,
 `src/main/assets/icon.png`, `src/main/assets/tray.png`,
 `src/renderer/assets/logo.svg`), the boot log text
 (`src/renderer/assets/misc/boot_log.txt`), the globe tile grid

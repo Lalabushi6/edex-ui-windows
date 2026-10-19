@@ -15,6 +15,7 @@ const { registerFiles } = require("./ipc/files");
 const { registerDesktop } = require("./ipc/desktop");
 const { registerNetwork, registerClipboard, registerNotes, registerThemes, registerAlarms } = require("./ipc/extras");
 const { registerMedia } = require("./ipc/media");
+const { registerKeyboards } = require("./ipc/keyboards");
 const { Telemetry } = require("./lib/telemetry");
 const { IconService } = require("./lib/icon-service");
 
@@ -38,6 +39,7 @@ function start() {
   let telemetry;
   let icons;
   let alarms;
+  let keyboards;
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -91,6 +93,7 @@ function start() {
     alarms = registerAlarms({ windows });
     registerThemes();
     registerMedia({ windows });
+    keyboards = registerKeyboards({ windows });
 
     // The bridge starts right away (the panels' first readings come from
     // it) and primes CPU/process/network deltas so first values are real.
@@ -152,6 +155,7 @@ function start() {
     terminal?.killAll();
     clip?.stop();
     alarms?.stop();
+    keyboards?.stop();
     notes?.flush();
     icons?.flush();
     settings?.flush();

@@ -210,22 +210,49 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 
 /* ── On-screen keyboard (eDEX-UI style: borderless legends, Enter and
    Space outlined, pressed keys flash in the accent colour) ─────────────── */
-#keyboard { display: none; }
-#keyboard.show { display: flex; flex-direction: column; gap: .35rem; padding: .5rem .3rem .2rem; border-top: 1px solid var(--c-30); }
-.kb-row { display: flex; gap: .45rem; justify-content: center; }
+#keyboard { display: none; --kb-gap: .32rem; --kb-h: 2.3rem; }
+#keyboard.show { display: flex; flex-direction: column; align-items: center; gap: var(--kb-gap); padding: .25rem .3rem .3rem; border-top: 1px solid var(--c-30); }
+.kb-bar, .kb-rows { width: min(100%, 66rem); }
+.kb-bar { display: flex; align-items: center; gap: .4rem; min-height: 1.5rem; }
+.kb-bar .grow { flex: 1; }
+.kb-layout-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .1rem .35rem; border: 1px solid transparent; background: transparent; color: var(--c-70); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; }
+.kb-layout-btn:hover { color: var(--c); border-color: var(--c-20); }
+.kb-layout-btn .ico { width: .95rem; height: .95rem; }
+.kb-dead { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--warn); }
+.kb-rows { display: flex; flex-direction: column; gap: var(--kb-gap); }
+/* Rows fill the full width so the right edges line up like a real keyboard
+   (and the two halves of Enter join). */
+.kb-row { display: flex; gap: .4rem; height: var(--kb-h); align-items: flex-end; }
 .kb-key {
-  position: relative;
-  flex: 1 1 0; max-width: 4.2rem; height: 2.4rem; display: flex; align-items: center; justify-content: center;
-  border: 1px solid transparent; background: transparent; font-size: 1.3rem; line-height: 1;
+  position: relative; flex: var(--g, 1) 1 0; min-width: 0; height: var(--kb-h); padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: .25rem; background: transparent;
+  font-size: 1.2rem; line-height: 1; color: var(--c); cursor: pointer; user-select: none; touch-action: none;
   transition: background .08s, color .08s;
 }
-.kb-key small { position: absolute; top: .1rem; left: .35rem; font-size: .75rem; color: var(--c-70); }
-.kb-key.wide { max-width: 7rem; flex-grow: 1.6; font-size: 1.05rem; }
-.kb-key.space { max-width: 28rem; flex-grow: 7; border-color: var(--c-50); }
-.kb-key.enter { border-color: var(--c-50); }
 .kb-key:hover { background: var(--c-12); }
-.kb-key.down, .kb-key.latched { background: var(--c); color: var(--bg); }
-.kb-key.down small, .kb-key.latched small { color: var(--bg); }
+.kb-main { max-width: 100%; padding: 0 .2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-key.word .kb-main { font-size: .74rem; letter-spacing: .1em; }
+.kb-l { position: absolute; font-size: .6rem; line-height: 1; color: var(--c-70); pointer-events: none; white-space: nowrap; }
+.kb-l:empty { display: none; }
+.kb-tl { top: .2rem; left: .3rem; }
+.kb-tr { top: .2rem; right: .3rem; }
+.kb-br { bottom: .2rem; right: .3rem; }
+.kb-bl { bottom: .2rem; left: .3rem; opacity: .5; }
+.kb-key svg { width: 1.35rem; height: 1.35rem; fill: currentColor; }
+.kb-key.space, .kb-key.enter { border-color: var(--c-50); }
+.kb-key.enter-top { border-bottom-color: transparent; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.kb-key.enter-bottom { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; height: calc(var(--kb-h) + var(--kb-gap)); margin-top: calc(-1 * var(--kb-gap)); }
+.kb-gap { flex: 1 1 0; }
+.kb-key.deadkey .kb-main { color: var(--c-70); }
+.kb-key.down, .kb-key.latched, .kb-key.pending { background: var(--c); color: var(--bg); }
+.kb-key.down .kb-l, .kb-key.latched .kb-l, .kb-key.pending .kb-l, .kb-key.pending .kb-main { color: var(--bg); }
+.kb-key.locked { box-shadow: inset 0 -3px 0 var(--bg); }
+#keyboard.fn-on .kb-key:not(.mod) .kb-main { letter-spacing: .04em; }
+/* Password mode (eDEX-UI's KB_PASSMODE): no visual feedback of what is typed. */
+#keyboard[data-password="true"] .kb-rows { opacity: .5; }
+#keyboard[data-password="true"] .kb-key:hover { background: transparent; }
+#keyboard[data-password="true"] .icon-btn.active { background: var(--warn); color: var(--bg); }
 /* ── Now playing ────────────────────────────────────────────────────────── */
 .np-top { display: flex; align-items: center; gap: .6rem; cursor: pointer; min-width: 0; }
 .np-art { width: 3rem; height: 3rem; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--c-35); }

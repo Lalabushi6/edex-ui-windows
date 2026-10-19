@@ -132,7 +132,62 @@ close the player tab, and Windows' media keys and media overlay control it.
 Formats are whatever Chromium plays: MP3, AAC/M4A, FLAC, WAV, Ogg/Opus,
 MP4 (H.264), WebM and most MKV files.
 
-## 9. Top bar and tools
+## 9. On-screen keyboard
+
+Show it with `Ctrl+Shift+K`, the keyboard button in the dock, or Settings →
+Keyboard. It types into the focused text field (launcher, dialogs,
+settings), otherwise into the active terminal, otherwise it sends key
+presses to whatever has focus (explorer, process list). App shortcuts work
+from it too: Shift+Ctrl+T opens a terminal, Fn+1 is F1 (help), and so on.
+
+| Key | Behaviour |
+|---|---|
+| Shift / Ctrl / AltGr | Tap once for the next key, twice to lock (underlined), again to release |
+| Caps | Toggles capitals for letters |
+| Fn | Switches the number row to F1–F12 |
+| Dead keys (e.g. `^` on French) | Accent the next letter: `^` then `e` → `ê`; twice types the accent itself |
+| Hold a key | Repeats |
+
+The bar above the keys shows the layout (click it to switch, open the
+custom layouts folder or import a layout), a lock button for **password
+mode** (no key highlights or sounds while you type a secret) and a close
+button. Physical key presses light up the matching keys.
+
+**Layouts**: all eDEX-UI layouts are included — English (US, UK, Dvorak,
+Colemak, Workman, Norman), French (AZERTY, BÉPO), German, Spanish (Spain,
+Latin America), Italian, Portuguese (Brazil), Dutch (Belgium), Danish,
+Swedish, Hungarian and Turkish (F, Q). **Auto** picks the one matching your
+Windows display language.
+
+**Custom layouts**: put eDEX-UI layout files (`.json`) in
+`%APPDATA%\eDEX-UI\keyboards` (Settings → Keyboard → Open, or Import…). A
+file named like a built-in (`en-US.json`) replaces it; changes apply as soon
+as the file is saved. Files that cannot be read are listed in Settings →
+Keyboard with the reason. The format is the original's: rows `row_numbers`,
+`row_1`, `row_2`, `row_3`, `row_space`; each key has `name` and `cmd` plus
+optional `shift_`, `alt_`, `altshift_`, `fn_`, `ctrl_` and `capslck_`
+variants; `~~~CTRLSEQ1~~~` is Esc; `ESCAPED|-- SHIFT: LEFT` (and CTRL, ALT,
+FN, CAPSLCK) are modifiers; `ESCAPED|-- ICON: ARROW_UP` (DOWN, LEFT, RIGHT)
+draws arrows; `ESCAPED|-- ACUTE` (GRAVE, CIRCUM, TREMA, TILDE, CEDILLA,
+CARON, BREVE, MACRON, OVERRING, BAR, GREEK, IOTASUB) are dead keys. An
+optional top-level `"name"` sets the name shown in the picker.
+
+## 10. Boot logo and ASCII art
+
+Settings → Appearance → **Boot logo** → **Edit…** opens the editor:
+
+- Type a single line for a title, or paste **ASCII art** (several lines).
+  Tabs, shared indentation and trailing spaces are cleaned up; the art is
+  scaled to fit the screen, keeping every space.
+- **Load file…** reads `.txt`, `.nfo`, `.ans`, `.asc` or `.diz` art; old DOS
+  (code page 437) files and ANSI colour codes are converted.
+- **Block letters…** turns text into big block-letter art (`\n` starts a
+  second line); **Presets** has eDEX-UI, your PC name and your user name.
+- **Preview boot** plays the title animation full-screen with the art.
+
+Up to 120 lines × 240 columns. Leave it empty for the default logo.
+
+## 11. Top bar and tools
 
 - **Clock**: click it for a month calendar with ISO week numbers (scroll or
   use the arrows to change month, **Today** to jump back).
@@ -153,7 +208,7 @@ MP4 (H.264), WebM and most MKV files.
 New widgets appear at the end of their column; drag them where you want them
 or hide them in Settings → Layout.
 
-## 10. Performance
+## 12. Performance
 
 eDEX is built to stay out of the way:
 
@@ -176,7 +231,7 @@ The page also shows eDEX's own CPU and memory use per process (interface,
 GPU process, native helper …), refreshed every two seconds. The launcher has
 **Cycle performance profile** for switching quickly.
 
-## 11. Global shortcuts
+## 13. Global shortcuts
 
 | Keys | Action |
 |---|---|
@@ -197,26 +252,29 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 The two global hotkeys can be changed in Settings → General. If another app
 already owns one, eDEX shows a notice at startup.
 
-## 12. Settings
+## 14. Settings
 
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
   with Windows, hotkeys, web search engine, sounds.
 - **Appearance**: themes, custom accent colour (saved as your own theme),
-  interface scale, clock format, temperature unit, boot screen.
+  interface scale, clock format, temperature unit, boot screen and boot
+  logo / ASCII art (see section 10).
 - **Terminal**: default shell, font size, cursor, scrollback, copy on select.
+- **Keyboard**: on-screen keyboard, layout, custom layouts folder and import,
+  password mode (see section 9).
 - **Layout**: columns, widgets, on-screen keyboard.
 - **Files**: hidden items, delete confirmation, default view, history.
 - **Performance**: profile, background slow-down, GPU terminal, eDEX's own
-  resource use (see section 10).
+  resource use (see section 12).
 - **Privacy**: outbound network lookups, clipboard history.
 
 Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
 run.
 
-## 13. Privacy and network
+## 15. Privacy and network
 
 With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 
@@ -230,7 +288,7 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 Turn it off and eDEX makes no outbound requests. Clipboard history is kept in
 memory only and can be disabled.
 
-## 14. Troubleshooting
+## 16. Troubleshooting
 
 - **A hotkey does nothing**: another app owns it — pick a new one in Settings → General.
 - **Everything refreshes slowly**: you are probably on battery, where the
