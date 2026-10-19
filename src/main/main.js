@@ -13,8 +13,10 @@ const { registerTerminal } = require("./ipc/terminal");
 const { registerSystem } = require("./ipc/system");
 const { registerFiles } = require("./ipc/files");
 const { registerDesktop } = require("./ipc/desktop");
-const { registerNetwork, registerClipboard, registerNotes, registerThemes } = require("./ipc/extras");
+const { registerNetwork, registerClipboard, registerNotes, registerThemes, registerAlarms } = require("./ipc/extras");
 const { registerMedia } = require("./ipc/media");
+const { Telemetry } = require("./lib/telemetry");
+const { IconService } = require("./lib/icon-service");
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -33,6 +35,9 @@ function start() {
   let notes;
   let bridge;
   let settings;
+  let telemetry;
+  let icons;
+  let alarms;
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -73,15 +78,24 @@ function start() {
     handle("settings:set", (_e, patch) => settings.set(patch));
     settings.on("change", (changed) => windows.send("settings:changed", changed));
 
+    telemetry = new Telemetry({ bridge });
+    icons = new IconService({ bridge, cacheFile: path.join(app.getPath("userData"), "icon-cache.json") });
+
     terminal = registerTerminal({ settings });
-    registerSystem({ windows, bridge });
-    registerFiles({ windows, bridge });
-    const desktop = registerDesktop({ windows, bridge });
+    registerSystem({ windows, telemetry });
+    registerFiles({ windows, bridge, icons });
+    const desktop = registerDesktop({ windows, bridge, icons });
     registerNetwork({ settings });
-    clip = registerClipboard({ settings, windows });
+    clip = registerClipboard({ settings, windows, bridge });
     notes = registerNotes();
+    alarms = registerAlarms({ windows });
     registerThemes();
     registerMedia({ windows });
+
+    // The bridge starts right away (the panels' first readings come from
+    // it) and primes CPU/process/network deltas so first values are real.
+    bridge.warmUp();
+    telemetry.warm();
 
     windows.create();
     createTray({ windows, settings, quit });
@@ -92,12 +106,10 @@ function start() {
       if ("openAtLogin" in changed) applyLoginItem();
     });
 
-    // Warm the slow sources in the background so the first launcher open and
-    // first dock refresh are instant.
-    setTimeout(() => {
-      bridge.warmUp();
-      desktop.warm();
-    }, 1500);
+    // Rebuilding the installed-app index runs Get-StartApps (about a second
+    // of helper time); the launcher answers from the disk cache until then,
+    // so it is pushed well past startup.
+    setTimeout(() => desktop.warm(), 25000);
   });
 
   function registerHotkeys() {
@@ -139,7 +151,9 @@ function start() {
     globalShortcut.unregisterAll();
     terminal?.killAll();
     clip?.stop();
+    alarms?.stop();
     notes?.flush();
+    icons?.flush();
     settings?.flush();
     bridge?.stop();
   });

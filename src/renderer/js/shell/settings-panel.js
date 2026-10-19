@@ -5,6 +5,8 @@ import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { currentTheme } from "../core/theme.js";
 import { openModal, toast, prompt, cleanError } from "../core/ui.js";
+import { profile, onSchedulingChange } from "../core/poll.js";
+import * as fmt from "../core/format.js";
 import { widgetDefs } from "../widgets/registry.js";
 
 const api = window.edex;
@@ -92,9 +94,51 @@ const PAGES = [
   { id: "terminal", label: "Terminal", icon: "terminal" },
   { id: "layout", label: "Layout", icon: "layout" },
   { id: "files", label: "Files", icon: "folder" },
+  { id: "performance", label: "Performance", icon: "gauge" },
   { id: "privacy", label: "Privacy", icon: "lock" },
   { id: "about", label: "About", icon: "info" }
 ];
+
+// Pages with live content register a cleanup that runs when the page is
+// left or the panel closes.
+let pageCleanups = [];
+function runPageCleanups() {
+  for (const fn of pageCleanups) { try { fn(); } catch (_) {} }
+  pageCleanups = [];
+}
+
+const PROCESS_LABELS = { Browser: "Main process", Tab: "Interface", GPU: "GPU process", Utility: "Utility (network, audio…)" };
+
+function performanceUsage() {
+  const total = h("span", { class: "mono" }, "--");
+  const list = h("div", { class: "perf-usage" });
+  const render = (u) => {
+    const rows = u.processes.map((p) => ({ label: PROCESS_LABELS[p.type] || p.type, cpu: p.cpu, memory: p.memory }));
+    if (u.bridge) rows.push({ label: "Native helper", cpu: u.bridge.cpu, memory: u.bridge.memory });
+    // Same process types are merged (e.g. several utility processes).
+    const merged = new Map();
+    for (const r of rows) {
+      const m = merged.get(r.label) || { label: r.label, cpu: 0, memory: 0, count: 0 };
+      m.cpu += r.cpu || 0;
+      m.memory += r.memory || 0;
+      m.count++;
+      merged.set(r.label, m);
+    }
+    const all = [...merged.values()];
+    const cpu = all.reduce((a, r) => a + r.cpu, 0);
+    const mem = all.reduce((a, r) => a + r.memory, 0);
+    total.textContent = `${cpu.toFixed(1)}% CPU · ${fmt.bytes(mem)}`;
+    list.replaceChildren(...all.map((r) => h("div", { class: "perf-row" },
+      h("span", { class: "ellipsis" }, r.count > 1 ? `${r.label} ×${r.count}` : r.label),
+      h("span", { class: "num" }, `${r.cpu.toFixed(1)}%`),
+      h("span", { class: "num" }, fmt.bytes(r.memory)))));
+  };
+  const refresh = () => api.sys.appUsage().then(render).catch(() => {});
+  refresh();
+  const timer = setInterval(refresh, 2000);
+  pageCleanups.push(() => clearInterval(timer));
+  return { total, list };
+}
 
 async function buildPage(id) {
   const page = [];
@@ -193,9 +237,28 @@ async function buildPage(id) {
       h("h3", null, "History"),
       row("Recent files and folders", "Shown in the launcher and explorer sidebar.", h("button", { class: "btn", type: "button", onclick: () => { settings.set({ recentFiles: [], recentFolders: [] }); toast("History cleared", { level: "ok" }); } }, "Clear history")));
   }
+  if (id === "performance") {
+    const active = h("span", { class: "muted" });
+    const describe = () => {
+      const p = profile();
+      const auto = (settings.get("perfProfile") || "auto") === "auto";
+      active.textContent = `Running: ${p.name[0].toUpperCase()}${p.name.slice(1)}${auto ? " (auto)" : ""}`;
+    };
+    describe();
+    pageCleanups.push(onSchedulingChange(describe));
+    const usage = performanceUsage();
+    page.push(h("h3", null, "Profile"),
+      row("Performance profile", "How often panels refresh and how smoothly the globe and visualizer animate. Auto uses Balanced on mains power and Eco on battery or with battery saver on.",
+        h("span", { style: { display: "flex", alignItems: "center", gap: ".6rem" } }, active, select("perfProfile", [["auto", "Auto"], ["performance", "Performance"], ["balanced", "Balanced"], ["eco", "Eco"]]))),
+      row("Slow down in the background", "Refresh less often and lower animation frame rates while another app has focus. eDEX always pauses completely when hidden, minimised or covered.", toggle("throttleUnfocused")),
+      row("GPU-accelerated terminal", "Draw terminals with WebGL. Much faster for heavy output; turn off if text looks wrong on your graphics driver.", toggle("termGpu")),
+      h("h3", null, "eDEX resource usage"),
+      row("Total", "All eDEX processes, refreshed every two seconds.", usage.total),
+      usage.list);
+  }
   if (id === "privacy") {
     page.push(h("h3", null, "Network"),
-      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view. Turn off to make eDEX fully offline.", toggle("allowNetworkGeolocation")),
+      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, and the weather forecast for your approximate location (open-meteo.com). Turn off to make eDEX fully offline.", toggle("allowNetworkGeolocation")),
       h("h3", null, "Clipboard"),
       row("Clipboard history", "Kept in memory only — never written to disk, cleared on quit.", toggle("clipboardHistory")),
       row("History size", null, number("clipboardMax", 5, 200)),
@@ -228,6 +291,7 @@ export function openSettings(pageId = "general") {
   const show = async (id) => {
     current = id;
     nav.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.page === id));
+    runPageCleanups();
     const items = await buildPage(id);
     if (current === id) content.replaceChildren(...items);
     content.scrollTop = 0;
@@ -239,7 +303,7 @@ export function openSettings(pageId = "general") {
     h("div", { class: "settings-body" }, nav, content)), {
     className: "settings",
     label: "Settings",
-    onClose: () => { openPanel = null; }
+    onClose: () => { openPanel = null; runPageCleanups(); }
   });
   openPanel = { show, close: modal.close };
   show(pageId);

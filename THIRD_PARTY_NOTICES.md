@@ -40,5 +40,10 @@ and pusher's vec2 helpers (MIT); their notices are retained in that file.
 
 ## Runtime dependencies
 
-xterm.js (MIT), node-pty (MIT), systeminformation (MIT) and Electron (MIT);
-see `node_modules/*/LICENSE`.
+xterm.js and its fit and WebGL addons (MIT), node-pty (MIT), systeminformation
+(MIT) and Electron (MIT); see `node_modules/*/LICENSE`.
+
+## Data services
+
+Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), used
+only when outbound lookups are enabled.

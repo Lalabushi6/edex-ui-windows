@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("edex", {
   },
   sys: {
     static: invoke("sys:static"),
+    live: invoke("sys:live"),
+    appUsage: invoke("sys:appUsage"),
     cpu: invoke("sys:cpu"),
     mem: invoke("sys:mem"),
     battery: invoke("sys:battery"),
@@ -109,15 +111,21 @@ contextBridge.exposeInMainWorld("edex", {
     tags: invoke("media:tags")
   },
   power: { action: invoke("power:action") },
+  display: {
+    brightness: invoke("display:brightness"),
+    setBrightness: invoke("display:setBrightness")
+  },
   shell: {
     openExternal: invoke("shell:openExternal"),
     openSettings: invoke("shell:openSettings"),
-    taskManager: invoke("shell:taskManager")
+    taskManager: invoke("shell:taskManager"),
+    snip: invoke("shell:snip")
   },
   net: {
     geo: invoke("net:geo"),
     pings: invoke("net:pings"),
-    latency: invoke("net:latency")
+    latency: invoke("net:latency"),
+    weather: invoke("net:weather")
   },
   clip: {
     list: invoke("clip:list"),
@@ -130,5 +138,10 @@ contextBridge.exposeInMainWorld("edex", {
   notes: {
     load: invoke("notes:load"),
     save: invoke("notes:save")
+  },
+  alarm: {
+    set: invoke("alarm:set"),
+    clear: invoke("alarm:clear"),
+    onFired: subscribe("alarm:fired")
   }
 });

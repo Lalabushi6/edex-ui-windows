@@ -11,3 +11,11 @@ export function on(name, fn) {
   target.addEventListener(name, listener);
   return () => target.removeEventListener(name, listener);
 }
+
+// Resolves once the boot sequence has finished and the shell is on screen;
+// heavy, non-essential work (the globe, the app index) waits for it.
+let markBootedFn;
+export const booted = new Promise((resolve) => { markBootedFn = resolve; });
+export function markBooted() {
+  markBootedFn();
+}

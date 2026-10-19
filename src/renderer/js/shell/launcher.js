@@ -6,7 +6,7 @@ import { icon, iconSvg, fileKind } from "../core/icons.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
-import { emit } from "../core/bus.js";
+import { emit, booted } from "../core/bus.js";
 import { allCommands } from "../core/commands.js";
 import { openModal, toast, contextMenu, copyText, cleanError } from "../core/ui.js";
 import { evaluate, looksLikeMath, formatNumber } from "./calc.js";
@@ -521,7 +521,11 @@ async function openPathLike(q) {
   }
 }
 
+// The app list and file index are warmed once the boot sequence is over and
+// the page is idle, so the launcher opens instantly without competing with
+// startup.
 export function preloadLauncher() {
-  setTimeout(() => { loadApps(); loadIndex(); }, 4000);
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 500));
+  booted.then(() => setTimeout(() => idle(() => { loadApps(); loadIndex(); }, { timeout: 4000 }), 1500));
 }
 

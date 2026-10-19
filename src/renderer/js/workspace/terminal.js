@@ -22,7 +22,24 @@ function wireOnce() {
   settings.watch(["termFontSize", "termFontFamily", "termCursorStyle", "termCursorBlink", "termScrollback"], () => {
     for (const t of sessions.values()) t.applyOptions();
   });
+  settings.watch("termGpu", (on) => {
+    for (const t of sessions.values()) {
+      if (!on) t.disableGpu();
+      else if (t.el.classList.contains("active")) t.enableGpu();
+    }
+  });
 }
+
+// GPU rendering: xterm's WebGL renderer draws the grid from a glyph atlas,
+// which is many times cheaper than the DOM renderer for heavy output.
+// Chromium caps live WebGL contexts, so only the visible terminal (and ones
+// used in the last minute) keep one.
+let webglModule = null;
+const loadWebgl = () => (webglModule ||= import("../../vendor/xterm-webgl/lib/addon-webgl.mjs").catch((e) => {
+  console.warn("xterm WebGL renderer unavailable", e);
+  return null;
+}));
+const GPU_RELEASE_MS = 60000;
 
 const URL_RE = /\bhttps?:\/\/[^\s"'<>`)\]]+[^\s"'<>`)\].,;:!?]/g;
 
@@ -236,10 +253,47 @@ export class TerminalTab {
   }, 60);
 
   activate() {
+    clearTimeout(this.gpuReleaseTimer);
     requestAnimationFrame(() => {
       this.fitNow();
       this.term?.focus();
+      this.enableGpu();
     });
+  }
+
+  deactivate() {
+    clearTimeout(this.gpuReleaseTimer);
+    this.gpuReleaseTimer = setTimeout(() => this.disableGpu(), GPU_RELEASE_MS);
+  }
+
+  async enableGpu() {
+    if (!this.term || this.webgl || this.gpuLoading || !settings.get("termGpu") || this.gpuFailed) return;
+    this.gpuLoading = true;
+    try {
+      const mod = await loadWebgl();
+      if (!mod || !this.term || !settings.get("termGpu")) return;
+      const addon = new mod.WebglAddon();
+      addon.onContextLoss(() => {
+        // The GPU process reset or the context was evicted; fall back to the
+        // DOM renderer and try again the next time this tab is shown.
+        this.disableGpu();
+      });
+      this.term.loadAddon(addon);
+      this.webgl = addon;
+    } catch (e) {
+      console.warn("terminal GPU rendering failed; using the DOM renderer", e);
+      this.gpuFailed = true;
+    } finally {
+      this.gpuLoading = false;
+    }
+  }
+
+  disableGpu() {
+    clearTimeout(this.gpuReleaseTimer);
+    if (!this.webgl) return;
+    const addon = this.webgl;
+    this.webgl = null;
+    try { addon.dispose(); } catch (_) {}
   }
 
   focus() {
@@ -247,9 +301,11 @@ export class TerminalTab {
   }
 
   dispose() {
+    clearTimeout(this.gpuReleaseTimer);
     this.resizeObserver?.disconnect();
     if (this.alive) api.term.kill(this.ptyId).catch(() => {});
     sessions.delete(this.ptyId);
+    this.disableGpu();
     this.term?.dispose();
   }
 }

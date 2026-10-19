@@ -68,6 +68,11 @@ const SCHEMA = {
   clockZones: [strList(6, 64), ["local", "UTC"]],
   temperatureUnit: [oneOf("C", "F"), "C"],
 
+  // Performance
+  perfProfile: [oneOf("auto", "performance", "balanced", "eco"), "auto"],
+  throttleUnfocused: [bool(), true],
+  termGpu: [bool(), true],
+
   // Layout
   showLeftColumn: [bool(), true],
   showRightColumn: [bool(), true],

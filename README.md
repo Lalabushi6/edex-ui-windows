@@ -14,14 +14,16 @@ telemetry from one surface — without dropping back to the Windows desktop.
 - **Dock**: pinned apps plus every open window — click to switch, click again
   to minimize, right-click to maximize or close.
 - **Terminal tabs**: PowerShell, PowerShell 7, Command Prompt, WSL and Git Bash
-  (whichever are installed) via `node-pty` + `xterm.js`. Clickable links,
-  copy/paste, font zoom, restart on exit.
+  (whichever are installed) via `node-pty` + `xterm.js`, drawn on the GPU
+  (WebGL) for fast output. Clickable links, copy/paste, font zoom, restart on
+  exit.
 - **File explorer tabs**: list/grid views, sorting, filter, breadcrumbs,
   copy/cut/paste, rename in place, drag files out to other apps or in from
   them, Recycle Bin deletes, pins, recents, "Open with…", Windows Properties.
 - **Quick-look viewer**: images, audio, video, PDF and text, with in-place
   editing of text files (`Ctrl+S`).
-- **Process manager**: sortable, filterable, end process.
+- **Process manager**: sortable, filterable, memory and thread counts, end
+  process.
 - **The eDEX-UI look**: the original's grid backdrop, "PANEL / SYSTEM"
   captions, ruled modules, slanted shell tabs, clipped-corner frames, logo,
   kernel-log boot sequence with the glitching title, and terminal colours
@@ -35,13 +37,23 @@ telemetry from one surface — without dropping back to the Windows desktop.
   Playback continues when the tab is closed.
 - **Telemetry widgets**: clock with world clocks, system, CPU (per core), memory,
   GPU utilisation, drives and disk I/O, top processes and network traffic.
-- **Tools**: notes (auto-saved), clipboard history (memory only), quick links.
-- **Top bar**: media keys, master volume slider, network, battery, clock,
+- **Tools**: weather with a four-day forecast, timer and stopwatch (with laps
+  and a Windows notification when a countdown ends), notes (auto-saved),
+  clipboard history (memory only), quick links.
+- **Top bar**: media keys, master volume slider, display brightness (laptop
+  panels), screen snip, network, battery, clock with a month calendar,
   settings and power menu (lock, sleep, sign out, restart, shut down).
+- **Light on resources**: telemetry comes from one long-lived native helper
+  (no process launches while running), every panel refreshes from one shared
+  scheduler, and nothing runs while eDEX is hidden. Performance profiles
+  (Auto / Performance / Balanced / Eco; Auto switches to Eco on battery) set
+  refresh rates and animation frame rates, and Settings → Performance shows
+  eDEX's own CPU and memory use.
 - **Two modes**: *Desktop* (full screen, sits behind your apps, so it acts as
   your desktop) and *Overlay* (always on top, summoned and dismissed by hotkey).
 - Tray icon, single instance, start with Windows, session restore of tabs,
-  the original eDEX-UI themes (with globe colours and colour filters) plus your\n  own, drag-to-reorder widgets, interface scaling.
+  the original eDEX-UI themes (with globe colours and colour filters) plus your
+  own, drag-to-reorder widgets, interface scaling.
 
 ## Getting started
 
@@ -76,10 +88,11 @@ src/main/            Electron main process
   tray.js            tray icon and menu
   preload.js         the renderer's only bridge (window.edex)
   ipc/               terminal, system, files, desktop (apps/windows/media keys/power), media player, extras
-  lib/               protocols, path policy, cache, JSON store, icon lookup
-  native/bridge.ps1  long-lived PowerShell helper for Win32 APIs
+  lib/               protocols, path policy, cache, JSON store, telemetry, icon service
+  native/bridge.ps1  long-lived PowerShell helper for Win32 APIs and telemetry
 src/renderer/        UI (ES modules served from app://edex)
-  js/core/           DOM builder, settings, theme, commands/hotkeys, polling, UI kit
+  js/core/           DOM builder, settings, theme, commands/hotkeys, scheduler,
+                     shared telemetry feeds, UI kit
   js/widgets/        side-column widgets
   js/workspace/      tabs: terminal, explorer, process manager, media player
   js/shell/          top bar, dock, launcher, settings, viewer, keyboard, boot
@@ -110,8 +123,9 @@ scripts/             check.js
 
 **Privacy:** the world-view globe looks up your public IP location (ipapi.co,
 falling back to ipinfo.io) and checks latency to google.com and twelve public
-sites. Turn this off under Settings → Privacy. Clipboard history is never
-written to disk.
+sites; the weather widget fetches a forecast for that approximate location
+from open-meteo.com. Turn all of this off under Settings → Privacy. Clipboard
+history is never written to disk.
 
 ## Credits and license
 

@@ -14,7 +14,8 @@ taskbar.
 │ system widgets │        workspace tabs (terminal / files)      │ tools   │
 │ clock, CPU,    │                                               │ network │
 │ memory, GPU,   │                                               │ globe   │
-│ storage, top   │                                               │ notes … │
+│ storage, top,  │                                               │ weather │
+│ timer          │                                               │ notes … │
 └──────────────────────── dock: apps · open windows · tray ──────────────────┘
 ```
 
@@ -131,7 +132,51 @@ close the player tab, and Windows' media keys and media overlay control it.
 Formats are whatever Chromium plays: MP3, AAC/M4A, FLAC, WAV, Ogg/Opus,
 MP4 (H.264), WebM and most MKV files.
 
-## 9. Global shortcuts
+## 9. Top bar and tools
+
+- **Clock**: click it for a month calendar with ISO week numbers (scroll or
+  use the arrows to change month, **Today** to jump back).
+- **Brightness** (☀, laptop screens only): click for a slider, or scroll over
+  the icon to step by 5%. External monitors don't expose brightness to
+  Windows, so the icon is hidden on them.
+- **Screen snip** (✂-style corner icon): opens the Windows snipping overlay,
+  same as `Win+Shift+S`; the capture goes to the clipboard.
+- **Weather** widget: current conditions and a four-day forecast for your
+  approximate location (from the public-IP lookup). Uses the temperature unit
+  from Settings → Appearance. Needs outbound lookups (Settings → Privacy).
+- **Timer** widget: a countdown (presets 1 / 5 / 10 / 25 minutes, or **…**
+  for a custom duration such as `90`, `12:30` or `1:00:00`, optionally
+  followed by a label: `25 Focus`) and a stopwatch with laps. A finished
+  countdown plays the alarm sound and shows a Windows notification, even
+  when eDEX is hidden. Right-click the widget to copy laps.
+
+New widgets appear at the end of their column; drag them where you want them
+or hide them in Settings → Layout.
+
+## 10. Performance
+
+eDEX is built to stay out of the way:
+
+- System readings come from one long-lived native helper; no processes are
+  launched while it runs.
+- All panels refresh from one shared timer, and every reading is fetched
+  once and shared by the widgets that show it.
+- While eDEX is hidden, minimised or completely covered by other windows,
+  nothing refreshes and nothing animates.
+
+Settings → **Performance**:
+
+| Setting | Effect |
+|---|---|
+| **Performance profile** | *Performance*: fastest refresh, 30 fps globe. *Balanced*: the default on mains power. *Eco*: slower refresh, 10 fps animations, decorative transitions off, globe at 1× resolution. *Auto* (default) uses Balanced on mains power and Eco on battery or when Windows battery saver is on. |
+| **Slow down in the background** | Halves refresh rates and lowers animation frame rates while another app has focus. |
+| **GPU-accelerated terminal** | Draws terminals with WebGL — far faster for heavy output. Turn it off if terminal text renders incorrectly on your graphics driver. |
+
+The page also shows eDEX's own CPU and memory use per process (interface,
+GPU process, native helper …), refreshed every two seconds. The launcher has
+**Cycle performance profile** for switching quickly.
+
+## 11. Global shortcuts
 
 | Keys | Action |
 |---|---|
@@ -152,7 +197,7 @@ MP4 (H.264), WebM and most MKV files.
 The two global hotkeys can be changed in Settings → General. If another app
 already owns one, eDEX shows a notice at startup.
 
-## 10. Settings
+## 12. Settings
 
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
@@ -163,13 +208,15 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 - **Terminal**: default shell, font size, cursor, scrollback, copy on select.
 - **Layout**: columns, widgets, on-screen keyboard.
 - **Files**: hidden items, delete confirmation, default view, history.
+- **Performance**: profile, background slow-down, GPU terminal, eDEX's own
+  resource use (see section 10).
 - **Privacy**: outbound network lookups, clipboard history.
 
 Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
 run.
 
-## 11. Privacy and network
+## 13. Privacy and network
 
 With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 
@@ -178,13 +225,22 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 | World-view location | ipapi.co, falling back to ipinfo.io | at most every 15 minutes |
 | World-view latency | 12 public sites (BBC, NYT, ABC …) | every 2 minutes while visible |
 | Network ping | google.com | every 30 seconds while visible |
+| Weather | api.open-meteo.com (approximate coordinates only) | at most every 20 minutes |
 
 Turn it off and eDEX makes no outbound requests. Clipboard history is kept in
 memory only and can be disabled.
 
-## 12. Troubleshooting
+## 14. Troubleshooting
 
 - **A hotkey does nothing**: another app owns it — pick a new one in Settings → General.
+- **Everything refreshes slowly**: you are probably on battery, where the
+  Auto profile switches to Eco. Pick Balanced or Performance in Settings →
+  Performance.
+- **Terminal text looks garbled or blurry**: turn off **GPU-accelerated
+  terminal** in Settings → Performance.
+- **No timer notification**: allow notifications for eDEX-UI in Windows
+  Settings → System → Notifications (the alarm sound and in-app toast still
+  play).
 - **Dock shows "Window list unavailable"**: the native helper uses Windows
   PowerShell 5.1; make sure `powershell.exe` is not blocked by policy.
 - **CPU temperature shows N/A**: Windows only exposes it to elevated apps on

@@ -50,8 +50,21 @@ class Player extends EventTarget {
   wire() {
     const el = this.el;
     const emit = (type) => this.dispatchEvent(new Event(type));
-    el.addEventListener("play", () => { emit("state"); this.updateSession(); });
-    el.addEventListener("pause", () => { emit("state"); this.save(); this.updateSession(); });
+    // The audio graph is suspended a few seconds into a pause so an idle
+    // player costs nothing, and resumed whenever playback starts.
+    el.addEventListener("play", () => {
+      clearTimeout(this.suspendTimer);
+      if (this.ctx?.state === "suspended") this.ctx.resume().catch(() => {});
+      emit("state");
+      this.updateSession();
+    });
+    el.addEventListener("pause", () => {
+      clearTimeout(this.suspendTimer);
+      this.suspendTimer = setTimeout(() => { if (el.paused) this.ctx?.suspend().catch(() => {}); }, 5000);
+      emit("state");
+      this.save();
+      this.updateSession();
+    });
     el.addEventListener("timeupdate", () => { emit("time"); if (Math.floor(el.currentTime) % 10 === 0) this.persist(); });
     el.addEventListener("loadedmetadata", () => {
       const item = this.current;

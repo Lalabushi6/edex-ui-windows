@@ -184,6 +184,48 @@ export function contextMenu(event, items) {
   };
 }
 
+// A small panel anchored under a button (brightness, calendar…). Shares the
+// context menu's slot, so opening one closes the other. `build(close)`
+// returns the content; returns the close function.
+export function popover(anchor, build, { className = "", onClose } = {}) {
+  closeMenu();
+  const panel = h("div", { class: `popover ${className}`, role: "dialog" });
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (activeMenu === teardown) activeMenu = null;
+    teardown();
+  };
+  panel.append(build(close));
+  document.body.append(panel);
+  const a = anchor.getBoundingClientRect();
+  const r = panel.getBoundingClientRect();
+  const { innerWidth: W, innerHeight: H } = window;
+  panel.style.left = `${Math.max(4, Math.min(a.right - r.width, W - r.width - 4))}px`;
+  panel.style.top = `${Math.max(4, Math.min(a.bottom + 6, H - r.height - 4))}px`;
+  const onDown = (e) => { if (!panel.contains(e.target) && !anchor.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } };
+  const timer = setTimeout(() => {
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+  }, 0);
+  function teardown() {
+    clearTimeout(timer);
+    document.removeEventListener("mousedown", onDown, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("blur", close);
+    window.removeEventListener("resize", close);
+    panel.remove();
+    closed = true;
+    onClose?.();
+  }
+  activeMenu = teardown;
+  return close;
+}
+
 export async function copyText(text, message = "Copied") {
   try {
     await window.edex.clip.copy(String(text));

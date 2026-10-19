@@ -9,7 +9,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const { app, dialog, shell } = require("electron");
 const { cached } = require("../lib/cache");
-const { iconFor } = require("../lib/icons");
+const { JsonStore } = require("../lib/store");
 const { handle, asString } = require("./util");
 
 function startMenuDirs() {
@@ -45,8 +45,19 @@ function psQuote(s) {
   return `'${String(s).replace(/'/g, "''")}'`;
 }
 
-function registerDesktop({ windows, bridge }) {
-  const apps = new Map(); // id -> { id, name, kind, target, iconPath }
+function registerDesktop({ windows, bridge, icons }) {
+  const apps = new Map(); // id -> { id, name, kind, target, iconPath, source }
+  const listView = () => [...apps.values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(({ id, name, source, iconPath }) => ({ id, name, source, hasIcon: !!iconPath }));
+
+  // The last index is kept on disk so the launcher and dock have apps the
+  // instant eDEX starts; the live rebuild happens later in the background.
+  const indexStore = new JsonStore(path.join(app.getPath("userData"), "apps-cache.json"), { fallback: { apps: [] } });
+  for (const a of Array.isArray(indexStore.data.apps) ? indexStore.data.apps : []) {
+    if (a && typeof a.id === "string" && typeof a.name === "string") apps.set(a.id, a);
+  }
+  let built = false;
 
   // Installed applications: Get-StartApps sees everything in the Start menu,
   // Store apps included; shortcut files supply icons and work without it.
@@ -72,7 +83,9 @@ function registerDesktop({ windows, bridge }) {
         name: entry.name,
         kind: "appsfolder",
         target: entry.appId,
-        iconPath: looksLikePath ? entry.appId : byName.get(entry.name.toLowerCase()) || null,
+        // Without a file to take an icon from, ask the shell for the
+        // AppsFolder item itself (this is how Store app logos resolve).
+        iconPath: looksLikePath ? entry.appId : byName.get(entry.name.toLowerCase()) || `shell:AppsFolder\\${entry.appId}`,
         source: /!/.test(entry.appId) ? "store" : "start"
       });
     }
@@ -96,9 +109,10 @@ function registerDesktop({ windows, bridge }) {
     }
     apps.clear();
     for (const [k, v] of next) apps.set(k, v);
-    return [...apps.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(({ id, name, source, iconPath }) => ({ id, name, source, hasIcon: !!iconPath }));
+    built = true;
+    indexStore.data = { apps: [...apps.values()], at: Date.now() };
+    indexStore.save();
+    return listView();
   }, 10 * 60 * 1000);
 
   const resolveApp = async (id) => {
@@ -110,6 +124,11 @@ function registerDesktop({ windows, bridge }) {
 
   handle("apps:list", (_e, force) => {
     if (force) index.invalidate();
+    else if (!built && apps.size) {
+      // Answer from the disk cache now; the rebuild finishes in the background.
+      index().catch(() => {});
+      return listView();
+    }
     return index();
   });
 
@@ -135,10 +154,9 @@ function registerDesktop({ windows, bridge }) {
   handle("apps:icons", async (_e, ids) => {
     const out = {};
     if (!apps.size) await index().catch(() => {});
-    for (const id of (Array.isArray(ids) ? ids.slice(0, 120) : [])) {
-      const entry = apps.get(id);
-      out[id] = entry?.iconPath ? await iconFor(entry.iconPath) : null;
-    }
+    const wanted = (Array.isArray(ids) ? ids.slice(0, 120) : []).map((id) => [id, apps.get(id)?.iconPath || null]);
+    const urls = await icons.get(wanted.map(([, p]) => p).filter(Boolean));
+    for (const [id, p] of wanted) out[id] = p ? urls[p] ?? null : null;
     return out;
   });
 
@@ -188,6 +206,21 @@ function registerDesktop({ windows, bridge }) {
   handle("media:volume", () => bridge.call("volume"));
   handle("media:setVolume", (_e, level) => bridge.call("setVolume", { level: Math.max(0, Math.min(100, Number(level) || 0)) }));
   handle("media:setMute", (_e, muted) => bridge.call("setMute", { muted: !!muted }));
+
+  // Display brightness (built-in panels; external monitors report null).
+  const brightness = cached(() => bridge.call("brightness", {}, 8000).catch(() => null), 4000);
+  handle("display:brightness", () => brightness());
+  handle("display:setBrightness", async (_e, level) => {
+    const v = await bridge.call("setBrightness", { level: Math.max(0, Math.min(100, Math.round(Number(level) || 0))) }, 8000);
+    brightness.invalidate();
+    return v;
+  });
+
+  // Windows' own snipping overlay (same as Win+Shift+S).
+  handle("shell:snip", async () => {
+    await shell.openExternal("ms-screenclip:");
+    return true;
+  });
 
   const POWER = {
     lock: { confirm: null, run: () => bridge.call("lock") },

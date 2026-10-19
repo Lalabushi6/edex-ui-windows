@@ -2,6 +2,7 @@
 import { h, setText, debounce } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import { poll } from "../core/poll.js";
+import { onLive } from "../core/live.js";
 import { Sparkline } from "../core/sparkline.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
@@ -34,31 +35,30 @@ defineWidget({
     const totals = h("div", { class: "net-graph-legend" });
     panel.body.append(grid, canvas, h("div", { class: "net-graph-legend" }, up, down), totals);
     const spark = new Sparkline(canvas, { mirror: true, series: 2, floor: 16384, points: 80 });
+    const outTotal = h("span");
+    const inTotal = h("span");
+    totals.append(outTotal, inTotal);
     let online = true;
 
-    const info = poll(async () => {
-      const n = await api.sys.net();
+    const off = onLive(({ net: n }) => {
       online = n.online;
       setText(refs.state, n.online ? "ONLINE" : "OFFLINE");
       refs.state.classList.toggle("warn-text", !n.online);
       setText(refs.ip, n.ip4 || "--");
       panel.setSub(n.iface ? `${n.iface}${n.speed ? ` · ${n.speed >= 1000 ? `${n.speed / 1000} Gb/s` : `${n.speed} Mb/s`}` : ""}` : "no interface");
-      emit("net-state", n);
-    }, 10000);
-    const stats = poll(async () => {
-      const s = await api.sys.netStats();
-      if (!s) return;
-      spark.push(s.txSec, s.rxSec);
-      setText(up, `▲ ${fmt.bits(s.txSec)}`);
-      setText(down, `▼ ${fmt.bits(s.rxSec)}`);
-      totals.replaceChildren(h("span", null, `OUT ${fmt.bytes(s.tx)}`), h("span", null, `IN ${fmt.bytes(s.rx)}`));
-    }, 1500);
+      if (!n.online) return;
+      spark.push(n.txSec, n.rxSec);
+      setText(up, `▲ ${fmt.bits(n.txSec)}`);
+      setText(down, `▼ ${fmt.bits(n.rxSec)}`);
+      setText(outTotal, `OUT ${fmt.bytes(n.tx)}`);
+      setText(inTotal, `IN ${fmt.bytes(n.rx)}`);
+    });
     const ping = poll(async () => {
       if (!online) { setText(refs.ping, "--"); return; }
       const ms = await api.net.latency();
       setText(refs.ping, ms === null ? (settings.get("allowNetworkGeolocation") ? "TIMEOUT" : "OFF") : `${Math.round(ms)} ms`);
     }, 30000);
-    return { destroy() { info.stop(); stats.stop(); ping.stop(); spark.destroy(); } };
+    return { destroy() { off(); ping.stop(); spark.destroy(); } };
   }
 });
 

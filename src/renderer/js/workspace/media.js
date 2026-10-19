@@ -4,7 +4,7 @@
 import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import { accent } from "../core/theme.js";
-import { appActive } from "../core/poll.js";
+import { appActive, animationFps } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { emit } from "../core/bus.js";
@@ -345,7 +345,7 @@ export class MediaTab {
       }
       ctx.fillStyle = accent(0.35);
       ctx.fillRect(0, base, W, dpr);
-      if (playing) this.vizTimer = setTimeout(() => requestAnimationFrame(frame), 1000 / 30);
+      if (playing) this.vizTimer = setTimeout(() => requestAnimationFrame(frame), 1000 / animationFps(30));
     };
     frame();
   }

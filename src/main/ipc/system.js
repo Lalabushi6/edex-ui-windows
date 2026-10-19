@@ -1,13 +1,11 @@
-// System telemetry. Every source is cached so several widgets polling the same
-// metric share one underlying query; expensive WMI-backed calls get long TTLs.
+// System telemetry IPC. Data comes from ../lib/telemetry.js (native bridge),
+// so polling widgets never launch processes.
 "use strict";
 
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const si = require("systeminformation");
-const { app } = require("electron");
-const { cached } = require("../lib/cache");
+const { app, dialog } = require("electron");
 const { handle } = require("./util");
 
 // Terminating any of these bug-checks Windows or kills the session.
@@ -17,133 +15,56 @@ const PROTECTED_PROCESSES = new Set([
   "fontdrvhost.exe", "sihost.exe", "explorer.exe", "memory compression", "secure system"
 ]);
 
-function registerSystem({ windows, bridge }) {
-  const staticInfo = cached(async () => {
-    const [cpu, system, chassis, osInfo] = await Promise.all([
-      si.cpu().catch(() => ({})),
-      si.system().catch(() => ({})),
-      si.chassis().catch(() => ({})),
-      si.osInfo().catch(() => ({}))
-    ]);
-    return {
-      cpu: {
-        manufacturer: cpu.manufacturer, brand: cpu.brand, cores: cpu.cores,
-        physicalCores: cpu.physicalCores, speed: cpu.speed, speedMax: cpu.speedMax
-      },
-      system: { manufacturer: system.manufacturer, model: system.model },
-      chassis: { type: chassis.type },
-      os: { distro: osInfo.distro, release: osInfo.release, build: osInfo.build, arch: osInfo.arch },
-      hostname: os.hostname(),
-      user: os.userInfo().username,
-      totalMem: os.totalmem()
-    };
-  }, 24 * 3600 * 1000);
+function registerSystem({ windows, telemetry }) {
+  handle("sys:static", () => telemetry.static());
 
-  const cpuLoad = cached(() => si.currentLoad(), 1500);
-  const cpuSpeed = cached(() => si.cpuCurrentSpeed(), 4000);
-  const mem = cached(() => si.mem(), 2000);
-  const battery = cached(() => si.battery(), 20000);
-  const temp = cached(() => si.cpuTemperature(), 15000);
-  const drives = cached(async () => {
-    const list = await si.fsSize();
-    return list
-      .filter((d) => d.size > 0)
-      .map((d) => ({ fs: d.fs, mount: d.mount, type: d.type, size: d.size, used: d.used, use: d.use }));
-  }, 30000);
-  const ifaces = cached(() => si.networkInterfaces(), 10000);
-  const defaultIface = cached(() => si.networkInterfaceDefault(), 30000);
-  const netStats = cached(async () => {
-    const iface = await defaultIface().catch(() => undefined);
-    return si.networkStats(iface || undefined);
-  }, 1500);
-  const graphics = cached(() => si.graphics(), 10 * 60 * 1000);
-  const perf = cached(() => bridge.call("perf", {}, 8000), 1500);
-  const processes = cached(() => si.processes(), 2500);
-
-  handle("sys:static", () => staticInfo());
+  // Everything the side panels refresh frequently, in one round trip.
+  handle("sys:live", () => telemetry.live());
 
   handle("sys:cpu", async () => {
-    const [load, speed] = await Promise.all([cpuLoad(), cpuSpeed().catch(() => null)]);
-    return {
-      load: load.currentLoad,
-      cores: (load.cpus || []).map((c) => c.load),
-      speed: speed?.avg || 0
-    };
+    const l = await telemetry.live();
+    return { load: l.cpu.load, cores: l.cpu.cores, speed: l.cpu.mhz ? l.cpu.mhz / 1000 : 0 };
   });
 
-  handle("sys:mem", async () => {
-    const m = await mem();
-    return { total: m.total, used: m.active, available: m.available, swapTotal: m.swaptotal, swapUsed: m.swapused };
-  });
+  handle("sys:mem", async () => (await telemetry.live()).mem);
 
-  handle("sys:battery", async () => {
-    const b = await battery();
-    return { hasBattery: b.hasBattery, percent: b.percent, charging: b.isCharging, ac: b.acConnected, timeRemaining: b.timeRemaining };
-  });
+  handle("sys:battery", () => telemetry.battery());
 
   handle("sys:temp", async () => {
-    const t = await temp().catch(() => null);
-    return { main: t && t.main > 0 ? t.main : null, max: t && t.max > 0 ? t.max : null };
+    const t = await telemetry.temp().catch(() => null);
+    return { main: t, max: t };
   });
 
-  handle("sys:drives", () => drives());
+  handle("sys:drives", () => telemetry.drives());
 
   handle("sys:net", async () => {
-    const [list, def] = await Promise.all([ifaces(), defaultIface().catch(() => "")]);
-    const arr = Array.isArray(list) ? list : [list];
-    const primary = arr.find((i) => i.iface === def) ||
-      arr.find((i) => !i.internal && i.operstate === "up" && i.ip4) || null;
-    return {
-      online: !!(primary && primary.operstate !== "down" && primary.ip4),
-      iface: primary?.iface || null,
-      ip4: primary?.ip4 || null,
-      mac: primary?.mac || null,
-      type: primary?.type || null,
-      speed: primary?.speed || null
-    };
+    const n = (await telemetry.live()).net;
+    return { online: n.online, iface: n.iface, ip4: n.ip4, mac: n.mac || null, type: n.type, speed: n.speed };
   });
 
   handle("sys:netStats", async () => {
-    const stats = await netStats();
-    const s = Array.isArray(stats) ? stats[0] : stats;
-    return s ? { rxSec: Math.max(0, s.rx_sec || 0), txSec: Math.max(0, s.tx_sec || 0), rx: s.rx_bytes, tx: s.tx_bytes } : null;
+    const n = (await telemetry.live()).net;
+    return n.online ? { rxSec: n.rxSec, txSec: n.txSec, rx: n.rx, tx: n.tx } : null;
   });
 
   handle("sys:gpu", async () => {
-    const [g, p] = await Promise.all([graphics().catch(() => null), perf().catch(() => null)]);
-    const ctrl = (g?.controllers || []).slice().sort((a, b) => (b.vram || 0) - (a.vram || 0))[0] || {};
+    const [s, l] = await Promise.all([telemetry.static(), telemetry.live()]);
     return {
-      model: ctrl.model || ctrl.name || null,
-      vendor: ctrl.vendor || null,
-      vramTotal: ctrl.vram ? ctrl.vram * 1048576 : null,
-      util: p?.gpu?.util ?? (typeof ctrl.utilizationGpu === "number" ? ctrl.utilizationGpu : null),
-      dedicatedUsed: p?.gpu?.dedicated ?? null,
-      sharedUsed: p?.gpu?.shared ?? null,
-      temp: typeof ctrl.temperatureGpu === "number" ? ctrl.temperatureGpu : null
+      model: s.gpu?.model || null,
+      vendor: s.gpu?.vendor || null,
+      vramTotal: s.gpu?.vram || null,
+      util: l.gpu?.util ?? null,
+      dedicatedUsed: l.gpu?.dedicated ?? null,
+      sharedUsed: l.gpu?.shared ?? null,
+      temp: null
     };
   });
 
-  handle("sys:diskIO", async () => {
-    const p = await perf().catch(() => null);
-    return p?.disk ? { read: p.disk.r, write: p.disk.w } : null;
-  });
+  handle("sys:diskIO", async () => (await telemetry.live()).disk);
 
-  handle("sys:processes", async () => {
-    const data = await processes();
-    return {
-      all: data.all,
-      running: data.running,
-      list: data.list.map((p) => ({
-        pid: p.pid,
-        name: p.name,
-        cpu: p.cpu,
-        mem: p.mem,
-        memRss: p.memRss,
-        user: p.user,
-        path: p.path,
-        started: p.started
-      }))
-    };
+  handle("sys:processes", async (_e, opts = {}) => {
+    const data = await (opts.paths ? telemetry.processesWithPaths() : telemetry.processes());
+    return { all: data.all, threads: data.threads, list: data.list };
   });
 
   handle("sys:uptime", () => os.uptime());
@@ -154,11 +75,11 @@ function registerSystem({ windows, bridge }) {
     const ownPids = new Set([process.pid, ...app.getAppMetrics().map((m) => m.pid)]);
     if (ownPids.has(target)) throw new Error("Refusing to terminate eDEX-UI itself");
     let name = null;
-    try { name = (await processes()).list.find((p) => p.pid === target)?.name || null; } catch (_) {}
+    try { name = (await telemetry.processes()).list.find((p) => p.pid === target)?.name || null; } catch (_) {}
     if (name && PROTECTED_PROCESSES.has(name.toLowerCase())) {
       throw new Error(`${name} is a protected system process`);
     }
-    const { response } = await windows.withDialog((win) => require("electron").dialog.showMessageBox(win, {
+    const { response } = await windows.withDialog((win) => dialog.showMessageBox(win, {
       type: "warning",
       buttons: ["Cancel", "End process"],
       defaultId: 0,
@@ -169,23 +90,39 @@ function registerSystem({ windows, bridge }) {
     }));
     if (response !== 1) return false;
     process.kill(target);
-    processes.invalidate();
+    telemetry.processes.invalidate();
+    telemetry.processesWithPaths.invalidate();
     return true;
   });
 
+  // eDEX's own footprint, for Settings → Performance.
+  handle("sys:appUsage", async () => {
+    const metrics = app.getAppMetrics();
+    let bridge = null;
+    try {
+      const pid = telemetry.bridge.proc?.pid;
+      if (pid) bridge = (await telemetry.processes()).list.find((p) => p.pid === pid) || null;
+    } catch (_) {}
+    return {
+      processes: metrics.map((m) => ({ type: m.type, pid: m.pid, cpu: m.cpu.percentCPUUsage, memory: m.memory.workingSetSize * 1024 })),
+      bridge: bridge ? { pid: bridge.pid, cpu: bridge.cpu, memory: bridge.memBytes } : null
+    };
+  });
+
   handle("sys:snapshot", async () => {
-    const [info, load, m, d, procs] = await Promise.all([
-      staticInfo(), cpuLoad(), mem(), drives().catch(() => []), processes().catch(() => ({ list: [] }))
+    const [info, live, d, procs] = await Promise.all([
+      telemetry.static(), telemetry.live(), telemetry.drives().catch(() => []), telemetry.processes().catch(() => ({ list: [] }))
     ]);
     const dest = path.join(app.getPath("documents"), `edex-snapshot-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
     const top = procs.list.slice().sort((a, b) => b.cpu - a.cpu).slice(0, 25)
-      .map(({ pid, name, cpu, mem: memPct }) => ({ pid, name, cpu, mem: memPct }));
+      .map(({ pid, name, cpu, mem, memBytes }) => ({ pid, name, cpu, mem, memBytes }));
     await fs.promises.writeFile(dest, JSON.stringify({
       timestamp: new Date().toISOString(),
       system: info,
       uptime: os.uptime(),
-      cpu: { load: load.currentLoad, cores: load.cpus.map((c) => c.load) },
-      memory: { total: m.total, used: m.active, swapUsed: m.swapused },
+      cpu: live.cpu,
+      memory: live.mem,
+      network: live.net,
       drives: d,
       topProcesses: top
     }, null, 2), "utf8");
