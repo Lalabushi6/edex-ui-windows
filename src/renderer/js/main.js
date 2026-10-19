@@ -20,11 +20,13 @@ import { initTopbar } from "./shell/topbar.js";
 import { initDock } from "./shell/dock.js";
 import { openLauncher, launcherIsOpen, closeLauncher, preloadLauncher, loadAppsCached } from "./shell/launcher.js";
 import { openSettings } from "./shell/settings-panel.js";
-import { openHelp, openFileSearch, initKeyboard, runBoot, showGreeting } from "./shell/extras.js";
+import { openHelp, openFileSearch, runBoot, showGreeting } from "./shell/extras.js";
+import { initKeyboard, openLayoutsFolder, importLayouts } from "./shell/keyboard.js";
 
 const api = window.edex;
 let workspace;
 let dock;
+let keyboard;
 
 function applyLayout() {
   document.documentElement.style.setProperty("--ui-scale", String(settings.get("uiScale") / 100));
@@ -72,6 +74,13 @@ async function registerCommands() {
     } catch (e) { toast(cleanError(e), { level: "warn" }); }
   }, { keys: "Ctrl+Shift+S", icon: "snapshot", keywords: "report json export diagnostics" });
   cmd("keyboard.toggle", "Toggle on-screen keyboard", () => settings.set({ showKeyboard: !settings.get("showKeyboard") }), { keys: "Ctrl+Shift+K", icon: "keyboard" });
+  cmd("keyboard.password", "On-screen keyboard: password mode", () => {
+    if (!settings.get("showKeyboard")) settings.set({ showKeyboard: true });
+    keyboard?.togglePassword();
+  }, { icon: "lock", keywords: "keyboard secret hide feedback kb_passmode" });
+  cmd("keyboard.folder", "Open custom keyboard layouts folder", () => openLayoutsFolder(), { icon: "folder", keywords: "keyboard layout custom json" });
+  cmd("keyboard.import", "Import keyboard layout…", () => importLayouts(), { icon: "download", keywords: "keyboard layout custom json" });
+  cmd("settings.keyboard", "Keyboard settings", () => openSettings("keyboard"), { icon: "keyboard", keywords: "on-screen keyboard layout azerty qwertz dvorak colemak" });
   cmd("layout.left", "Toggle left column", () => settings.set({ showLeftColumn: !settings.get("showLeftColumn") }), { icon: "layout", keywords: "panel sidebar hide show" });
   cmd("layout.right", "Toggle right column", () => settings.set({ showRightColumn: !settings.get("showRightColumn") }), { icon: "layout", keywords: "panel sidebar hide show" });
   cmd("mode.toggle", "Switch desktop / overlay mode", () => settings.set({ mode: settings.get("mode") === "overlay" ? "desktop" : "overlay" }), { icon: "window", keywords: "overlay desktop hud always on top" });
@@ -142,7 +151,7 @@ async function main() {
   mountWidgets($("#col-left-body"), $("#col-right-body"));
   workspace = new Workspace($("#workspace"));
   await registerCommands();
-  initKeyboard($("#keyboard"), () => workspace.activeTerminal());
+  keyboard = initKeyboard($("#keyboard"), () => workspace.activeTerminal());
   await workspace.init();
   preloadLauncher();
   window.addEventListener("dragover", (e) => e.preventDefault());

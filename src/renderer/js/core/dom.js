@@ -8,7 +8,13 @@ export function h(tag, props, ...children) {
     for (const [key, value] of Object.entries(props)) {
       if (value === undefined || value === null || value === false) continue;
       if (key === "class") el.className = value;
-      else if (key === "style" && typeof value === "object") Object.assign(el.style, value);
+      else if (key === "style" && typeof value === "object") {
+        // Custom properties (--name) only take effect through setProperty.
+        for (const [k, v] of Object.entries(value)) {
+          if (k.startsWith("--")) el.style.setProperty(k, String(v));
+          else el.style[k] = v;
+        }
+      }
       else if (key === "dataset") Object.assign(el.dataset, value);
       else if (key === "svg") el.innerHTML = value; // trusted static icon markup only
       else if (key.startsWith("on") && typeof value === "function") el.addEventListener(key.slice(2).toLowerCase(), value);

@@ -1,6 +1,6 @@
 // Settings overlay. Every control writes straight to the settings store;
 // changes apply live.
-import { h } from "../core/dom.js";
+import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { currentTheme } from "../core/theme.js";
@@ -8,6 +8,9 @@ import { openModal, toast, prompt, cleanError } from "../core/ui.js";
 import { profile, onSchedulingChange } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import { widgetDefs } from "../widgets/registry.js";
+import { runCommand } from "../core/commands.js";
+import { autoLayoutId, openLayoutsFolder, importLayouts } from "./keyboard.js";
+import { describeLogo, openBootLogoEditor, previewBootTitle } from "./boot-art.js";
 
 const api = window.edex;
 
@@ -57,6 +60,16 @@ function range(key, min, max, suffix = "") {
   return h("span", { style: { display: "flex", alignItems: "center", gap: ".5rem" } }, el, label);
 }
 
+// Boot logo: a title or ASCII art, edited in its own dialog.
+function bootLogoRow() {
+  const summary = h("span", { class: "muted", style: { fontSize: ".82rem" } }, describeLogo(settings.get("bootLogo")));
+  const refresh = () => setText(summary, describeLogo(settings.get("bootLogo")));
+  return row("Boot logo", "A title, or ASCII art: paste it, load a .txt / .nfo / .ans file, or generate block letters. Art is scaled to fit the screen.",
+    h("span", { style: { display: "flex", alignItems: "center", gap: ".5rem" } }, summary,
+      h("button", { class: "btn", type: "button", onclick: () => previewBootTitle(settings.get("bootLogo"), settings.get("bootSubtitle")) }, icon("play"), "Preview"),
+      h("button", { class: "btn", type: "button", onclick: () => openBootLogoEditor(refresh) }, icon("edit"), "Edit…")));
+}
+
 // Click, then press the new key combination. Esc cancels, Backspace clears.
 function hotkey(key) {
   const el = h("input", { class: "input hotkey-input", readOnly: true });
@@ -92,6 +105,7 @@ const PAGES = [
   { id: "general", label: "General", icon: "gear" },
   { id: "appearance", label: "Appearance", icon: "palette" },
   { id: "terminal", label: "Terminal", icon: "terminal" },
+  { id: "keyboard", label: "Keyboard", icon: "keyboard" },
   { id: "layout", label: "Layout", icon: "layout" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "performance", label: "Performance", icon: "gauge" },
@@ -193,7 +207,7 @@ async function buildPage(id) {
       row("Temperature unit", null, select("temperatureUnit", [["C", "Celsius"], ["F", "Fahrenheit"]])),
       h("h3", null, "Boot screen"),
       row("Boot animation", null, toggle("bootAnimation")),
-      row("Boot logo text", "Leave empty for the default. Multi-line ASCII art is supported.", text("bootLogo", "eDEX")),
+      bootLogoRow(),
       row("Boot subtitle", null, text("bootSubtitle", "WINDOWS EDITION")));
   }
   if (id === "terminal") {
@@ -208,6 +222,29 @@ async function buildPage(id) {
       row("Scrollback lines", null, number("termScrollback", 100, 100000, 100)),
       h("h3", null, "Clipboard"),
       row("Copy on select", "Selecting text copies it immediately.", toggle("termCopyOnSelect")));
+  }
+  if (id === "keyboard") {
+    const { layouts, errors, folder } = await api.kb.list().catch(() => ({ layouts: [], errors: [], folder: "" }));
+    const auto = autoLayoutId(layouts.map((l) => l.id));
+    const autoName = layouts.find((l) => l.id === auto)?.name || auto;
+    const picker = select("keyboardLayout", [["auto", `Auto — ${autoName}`], ...layouts.map((l) => [l.id, `${l.name}${l.custom ? " (custom)" : ""}`])]);
+    if (![...picker.options].some((o) => o.value === picker.value)) picker.value = "auto";
+    const customCount = layouts.filter((l) => l.custom).length;
+    page.push(h("h3", null, "On-screen keyboard"),
+      row("Show keyboard", "Ctrl+Shift+K. Types into the focused text field, otherwise the active terminal.", toggle("showKeyboard")),
+      row("Layout", "The eDEX-UI layouts, including AZERTY, QWERTZ, BÉPO, Dvorak, Colemak, Workman and Norman. Auto follows your Windows display language.", picker),
+      h("h3", null, "Custom layouts"),
+      row("Layouts folder", `${customCount ? `${customCount} custom layout${customCount === 1 ? "" : "s"}. ` : ""}Drop eDEX-UI layout files (.json) here; a file named like a built-in (e.g. en-US.json) replaces it. Changes apply immediately.`,
+        h("span", { style: { display: "flex", gap: ".4rem" } },
+          h("button", { class: "btn", type: "button", onclick: () => { openLayoutsFolder(); } }, icon("folder"), "Open"),
+          h("button", { class: "btn", type: "button", onclick: async () => { await importLayouts(); openPanel?.show("keyboard"); } }, icon("download"), "Import…"))),
+      ...errors.map((e) => row(e.file, `Not loaded: ${e.message}`, h("span", { class: "warn-text mono", style: { fontSize: ".78rem" } }, "error"))),
+      h("div", { class: "setting-desc", style: { marginTop: ".6rem" } },
+        "Format: rows named row_numbers, row_1, row_2, row_3 and row_space, each a list of keys with name / cmd, and optional shift_, alt_, altshift_, fn_, ctrl_ and capslck_ variants. ",
+        "Commands may use ~~~CTRLSEQ1~~~ (Esc) and the other eDEX-UI control placeholders, ESCAPED|-- SHIFT/CTRL/ALT/FN/CAPSLCK modifiers, ESCAPED|-- ICON: ARROW_UP… icons and dead keys (ESCAPED|-- ACUTE, GRAVE, CIRCUM, TREMA, TILDE, CEDILLA, CARON, BREVE, MACRON, OVERRING, BAR, GREEK, IOTASUB). ",
+        "An optional top-level \"name\" sets the display name. ", folder ? `Folder: ${folder}` : ""),
+      h("h3", null, "Privacy"),
+      row("Password mode", "Hides key presses on the on-screen keyboard while you type a secret (the lock button on the keyboard, or the command palette).", h("button", { class: "btn", type: "button", onclick: () => runCommand("keyboard.password") }, icon("lock"), "Toggle")));
   }
   if (id === "layout") {
     const hidden = new Set(settings.get("hiddenWidgets") || []);

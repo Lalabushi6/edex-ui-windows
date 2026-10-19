@@ -7,6 +7,7 @@ import * as fmt from "../core/format.js";
 import { emit } from "../core/bus.js";
 import { allCommands } from "../core/commands.js";
 import { openModal, toast, cleanError, contextMenu, copyText } from "../core/ui.js";
+import { applyLogo, fitLogoToScreen } from "./boot-art.js";
 
 const api = window.edex;
 
@@ -88,80 +89,6 @@ export function openFileSearch(root) {
   setTimeout(() => query.focus(), 0);
 }
 
-// ── On-screen keyboard ──────────────────────────────────────────────────────
-const LAYOUT = [
-  [["Esc", "\x1b", "Escape"], ["`", "`", null, "~"], ["1", "1", null, "!"], ["2", "2", null, "@"], ["3", "3", null, "#"], ["4", "4", null, "$"], ["5", "5", null, "%"], ["6", "6", null, "^"], ["7", "7", null, "&"], ["8", "8", null, "*"], ["9", "9", null, "("], ["0", "0", null, ")"], ["-", "-", null, "_"], ["=", "=", null, "+"], ["Back", "\x7f", "Backspace", null, "wide"]],
-  [["Tab", "\t", "Tab", null, "wide"], ..."qwertyuiop".split("").map((c) => [c.toUpperCase(), c, null, c.toUpperCase()]), ["[", "[", null, "{"], ["]", "]", null, "}"], ["\\", "\\", null, "|"]],
-  [["Caps", "caps", "CapsLock", null, "wide"], ..."asdfghjkl".split("").map((c) => [c.toUpperCase(), c, null, c.toUpperCase()]), [";", ";", null, ":"], ["'", "'", null, "\""], ["Enter", "\r", "Enter", null, "wide"]],
-  [["Shift", "shift", "ShiftLeft", null, "wide"], ..."zxcvbnm".split("").map((c) => [c.toUpperCase(), c, null, c.toUpperCase()]), [",", ",", null, "<"], [".", ".", null, ">"], ["/", "/", null, "?"], ["\u25B2", "\x1b[A", "ArrowUp"], ["Shift", "shift", "ShiftRight", null, "wide"]],
-  [["Ctrl", "ctrl", "ControlLeft", null, "wide"], ["Alt", "alt", "AltLeft", null, "wide"], ["", " ", "Space", null, "space"], ["\u25C0", "\x1b[D", "ArrowLeft"], ["\u25BC", "\x1b[B", "ArrowDown"], ["\u25B6", "\x1b[C", "ArrowRight"], ["Ctrl", "ctrl", "ControlRight", null, "wide"]]
-];
-
-export function initKeyboard(root, getTerminal) {
-  const state = { shift: false, caps: false, ctrl: false, alt: false };
-  const byCode = new Map();
-  const byChar = new Map();
-  const modKeys = { shift: [], ctrl: [], alt: [], caps: [] };
-
-  const press = (def) => {
-    const [, seq, , shifted] = def;
-    if (seq in modKeys) {
-      if (seq === "caps") state.caps = !state.caps;
-      else state[seq] = !state[seq];
-      paintMods();
-      return;
-    }
-    const term = getTerminal();
-    if (!term) { toast("Open a terminal tab to type into", { timeout: 1500 }); return; }
-    let out = seq;
-    if (shifted) {
-      // Caps Lock only affects letters; Shift inverts it for letters.
-      const useShift = /^[a-z]$/.test(seq) ? state.shift !== state.caps : state.shift;
-      if (useShift) out = shifted;
-    }
-    if (state.ctrl && out.length === 1) {
-      const c = out.toLowerCase().charCodeAt(0);
-      if (c >= 97 && c <= 122) out = String.fromCharCode(c - 96);
-    }
-    if (state.alt && out.length === 1) out = `\x1b${out}`;
-    term.input(out);
-    term.focus();
-    sfx.play("stdin");
-    state.shift = false;
-    state.ctrl = false;
-    state.alt = false;
-    paintMods();
-  };
-  const paintMods = () => {
-    for (const [mod, els] of Object.entries(modKeys)) els.forEach((el) => el.classList.toggle("latched", !!state[mod]));
-  };
-
-  for (const rowDef of LAYOUT) {
-    const rowEl = h("div", { class: "kb-row" });
-    for (const def of rowDef) {
-      const [label, seq, code, shifted, size] = def;
-      const key = h("button", { class: `kb-key${size ? ` ${size}` : ""}${label === "Enter" ? " enter" : ""}`, type: "button", tabindex: -1 },
-        shifted && !/^[A-Z]$/.test(label) ? h("small", null, shifted) : null, label);
-      key.addEventListener("mousedown", (e) => { e.preventDefault(); press(def); });
-      if (seq in modKeys) modKeys[seq].push(key);
-      if (code) byCode.set(code, key);
-      byChar.set(seq, key);
-      if (shifted) byChar.set(shifted, key);
-      rowEl.append(key);
-    }
-    root.append(rowEl);
-  }
-
-  const find = (e) => byCode.get(e.code) || byChar.get(e.key) || byChar.get(e.key?.toLowerCase());
-  document.addEventListener("keydown", (e) => { if (root.classList.contains("show")) find(e)?.classList.add("down"); });
-  document.addEventListener("keyup", (e) => { if (root.classList.contains("show")) find(e)?.classList.remove("down"); });
-  window.addEventListener("blur", () => root.querySelectorAll(".down").forEach((k) => k.classList.remove("down")));
-
-  const apply = () => root.classList.toggle("show", !!settings.get("showKeyboard"));
-  settings.watch("showKeyboard", apply);
-  apply();
-}
-
 // ── Boot screen ─────────────────────────────────────────────────────────────
 // The original eDEX-UI sequence: a fast-scrolling kernel log, then the title
 // card that fills, boxes and "derezzes" before the UI appears.
@@ -174,12 +101,7 @@ export function runBoot() {
   const logo = document.getElementById("boot-logo");
   const sub = document.getElementById("boot-sub");
   const log = document.getElementById("boot-log");
-  const custom = settings.get("bootLogo");
-  if (custom) {
-    logo.textContent = custom;
-    logo.dataset.text = custom;
-    logo.classList.toggle("multiline", custom.includes("\n"));
-  }
+  applyLogo(logo, settings.get("bootLogo"));
   if (settings.get("bootSubtitle")) sub.textContent = settings.get("bootSubtitle");
 
   const finish = () => {
@@ -220,6 +142,7 @@ export function runBoot() {
       screen.classList.add("titling");
       sfx.play("theme");
       await delay(300);
+      fitLogoToScreen(logo);
       titleBox.hidden = false;
       await delay(200);
       logo.classList.add("fill");

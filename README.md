@@ -27,7 +27,14 @@ telemetry from one surface — without dropping back to the Windows desktop.
 - **The eDEX-UI look**: the original's grid backdrop, "PANEL / SYSTEM"
   captions, ruled modules, slanted shell tabs, clipped-corner frames, logo,
   kernel-log boot sequence with the glitching title, and terminal colours
-  tinted to the theme.
+  tinted to the theme. The boot logo can be your own title or ASCII art
+  (pasted, loaded from .txt / .nfo / .ans, or generated as block letters),
+  scaled to fit the screen.
+- **On-screen keyboard** with all 19 eDEX-UI layouts (US, UK, AZERTY, BÉPO,
+  QWERTZ, Dvorak, Colemak, Workman, Norman, Spanish, Italian, Nordic,
+  Turkish F/Q …) plus your own custom layouts: Shift / Caps / Ctrl / AltGr /
+  Fn layers, dead keys for accents, password mode, and it types into the
+  terminal, any text field, or triggers app shortcuts.
 - **World view**: the original ENCOM hex-tile globe with orbiting satellites,
   your location pin and connection arcs to reference cities (with latency);
   falls back to a canvas globe without WebGL.
@@ -99,6 +106,7 @@ src/renderer/        UI (ES modules served from app://edex)
   js/media/          media player engine
   lib/encom-globe.js the ENCOM globe (from eDEX-UI)
 themes/              built-in themes (JSON, eDEX-UI format)
+keyboards/           on-screen keyboard layouts (JSON, eDEX-UI format)
 scripts/             check.js
 ```
 
@@ -129,7 +137,7 @@ history is never written to disk.
 
 ## Credits and license
 
-The look, themes, logo, boot sequence and globe come from
+The look, themes, keyboard layouts, logo, boot sequence and globe come from
 [eDEX-UI](https://github.com/GitSquared/edex-ui) by Gabriel "Squared" SAILLARD
 and contributors (GPL-3.0); the globe is their fork of Rob Scanlon's ENCOM
 Globe (MIT). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

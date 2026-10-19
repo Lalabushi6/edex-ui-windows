@@ -42,6 +42,12 @@ export function modalOpen() {
 // Opens a modal; `build(close)` returns its content. Esc / backdrop close it.
 export function openModal(build, { className = "", onClose, dismissible = true, label = "Dialog" } = {}) {
   const backdrop = h("div", { class: "modal-backdrop" });
+  // The on-screen keyboard stays uncovered (and usable) below dialogs.
+  const kb = document.getElementById("keyboard");
+  if (kb?.classList.contains("show")) {
+    const top = kb.getBoundingClientRect().top;
+    if (top > 0 && top < window.innerHeight) backdrop.style.bottom = `${Math.round(window.innerHeight - top)}px`;
+  }
   const box = h("div", { class: `modal ${className}`, role: "dialog", "aria-label": label });
   backdrop.append(box);
   let closed = false;
