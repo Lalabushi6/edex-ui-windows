@@ -1,0 +1,5 @@
+{
+    "name": "Tron Color Filter",
+    "colors": { "r": 100, "g": 220, "b": 180, "black": "#000000", "light_black": "#05080d", "grey": "#262828" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "block", "foreground": "#64dcb4", "background": "#05080d", "cursor": "#64dcb4", "selectionBackground": "rgba(100,220,180,0.3)" }
+}

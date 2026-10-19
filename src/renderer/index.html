@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Served from app://edex, so 'self' is the bundled renderer only. Local
+       files for previews come through the read-only localfile: protocol.
+       Inline styles stay allowed because xterm.js injects <style> elements;
+       scripts are never inline. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: localfile:;
+    media-src 'self' localfile:;
+    frame-src localfile:;
+    font-src 'self';
+    connect-src 'self';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>eDEX-UI</title>
+  <link rel="stylesheet" href="vendor/xterm/css/xterm.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/workspace.css">
+  <link rel="stylesheet" href="css/overlays.css">
+</head>
+<body>
+  <div id="app">
+    <header id="topbar"></header>
+    <aside id="col-left" class="column" aria-label="System panels"></aside>
+    <main id="workspace"></main>
+    <aside id="col-right" class="column" aria-label="Network and tools"></aside>
+    <section id="keyboard" aria-label="On-screen keyboard"></section>
+    <footer id="dock"></footer>
+  </div>
+  <div id="toasts" aria-live="polite"></div>
+
+  <div id="boot">
+    <div class="boot-inner">
+      <div class="boot-logo" id="boot-logo">eDEX</div>
+      <div class="boot-sub" id="boot-sub">WINDOWS EDITION</div>
+      <div class="boot-log" id="boot-log"></div>
+      <div class="boot-bar"><i id="boot-bar"></i></div>
+      <div class="boot-skip">PRESS ANY KEY TO SKIP</div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

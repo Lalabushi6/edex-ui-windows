@@ -1,0 +1,5 @@
+{
+    "name": "Navy Disrupted",
+    "colors": { "r": 20, "g": 119, "b": 205, "black": "#282a36", "light_black": "#1a1d26", "grey": "#1a1d26" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "bar", "foreground": "#87b7cc", "background": "#1a1d26", "cursor": "#87b7cc", "selectionBackground": "rgba(20,119,205,0.3)" }
+}

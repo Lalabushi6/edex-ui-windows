@@ -1,0 +1,5 @@
+{
+    "name": "Matrix",
+    "colors": { "r": 0, "g": 143, "b": 17, "black": "#0D0208", "light_black": "#090B0A", "grey": "#262827" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "underline", "foreground": "#00ff41", "background": "#0D0208", "cursor": "#00ff41", "selectionBackground": "#008f11" }
+}

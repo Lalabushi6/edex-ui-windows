@@ -1,0 +1,189 @@
+// Owns the single eDEX window and its two presentation modes:
+//
+//   desktop  A full-screen surface that sits *behind* ordinary windows, so it
+//            acts as your desktop: launch an app and it opens on top; close it
+//            and you are back in eDEX instead of the Windows desktop.
+//   overlay  Always-on-top HUD summoned by the global hotkey. It hides itself
+//            when it loses focus or after launching something.
+"use strict";
+
+const path = require("path");
+const { BrowserWindow, screen, app } = require("electron");
+const { APP_ORIGIN } = require("./lib/protocol");
+
+const DEV_WINDOWED = process.env.EDEX_DEV_WINDOWED === "1";
+
+class WindowManager {
+  constructor({ settings }) {
+    this.settings = settings;
+    this.win = null;
+    this.quitting = false;
+    this.blurHideSuppressed = 0;
+    this.blurTimer = null;
+    settings.on("change", (changed) => {
+      if ("mode" in changed || "coverTaskbar" in changed) this.applyMode();
+    });
+  }
+
+  get mode() {
+    return this.settings.get("mode");
+  }
+
+  get webContents() {
+    return this.win && !this.win.isDestroyed() ? this.win.webContents : null;
+  }
+
+  send(channel, payload) {
+    const wc = this.webContents;
+    if (wc && !wc.isDestroyed()) wc.send(channel, payload);
+  }
+
+  _targetDisplay() {
+    if (this.mode === "overlay") return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    return screen.getPrimaryDisplay();
+  }
+
+  _targetBounds() {
+    const display = this._targetDisplay();
+    if (DEV_WINDOWED) {
+      const { workArea } = display;
+      const width = Math.min(1600, workArea.width - 80);
+      const height = Math.min(940, workArea.height - 80);
+      return {
+        x: Math.round(workArea.x + (workArea.width - width) / 2),
+        y: Math.round(workArea.y + (workArea.height - height) / 2),
+        width,
+        height
+      };
+    }
+    return this.settings.get("coverTaskbar") ? display.bounds : display.workArea;
+  }
+
+  create() {
+    const bounds = this._targetBounds();
+    this.win = new BrowserWindow({
+      ...bounds,
+      show: false,
+      frame: false,
+      resizable: DEV_WINDOWED,
+      maximizable: false,
+      fullscreenable: false,
+      backgroundColor: "#000000",
+      title: "eDEX-UI",
+      icon: path.join(__dirname, "assets", "icon.png"),
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webviewTag: false,
+        spellcheck: false,
+        backgroundThrottling: true
+      }
+    });
+    this.applyMode();
+
+    const win = this.win;
+    win.loadURL(`${APP_ORIGIN}/index.html`);
+    win.once("ready-to-show", () => {
+      const hidden = !DEV_WINDOWED && (this.settings.get("startHidden") || process.argv.includes("--hidden"));
+      if (!hidden) this.show();
+    });
+
+    const emitVisibility = () => this.send("app:visibility", {
+      visible: win.isVisible() && !win.isMinimized(),
+      focused: win.isFocused()
+    });
+    for (const evt of ["show", "hide", "minimize", "restore", "focus"]) win.on(evt, emitVisibility);
+    win.on("blur", () => {
+      emitVisibility();
+      this._maybeHideOnBlur();
+    });
+
+    win.on("close", (event) => {
+      if (this.quitting || !this.settings.get("closeToTray")) return;
+      event.preventDefault();
+      this.hide();
+    });
+    win.on("closed", () => { this.win = null; });
+
+    const refit = () => this.applyMode();
+    screen.on("display-metrics-changed", refit);
+    screen.on("display-added", refit);
+    screen.on("display-removed", refit);
+    return win;
+  }
+
+  applyMode() {
+    const win = this.win;
+    if (!win || win.isDestroyed()) return;
+    const overlay = this.mode === "overlay";
+    win.setSkipTaskbar(overlay);
+    if (overlay) win.setAlwaysOnTop(true, this.settings.get("coverTaskbar") && !DEV_WINDOWED ? "screen-saver" : "floating");
+    else win.setAlwaysOnTop(false);
+    win.setBounds(this._targetBounds());
+    this.send("app:mode", { mode: this.mode });
+  }
+
+  _maybeHideOnBlur() {
+    clearTimeout(this.blurTimer);
+    if (this.mode !== "overlay" || !this.settings.get("overlayHideOnBlur") || this.blurHideSuppressed > 0) return;
+    this.blurTimer = setTimeout(() => {
+      if (this.win && !this.win.isDestroyed() && !this.win.isFocused() && this.blurHideSuppressed === 0) this.hide();
+    }, 150);
+  }
+
+  // Native dialogs steal focus; without this an overlay would hide itself
+  // (and its dialog's parent) the moment a confirmation appeared.
+  async withDialog(fn) {
+    this.blurHideSuppressed++;
+    try {
+      return await fn(this.win && !this.win.isDestroyed() ? this.win : undefined);
+    } finally {
+      this.blurHideSuppressed--;
+    }
+  }
+
+  show(command) {
+    const win = this.win;
+    if (!win || win.isDestroyed()) return;
+    if (this.mode === "overlay") win.setBounds(this._targetBounds());
+    if (win.isMinimized()) win.restore();
+    win.show();
+    if (this.mode !== "overlay") {
+      // Windows refuses focus to background apps; a momentary topmost flip
+      // reliably lifts the window above whatever currently has focus.
+      win.setAlwaysOnTop(true);
+      win.setAlwaysOnTop(false);
+    }
+    win.focus();
+    app.focus({ steal: true });
+    if (command) this.send("app:command", { name: command, toggle: false });
+  }
+
+  hide() {
+    const win = this.win;
+    if (!win || win.isDestroyed()) return;
+    clearTimeout(this.blurTimer);
+    win.hide();
+  }
+
+  toggle(command) {
+    const win = this.win;
+    if (!win || win.isDestroyed()) return;
+    // Already in front: a plain toggle hides, a command toggles its panel.
+    if (win.isVisible() && !win.isMinimized() && win.isFocused()) {
+      if (command) this.send("app:command", { name: command, toggle: true });
+      else this.hide();
+      return;
+    }
+    this.show(command);
+  }
+
+  // Called before handing focus to another app or window.
+  yieldFocus() {
+    if (this.mode === "overlay" && this.settings.get("hideAfterLaunch")) this.hide();
+  }
+}
+
+module.exports = { WindowManager, DEV_WINDOWED };

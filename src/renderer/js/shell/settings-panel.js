@@ -1,0 +1,245 @@
+// Settings overlay. Every control writes straight to the settings store;
+// changes apply live.
+import { h } from "../core/dom.js";
+import { icon } from "../core/icons.js";
+import * as settings from "../core/settings.js";
+import { currentTheme } from "../core/theme.js";
+import { openModal, toast, prompt, cleanError } from "../core/ui.js";
+import { widgetDefs } from "../widgets/registry.js";
+
+const api = window.edex;
+
+function row(name, desc, control) {
+  return h("div", { class: "setting" },
+    h("div", { class: "setting-text" }, h("div", { class: "setting-name" }, name), desc && h("div", { class: "setting-desc" }, desc)),
+    h("div", { class: "setting-control" }, control));
+}
+
+function toggle(key) {
+  const el = h("input", { class: "switch", type: "checkbox", checked: !!settings.get(key) });
+  el.addEventListener("change", () => settings.set({ [key]: el.checked }));
+  return el;
+}
+
+function select(key, options) {
+  const el = h("select", { class: "input" }, ...options.map(([value, label]) => h("option", { value }, label)));
+  el.value = String(settings.get(key));
+  el.addEventListener("change", () => settings.set({ [key]: el.value }));
+  return el;
+}
+
+function number(key, min, max, step = 1) {
+  const el = h("input", { class: "input", type: "number", min, max, step });
+  el.value = String(settings.get(key));
+  el.addEventListener("change", () => {
+    const n = Math.max(min, Math.min(max, Number(el.value) || min));
+    el.value = String(n);
+    settings.set({ [key]: n });
+  });
+  return el;
+}
+
+function text(key, placeholder = "") {
+  const el = h("input", { class: "input", spellcheck: false, placeholder });
+  el.value = settings.get(key) || "";
+  el.addEventListener("change", () => settings.set({ [key]: el.value.trim() }));
+  return el;
+}
+
+function range(key, min, max, suffix = "") {
+  const label = h("span", { class: "muted", style: { minWidth: "3rem", textAlign: "right" } }, `${settings.get(key)}${suffix}`);
+  const el = h("input", { type: "range", min, max, step: 1, style: { width: "12rem" } });
+  el.value = String(settings.get(key));
+  el.addEventListener("input", () => { label.textContent = `${el.value}${suffix}`; });
+  el.addEventListener("change", () => settings.set({ [key]: Number(el.value) }));
+  return h("span", { style: { display: "flex", alignItems: "center", gap: ".5rem" } }, el, label);
+}
+
+// Click, then press the new key combination. Esc cancels, Backspace clears.
+function hotkey(key) {
+  const el = h("input", { class: "input hotkey-input", readOnly: true });
+  const show = () => { el.value = settings.get(key) || "(none)"; };
+  show();
+  el.addEventListener("focus", () => { el.classList.add("recording"); el.value = "Press keys…"; });
+  el.addEventListener("blur", () => { el.classList.remove("recording"); show(); });
+  el.addEventListener("keydown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") { el.blur(); return; }
+    if (e.key === "Backspace" || e.key === "Delete") { settings.set({ [key]: "" }); el.blur(); return; }
+    if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+    const parts = [];
+    if (e.ctrlKey) parts.push("CommandOrControl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    if (e.metaKey) parts.push("Super");
+    let k = e.key;
+    if (e.code.startsWith("Key")) k = e.code.slice(3);
+    else if (e.code.startsWith("Digit")) k = e.code.slice(5);
+    else if (k === " ") k = "Space";
+    else if (e.code === "Backquote") k = "`";
+    if (!parts.length && !/^F\d+$/.test(k)) { toast("Use at least one modifier (Ctrl, Alt or Shift)", { level: "warn" }); return; }
+    parts.push(k.length === 1 ? k.toUpperCase() : k);
+    settings.set({ [key]: parts.join("+") });
+    el.blur();
+  });
+  return el;
+}
+
+const PAGES = [
+  { id: "general", label: "General", icon: "gear" },
+  { id: "appearance", label: "Appearance", icon: "palette" },
+  { id: "terminal", label: "Terminal", icon: "terminal" },
+  { id: "layout", label: "Layout", icon: "layout" },
+  { id: "files", label: "Files", icon: "folder" },
+  { id: "privacy", label: "Privacy", icon: "lock" },
+  { id: "about", label: "About", icon: "info" }
+];
+
+async function buildPage(id) {
+  const page = [];
+  if (id === "general") {
+    page.push(h("h3", null, "Behaviour"),
+      row("Mode", "Desktop: a full-screen home that sits behind your apps. Overlay: an always-on-top HUD you summon with the hotkey.", select("mode", [["desktop", "Desktop"], ["overlay", "Overlay"]])),
+      row("Cover the Windows taskbar", "Use the whole screen instead of the work area.", toggle("coverTaskbar")),
+      row("Hide overlay when it loses focus", "Overlay mode only.", toggle("overlayHideOnBlur")),
+      row("Hide overlay after launching", "Get out of the way after opening an app, file or window (overlay mode).", toggle("hideAfterLaunch")),
+      row("Close button hides to tray", "Alt+F4 keeps eDEX running in the tray instead of quitting.", toggle("closeToTray")),
+      row("Start with Windows", "Launch eDEX (hidden) when you sign in.", toggle("openAtLogin")),
+      row("Start hidden", "Stay in the tray at launch until summoned.", toggle("startHidden")),
+      h("h3", null, "Global hotkeys"),
+      row("Show / hide eDEX", "Works from any app. Click, then press a new combination.", hotkey("hotkeyToggle")),
+      row("Open launcher", "Summons eDEX straight into search.", hotkey("hotkeyLauncher")),
+      h("h3", null, "Launcher"),
+      row("Web search URL", "%s is replaced by your query.", text("webSearchUrl", "https://www.google.com/search?q=%s")),
+      h("h3", null, "Sound"),
+      row("Interface sounds", null, toggle("audioEnabled")),
+      row("Volume", null, range("audioVolume", 0, 100, "%")),
+      row("Typing feedback", "Click sounds for terminal input.", toggle("audioFeedback")));
+  }
+  if (id === "appearance") {
+    const themes = await api.themes.list().catch(() => []);
+    const grid = h("div", { class: "theme-grid" });
+    const renderThemes = () => grid.replaceChildren(...themes.map((t) => h("button", {
+      class: `theme-card${settings.get("theme") === t.id ? " active" : ""}`, type: "button",
+      onclick: () => { settings.set({ theme: t.id }); renderThemes(); }
+    }, h("span", { class: "theme-swatch", style: { background: `rgb(${t.rgb.join(",")})`, color: `rgb(${t.rgb.join(",")})` } }), h("span", { class: "ellipsis" }, t.name))));
+    renderThemes();
+    const color = h("input", { type: "color", value: `#${currentTheme().rgb.map((v) => v.toString(16).padStart(2, "0")).join("")}`, style: { width: "3rem", height: "2rem", background: "transparent", border: "0" } });
+    const saveCustom = h("button", { class: "btn", type: "button" }, "Save as theme");
+    saveCustom.addEventListener("click", async () => {
+      const name = await prompt({ title: "Save custom theme", placeholder: "My theme" });
+      if (!name) return;
+      const hex = color.value.replace("#", "");
+      const rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const base = currentTheme();
+      try {
+        const newId = await api.themes.save(name, { rgb, black: base.black, lightBlack: base.lightBlack, grey: base.grey });
+        settings.set({ theme: newId });
+        toast("Theme saved", { level: "ok" });
+        themes.splice(0, themes.length, ...(await api.themes.list()));
+        renderThemes();
+      } catch (e) { toast(cleanError(e), { level: "warn" }); }
+    });
+    page.push(h("h3", null, "Theme"), grid,
+      row("Custom accent", "Pick a colour and save it as your own theme.", h("span", { style: { display: "flex", gap: ".5rem", alignItems: "center" } }, color, saveCustom)),
+      h("h3", null, "Display"),
+      row("Interface scale", "Size of text and controls.", range("uiScale", 70, 160, "%")),
+      row("24-hour clock", null, toggle("clock24h")),
+      row("Temperature unit", null, select("temperatureUnit", [["C", "Celsius"], ["F", "Fahrenheit"]])),
+      h("h3", null, "Boot screen"),
+      row("Boot animation", null, toggle("bootAnimation")),
+      row("Boot logo text", "Leave empty for the default. Multi-line ASCII art is supported.", text("bootLogo", "eDEX")),
+      row("Boot subtitle", null, text("bootSubtitle", "WINDOWS EDITION")));
+  }
+  if (id === "terminal") {
+    const shells = await api.term.shells().catch(() => []);
+    page.push(h("h3", null, "Shell"),
+      row("Default shell", "Used for new terminal tabs.", select("defaultShell", shells.map((s) => [s.id, s.name]))),
+      h("h3", null, "Display"),
+      row("Font size", "Ctrl+= / Ctrl+- in a terminal also adjusts this.", number("termFontSize", 8, 32)),
+      row("Cursor style", null, select("termCursorStyle", [["block", "Block"], ["bar", "Bar"], ["underline", "Underline"]])),
+      row("Blinking cursor", null, toggle("termCursorBlink")),
+      row("Scrollback lines", null, number("termScrollback", 100, 100000, 100)),
+      h("h3", null, "Clipboard"),
+      row("Copy on select", "Selecting text copies it immediately.", toggle("termCopyOnSelect")));
+  }
+  if (id === "layout") {
+    const hidden = new Set(settings.get("hiddenWidgets") || []);
+    const widgets = widgetDefs().map((w) => {
+      const el = h("input", { class: "switch", type: "checkbox", checked: !hidden.has(w.id) });
+      el.addEventListener("change", () => {
+        const next = new Set(settings.get("hiddenWidgets") || []);
+        if (el.checked) next.delete(w.id); else next.add(w.id);
+        settings.set({ hiddenWidgets: [...next] });
+      });
+      return row(w.title, w.column === "left" ? "Left column" : "Right column", el);
+    });
+    page.push(h("h3", null, "Columns"),
+      row("Left column", "System telemetry.", toggle("showLeftColumn")),
+      row("Right column", "Network and tools.", toggle("showRightColumn")),
+      row("On-screen keyboard", "Ctrl+Shift+K", toggle("showKeyboard")),
+      h("h3", null, "Widgets"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Drag a widget by its title bar to reorder it or move it to the other column."),
+      ...widgets,
+      row("Reset widget layout", null, h("button", { class: "btn", type: "button", onclick: () => settings.set({ widgetOrder: { left: [], right: [] }, hiddenWidgets: [] }) }, "Reset")));
+  }
+  if (id === "files") {
+    page.push(h("h3", null, "Explorer"),
+      row("Show hidden items", null, toggle("showHidden")),
+      row("Confirm before deleting", "Deleted items always go to the Recycle Bin.", toggle("confirmDelete")),
+      row("Default view", null, select("explorerView", [["list", "List"], ["grid", "Grid"]])),
+      h("h3", null, "History"),
+      row("Recent files and folders", "Shown in the launcher and explorer sidebar.", h("button", { class: "btn", type: "button", onclick: () => { settings.set({ recentFiles: [], recentFolders: [] }); toast("History cleared", { level: "ok" }); } }, "Clear history")));
+  }
+  if (id === "privacy") {
+    page.push(h("h3", null, "Network"),
+      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view. Turn off to make eDEX fully offline.", toggle("allowNetworkGeolocation")),
+      h("h3", null, "Clipboard"),
+      row("Clipboard history", "Kept in memory only — never written to disk, cleared on quit.", toggle("clipboardHistory")),
+      row("History size", null, number("clipboardMax", 5, 200)),
+      row("Clear clipboard history", null, h("button", { class: "btn", type: "button", onclick: () => api.clip.clear().then(() => toast("Clipboard history cleared", { level: "ok" })) }, "Clear")),
+      h("h3", null, "Launcher"),
+      row("Usage ranking", "The launcher ranks frequently used results higher; counts live in this window's local storage.", h("button", {
+        class: "btn", type: "button", onclick: () => { try { localStorage.removeItem("edex.launcherUsage"); } catch (_) {} toast("Usage history cleared", { level: "ok" }); }
+      }, "Reset")));
+  }
+  if (id === "about") {
+    const info = await api.app.info().catch(() => ({}));
+    const sys = await api.sys.static().catch(() => ({}));
+    page.push(h("h3", null, "eDEX-UI Windows"),
+      row("Version", null, h("span", { class: "mono" }, info.version || "?")),
+      row("Mode", null, h("span", { class: "mono" }, info.windowed ? "development (windowed)" : info.mode)),
+      row("System", null, h("span", { class: "mono" }, `${sys.os?.distro || "Windows"} ${sys.os?.release || ""}`)),
+      row("Developer tools", "Inspect the interface.", h("button", { class: "btn", type: "button", onclick: () => api.app.devtools() }, "Toggle DevTools")),
+      row("Reload interface", null, h("button", { class: "btn", type: "button", onclick: () => api.app.reload() }, "Reload")));
+  }
+  return page;
+}
+
+let openPanel = null;
+
+export function openSettings(pageId = "general") {
+  if (openPanel) { openPanel.show(pageId); return; }
+  const nav = h("nav", { class: "settings-nav" });
+  const content = h("div", { class: "settings-page" });
+  let current = null;
+  const show = async (id) => {
+    current = id;
+    nav.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.page === id));
+    const items = await buildPage(id);
+    if (current === id) content.replaceChildren(...items);
+    content.scrollTop = 0;
+  };
+  nav.append(...PAGES.map((p) => h("button", { type: "button", dataset: { page: p.id }, onclick: () => show(p.id) }, icon(p.icon), p.label)));
+  const modal = openModal((close) => h("div", { style: { display: "contents" } },
+    h("div", { class: "modal-head" }, icon("gear"), h("span", { class: "modal-title grow" }, "Settings"),
+      h("button", { class: "icon-btn", type: "button", title: "Close (Esc)", onclick: () => close() }, icon("close"))),
+    h("div", { class: "settings-body" }, nav, content)), {
+    className: "settings",
+    label: "Settings",
+    onClose: () => { openPanel = null; }
+  });
+  openPanel = { show, close: modal.close };
+  show(pageId);
+}

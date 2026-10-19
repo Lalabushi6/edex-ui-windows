@@ -1,0 +1,5 @@
+{
+    "name": "Nord",
+    "colors": { "r": 216, "g": 222, "b": 233, "black": "#3B4252", "light_black": "#2E3440", "grey": "#4c566a" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "block", "foreground": "#D8DEE9", "background": "#2E3440", "cursor": "#D8DEE9", "selectionBackground": "rgba(67,76,94,0.8)" }
+}

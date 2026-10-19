@@ -1,0 +1,5 @@
+{
+    "name": "Interstellar",
+    "colors": { "r": 3, "g": 169, "b": 244, "black": "#f3f3f3", "light_black": "#dedede", "grey": "#bfbfbf" },
+    "terminal": { "fontFamily": "Courier New", "cursorStyle": "bar", "foreground": "#03A9F4", "background": "#dedede", "cursor": "#03A9F4", "selectionBackground": "rgba(3,169,244,0.3)" }
+}

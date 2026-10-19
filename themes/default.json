@@ -1,0 +1,7 @@
+{
+    "name": "Default Green",
+    "author": "eDEX-UI",
+    "description": "The classic eDEX phosphor green.",
+    "colors": { "r": 0, "g": 255, "b": 120, "black": "#000000", "light_black": "#020a05", "grey": "#0f2a18" },
+    "terminal": { "foreground": "#00ff78", "background": "#020a05", "cursor": "#00ff78", "selectionBackground": "rgba(0,255,120,0.28)" }
+}
