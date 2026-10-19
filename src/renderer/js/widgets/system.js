@@ -59,9 +59,10 @@ defineWidget({
       let hh = now.getHours();
       const suffix = h24 ? "" : (hh >= 12 ? " PM" : " AM");
       if (!h24) hh = hh % 12 || 12;
+      const pad = (n) => String(n).padStart(2, "0");
       time.replaceChildren(
-        `${String(hh).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
-        h("span", { class: "sec" }, `${String(now.getSeconds()).padStart(2, "0")}${suffix}`));
+        pad(hh), h("span", { class: "colon" }, ":"), pad(now.getMinutes()), h("span", { class: "colon" }, ":"), pad(now.getSeconds()),
+        suffix && h("span", { class: "colon" }, suffix));
       setText(date, now.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" }).toUpperCase());
       if (uptimeAt) setText(uptime, `UP ${fmt.duration(uptimeSec + (Date.now() - uptimeAt) / 1000)}`);
       const extra = (settings.get("clockZones") || []).filter((z) => z !== "local");

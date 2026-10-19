@@ -4,6 +4,7 @@ import { h, setText } from "../core/dom.js";
 import { icon, fileKind } from "../core/icons.js";
 import * as fmt from "../core/format.js";
 import { openModal, toast, copyText, cleanError, confirm } from "../core/ui.js";
+import { emit } from "../core/bus.js";
 
 const api = window.edex;
 const EDITABLE_LIMIT = 4 * 1024 * 1024;
@@ -21,13 +22,14 @@ export function openViewer(path, { siblings = [], onNavigate } = {}) {
   const footLeft = h("span", { class: "grow ellipsis" });
   const footRight = h("span");
   const editBtn = h("button", { class: "btn", type: "button", onclick: () => toggleEdit() }, icon("edit"), "Edit");
+  const playerBtn = h("button", { class: "btn", type: "button", hidden: true, onclick: () => { modal.close(); emit("open-media", { paths: [current], play: true }); } }, icon("play"), "Media player");
   const saveBtn = h("button", { class: "btn primary", type: "button", hidden: true, onclick: () => save() }, "Save");
   const btn = (name, label, onclick) => h("button", { class: "icon-btn", type: "button", title: label, onclick }, icon(name));
 
   const head = h("div", { class: "modal-head" },
     icon("eye"),
     h("div", { class: "grow" }, title, sub),
-    editBtn, saveBtn,
+    playerBtn, editBtn, saveBtn,
     btn("external", "Open with default app", () => api.fs.open(current).catch((e) => toast(cleanError(e), { level: "warn" }))),
     btn("app", "Open with…", () => api.fs.openWith(current)),
     btn("folder", "Show in Windows Explorer", () => api.fs.reveal(current)),
@@ -48,6 +50,7 @@ export function openViewer(path, { siblings = [], onNavigate } = {}) {
     editor = null;
     saveBtn.hidden = true;
     editBtn.hidden = true;
+    playerBtn.hidden = !["audio", "video"].includes(fileKind(fmt.basename(p), false));
     setText(title, fmt.basename(p));
     setText(sub, p);
     const idx = siblings.findIndex((s) => fmt.pathsEqual(s, p));

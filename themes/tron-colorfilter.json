@@ -1,5 +1,36 @@
 {
     "name": "Tron Color Filter",
-    "colors": { "r": 100, "g": 220, "b": 180, "black": "#000000", "light_black": "#05080d", "grey": "#262828" },
-    "terminal": { "fontFamily": "Courier New", "cursorStyle": "block", "foreground": "#64dcb4", "background": "#05080d", "cursor": "#64dcb4", "selectionBackground": "rgba(100,220,180,0.3)" }
+    "author": "eDEX-UI",
+    "colors": {
+        "r": 170,
+        "g": 207,
+        "b": 209,
+        "black": "#000000",
+        "light_black": "#05080d",
+        "grey": "#262828"
+    },
+    "cssvars": {
+        "font_main": "United Sans Medium",
+        "font_main_light": "United Sans Light"
+    },
+    "terminal": {
+        "fontFamily": "Fira Mono",
+        "cursorStyle": "block",
+        "foreground": "#aacfd1",
+        "background": "#05080d",
+        "cursor": "#aacfd1",
+        "cursorAccent": "#aacfd1",
+        "selection": "rgba(170,207,209,0.3)",
+        "colorFilter": [
+            "rotate(180)",
+            "saturate(0.5)",
+            "mix(0.7)"
+        ]
+    },
+    "globe": {
+        "base": "#000000",
+        "marker": "#aacfd1",
+        "pin": "#aacfd1",
+        "satellite": "#aacfd1"
+    }
 }

@@ -15,6 +15,7 @@
   --c-70: rgb(var(--rgb) / .7);
   --c-50: rgb(var(--rgb) / .5);
   --c-35: rgb(var(--rgb) / .35);
+  --c-30: rgb(var(--rgb) / .3);
   --c-20: rgb(var(--rgb) / .2);
   --c-12: rgb(var(--rgb) / .12);
   --c-06: rgb(var(--rgb) / .06);
@@ -25,8 +26,9 @@
   --font-mono: "Fira Mono", Consolas, monospace;
   --ui-scale: 1;
   --gap: .55rem;
-  --radius: 2px;
+  --radius: 0;
   --col-w: clamp(250px, 19vw, 420px);
+  --clip: 1rem;
   color-scheme: dark;
 }
 
@@ -34,42 +36,39 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { font-size: calc(clamp(11px, 1.22vh, 17px) * var(--ui-scale)); }
 html, body { height: 100%; margin: 0; }
+/* eDEX-UI's signature backdrop: a fine grid of grey lines on the theme
+   background, with every module drawn straight onto it. */
 body {
-  background: var(--bg);
   color: var(--c);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
+  font-weight: 500;
   font-size: 1rem;
-  line-height: 1.35;
+  letter-spacing: .04em;
+  line-height: 1.3;
   overflow: hidden;
   user-select: none;
   -webkit-font-smoothing: antialiased;
+  background:
+    linear-gradient(90deg, var(--bg) 1.85vh, transparent 1%) center,
+    linear-gradient(var(--bg) 1.85vh, transparent 1%) center,
+    var(--grey);
+  background-size: 2.04vh 2.04vh;
 }
-button, input, select, textarea { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
 [hidden] { display: none !important; }
 button { cursor: pointer; }
 input, textarea, [contenteditable] { user-select: text; }
 ::selection { background: var(--c-35); }
 .ico { width: 1.15em; height: 1.15em; display: block; flex: none; }
 .ico-wrap { display: inline-flex; align-items: center; justify-content: center; }
+.light { font-weight: 300; }
 
-/* Thin themed scrollbars */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--c-20); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--c-35); }
+/* eDEX-UI scrollbars: solid accent thumb on a faint track. */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-track { background: rgb(var(--rgb) / .4); border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--c); }
 ::-webkit-scrollbar-corner { background: transparent; }
-
-/* Faint CRT scanlines + vignette behind everything */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / .45) 100%),
-    repeating-linear-gradient(0deg, rgb(var(--rgb) / .018) 0 1px, transparent 1px 3px);
-}
 
 /* ── App grid ───────────────────────────────────────────────────────────── */
 #app {
@@ -94,80 +93,130 @@ body::before {
 
 #topbar { grid-area: top; }
 #col-left { grid-area: left; }
-#workspace { grid-area: work; }
+#work { grid-area: work; }
 #col-right { grid-area: right; }
 #keyboard { grid-area: kbd; }
 #dock { grid-area: dock; }
 
+.side, #work { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: .45rem; }
+
+/* Section captions: "PANEL ............ SYSTEM" with end ticks. */
+.col-title {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 .2rem;
+  padding: 0 .75rem .05rem;
+  font-size: .84rem;
+  letter-spacing: .06em;
+  border-bottom: 1px solid var(--c-30);
+  flex: none;
+  white-space: nowrap;
+}
+.col-title > span { overflow: hidden; text-overflow: ellipsis; }
+.col-title::before, .col-title::after {
+  content: "";
+  position: absolute;
+  bottom: -.45rem;
+  height: .4rem;
+  border-left: 1px solid var(--c-30);
+}
+.col-title::before { left: 0; }
+.col-title::after { right: 0; }
+
 .column {
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
+  gap: .9rem;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 2px;
+  padding: .55rem .25rem 0;
 }
-/* The scrollbar stays invisible until the column is hovered, so panels
-   pushed below the fold are discoverable without permanent chrome. */
+/* Columns keep a hairline scrollbar that only shows on hover. */
 .column::-webkit-scrollbar { width: 3px; }
+.column::-webkit-scrollbar-track { background: transparent; border: 0; }
 .column::-webkit-scrollbar-thumb { background: transparent; }
 .column:hover::-webkit-scrollbar-thumb { background: var(--c-35); }
 
-/* ── Panels ─────────────────────────────────────────────────────────────── */
+/* ── Modules (widgets) ──────────────────────────────────────────────────── */
+/* Drawn like eDEX-UI modules: no box, just a top rule with short ticks
+   rising at both ends. */
 .panel {
   position: relative;
-  border: 1px solid var(--c-20);
-  background: linear-gradient(180deg, rgb(var(--rgb) / .035), rgb(var(--rgb) / .012));
+  border-top: 1px solid var(--c-30);
   container-type: inline-size;
   flex: none;
-  animation: panel-in .45s ease both;
+  animation: panel-in .5s cubic-bezier(.4, 0, 1, 1) both;
 }
 .panel::before, .panel::after {
   content: "";
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border-color: var(--c-70);
-  border-style: solid;
+  top: -.55rem;
+  height: .5rem;
+  border-left: 1px solid var(--c-30);
   pointer-events: none;
 }
-.panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
-.panel::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
-@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.panel::before { left: -1px; }
+.panel::after { right: -1px; }
+@keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
 
 .panel-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: .5rem;
-  min-height: 2rem;
-  padding: .3rem .6rem;
-  border-bottom: 1px solid var(--c-12);
+  padding: .25rem .1rem .05rem;
 }
 .panel-title {
   flex: none;
-  font-family: var(--font-ui);
   font-weight: 500;
-  font-size: .82rem;
-  letter-spacing: .16em;
+  font-size: 1.2rem;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 .panel-sub {
   flex: 1;
   min-width: 0;
   text-align: right;
-  font-size: .76rem;
-  color: var(--c-70);
+  font-weight: 300;
+  font-size: .95rem;
+  color: var(--c-50);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: uppercase;
 }
-.panel-tools { display: flex; gap: .15rem; flex: none; }
-.panel-body { padding: .5rem .6rem .6rem; }
+.panel-tools { display: flex; gap: .15rem; flex: none; align-self: center; }
+.panel-body { padding: .2rem .1rem .3rem; }
 .panel.dragging { opacity: .4; }
 .panel.drop-before { box-shadow: 0 -3px 0 var(--c); }
 .panel.drop-after { box-shadow: 0 3px 0 var(--c); }
 .panel-head[draggable="true"] { cursor: grab; }
+
+/* Clipped-corner frame (augmented-ui "tr-clip bl-clip" in the original):
+   ::before paints the border colour, ::after the fill, both clipped. */
+.frame {
+  --frame: var(--c-50);
+  --fill: var(--bg);
+  position: relative;
+  isolation: isolate;
+  clip-path: polygon(0 0, calc(100% - var(--clip)) 0, 100% var(--clip), 100% 100%, var(--clip) 100%, 0 calc(100% - var(--clip)));
+}
+.frame::before, .frame::after { content: ""; position: absolute; pointer-events: none; }
+.frame::before {
+  inset: 0;
+  z-index: -2;
+  background: var(--frame);
+  clip-path: inherit;
+}
+.frame::after {
+  inset: 2px;
+  z-index: -1;
+  background: var(--fill);
+  clip-path: polygon(0 0, calc(100% - var(--clip) + 1px) 0, 100% calc(var(--clip) - 1px), 100% 100%, calc(var(--clip) - 1px) 100%, 0 calc(100% - var(--clip) + 1px));
+}
 
 /* ── Primitives ─────────────────────────────────────────────────────────── */
 .btn {
@@ -175,23 +224,22 @@ body::before {
   align-items: center;
   justify-content: center;
   gap: .35rem;
-  padding: .3rem .7rem;
-  border: 1px solid var(--c-35);
+  padding: .3rem .75rem;
+  border: 1px solid var(--c-50);
   background: transparent;
   border-radius: var(--radius);
-  font-family: var(--font-ui);
-  font-size: .82rem;
-  letter-spacing: .1em;
+  font-size: .9rem;
+  letter-spacing: .08em;
   text-transform: uppercase;
-  transition: background .12s, border-color .12s;
+  transition: background .12s, color .12s;
   white-space: nowrap;
 }
-.btn:hover:not(:disabled) { background: var(--c-12); border-color: var(--c-70); }
+.btn:hover:not(:disabled) { background: var(--c); color: var(--bg); }
 .btn:disabled { opacity: .35; cursor: default; }
-.btn.primary { background: var(--c-12); border-color: var(--c-70); }
-.btn.primary:hover { background: var(--c-20); }
+.btn.primary { background: var(--c-20); border-color: var(--c); }
+.btn.primary:hover { background: var(--c); color: var(--bg); }
 .btn.danger { border-color: rgb(255 92 92 / .6); color: var(--danger); }
-.btn.danger:hover { background: rgb(255 92 92 / .12); }
+.btn.danger:hover { background: var(--danger); color: var(--bg); }
 
 .icon-btn {
   display: inline-flex;
@@ -206,9 +254,9 @@ body::before {
   color: var(--c-90);
   flex: none;
 }
-.icon-btn:hover:not(:disabled) { background: var(--c-12); border-color: var(--c-20); color: var(--c); }
+.icon-btn:hover:not(:disabled) { background: var(--c-20); border-color: var(--c-35); color: var(--c); }
 .icon-btn:disabled { opacity: .3; cursor: default; }
-.icon-btn.active { background: var(--c-20); border-color: var(--c-50); }
+.icon-btn.active { background: var(--c); color: var(--bg); }
 .icon-btn.sm { width: 1.5rem; height: 1.5rem; }
 
 .input {
@@ -218,36 +266,35 @@ body::before {
   border: 1px solid var(--c-35);
   border-radius: var(--radius);
   outline: none;
-  font-family: var(--font-mono);
-  font-size: .95rem;
+  font-size: 1rem;
 }
 .input:focus { border-color: var(--c); box-shadow: 0 0 0 1px var(--c-20); }
 .input::placeholder { color: var(--c-50); }
-textarea.input { resize: vertical; line-height: 1.45; }
+textarea.input { resize: vertical; line-height: 1.45; font-family: var(--font-mono); font-size: .9rem; letter-spacing: 0; }
 select.input { padding: .3rem .5rem; }
 select.input option { background: var(--bg); color: var(--c); }
 
-.label { font-family: var(--font-ui); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--c-70); }
+.label { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--c-50); }
 .muted { color: var(--c-50); }
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-mono); letter-spacing: 0; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.empty { padding: .8rem; color: var(--c-50); font-size: .85rem; text-align: center; }
+.empty { padding: .8rem; color: var(--c-50); font-size: .9rem; text-align: center; }
 .warn-text { color: var(--warn); }
 .danger-text { color: var(--danger); }
 
-.bar { position: relative; height: .45rem; background: var(--c-12); overflow: hidden; }
-.bar > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--c); transition: width .5s ease; box-shadow: 0 0 6px var(--c-50); }
-.bar.warn > i { background: var(--warn); box-shadow: none; }
-.bar.danger > i { background: var(--danger); box-shadow: none; }
+.bar { position: relative; height: .4rem; background: var(--c-20); overflow: hidden; }
+.bar > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--c); transition: width .5s ease; }
+.bar.warn > i { background: var(--warn); }
+.bar.danger > i { background: var(--danger); }
 
 .kbd {
   display: inline-block;
   padding: .05rem .4rem;
   border: 1px solid var(--c-35);
   border-bottom-width: 2px;
-  border-radius: 3px;
-  font-size: .78rem;
+  font-size: .8rem;
   font-family: var(--font-mono);
+  letter-spacing: 0;
   white-space: nowrap;
 }
 

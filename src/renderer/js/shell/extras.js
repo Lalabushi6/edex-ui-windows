@@ -140,7 +140,7 @@ export function initKeyboard(root, getTerminal) {
     const rowEl = h("div", { class: "kb-row" });
     for (const def of rowDef) {
       const [label, seq, code, shifted, size] = def;
-      const key = h("button", { class: `kb-key${size ? ` ${size}` : ""}`, type: "button", tabindex: -1 },
+      const key = h("button", { class: `kb-key${size ? ` ${size}` : ""}${label === "Enter" ? " enter" : ""}`, type: "button", tabindex: -1 },
         shifted && !/^[A-Z]$/.test(label) ? h("small", null, shifted) : null, label);
       key.addEventListener("mousedown", (e) => { e.preventDefault(); press(def); });
       if (seq in modKeys) modKeys[seq].push(key);
@@ -163,16 +163,21 @@ export function initKeyboard(root, getTerminal) {
 }
 
 // ── Boot screen ─────────────────────────────────────────────────────────────
+// The original eDEX-UI sequence: a fast-scrolling kernel log, then the title
+// card that fills, boxes and "derezzes" before the UI appears.
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export function runBoot() {
   const screen = document.getElementById("boot");
   if (!screen) return Promise.resolve();
+  const titleBox = document.getElementById("boot-title");
   const logo = document.getElementById("boot-logo");
   const sub = document.getElementById("boot-sub");
   const log = document.getElementById("boot-log");
-  const bar = document.getElementById("boot-bar");
   const custom = settings.get("bootLogo");
   if (custom) {
     logo.textContent = custom;
+    logo.dataset.text = custom;
     logo.classList.toggle("multiline", custom.includes("\n"));
   }
   if (settings.get("bootSubtitle")) sub.textContent = settings.get("bootSubtitle");
@@ -184,32 +189,63 @@ export function runBoot() {
   if (!settings.get("bootAnimation")) { finish(); return Promise.resolve(); }
 
   return new Promise((resolve) => {
-    const lines = [
-      "Initializing core subsystems", "Loading telemetry probes", "Mounting filesystem bridge",
-      "Indexing applications", "Attaching window manager", "Spawning terminal sessions", "Applying theme"
-    ];
-    let i = 0;
-    let done = false;
+    let skipped = false;
     const end = () => {
-      if (done) return;
-      done = true;
-      clearInterval(timer);
+      if (skipped) return;
+      skipped = true;
       document.removeEventListener("keydown", end, true);
       screen.removeEventListener("mousedown", end);
-      sfx.play("granted");
       finish();
       resolve();
     };
-    sfx.play("theme");
-    const timer = setInterval(() => {
-      if (i >= lines.length) { setTimeout(end, 250); clearInterval(timer); return; }
-      const time = new Date().toLocaleTimeString(undefined, { hour12: false });
-      log.append(h("div", null, h("span", null, time), h("span", null, lines[i].toUpperCase()), h("span", { class: "ok" }, "[ OK ]")));
-      bar.style.width = `${Math.round(((i + 1) / lines.length) * 100)}%`;
-      sfx.play("stdout");
-      i++;
-    }, 140);
     document.addEventListener("keydown", end, true);
     screen.addEventListener("mousedown", end);
+
+    (async () => {
+      const [text, info] = await Promise.all([
+        fetch("assets/misc/boot_log.txt").then((r) => r.text()).catch(() => ""),
+        window.edex.app.info().catch(() => ({}))
+      ]);
+      const lines = text.split(/\r?\n/);
+      for (let i = 0; i < lines.length && !skipped; i++) {
+        log.append(lines[i], "\n");
+        if (i === 0) log.append(`eDEX-UI Kernel version ${info.version || "2"} boot at ${new Date().toString()}; root:xnu-1699.22.73~1/RELEASE_X86_64\n`);
+        sfx.play(lines[i] === "Boot Complete" ? "granted" : "stdout");
+        const wait = i < 3 ? 250 : i === 24 ? 200 : i === 41 ? 150 : i >= lines.length - 3 ? 150 : Math.max(4, Math.pow(1 - i / 1000, 3) * 12);
+        await delay(wait);
+      }
+      if (skipped) return;
+      await delay(150);
+      log.remove();
+      screen.classList.add("titling");
+      sfx.play("theme");
+      await delay(300);
+      titleBox.hidden = false;
+      await delay(200);
+      logo.classList.add("fill");
+      await delay(280);
+      logo.classList.replace("fill", "boxed");
+      await delay(100);
+      logo.classList.replace("boxed", "glitch");
+      await delay(450);
+      logo.classList.replace("glitch", "boxed");
+      await delay(800);
+      end();
+    })();
   });
+}
+
+// "Welcome back, <user>" in the shell frame, as the original showed after boot.
+export async function showGreeting(host) {
+  if (!host || !settings.get("bootAnimation")) return;
+  let user = "";
+  try { user = (await window.edex.sys.static()).user || ""; } catch (_) {}
+  const el = h("div", { class: "greeting" }, "Welcome back", user ? h("em", null, user) : null);
+  host.append(el);
+  sfx.play("keyboard");
+  requestAnimationFrame(() => el.classList.add("show"));
+  await delay(1300);
+  el.classList.remove("show");
+  await delay(500);
+  el.remove();
 }

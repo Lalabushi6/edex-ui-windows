@@ -9,9 +9,10 @@ import { contextMenu, prompt } from "../core/ui.js";
 import { TerminalTab } from "./terminal.js";
 import { ExplorerTab } from "./explorer.js";
 import { ProcessesTab } from "./processes.js";
+import { MediaTab, addPaths } from "./media.js";
 
-const TYPES = { terminal: TerminalTab, files: ExplorerTab, processes: ProcessesTab };
-const TYPE_ICON = { terminal: "terminal", files: "folder", processes: "process" };
+const TYPES = { terminal: TerminalTab, files: ExplorerTab, processes: ProcessesTab, media: MediaTab };
+const TYPE_ICON = { terminal: "terminal", files: "folder", processes: "process", media: "audio" };
 const MAX_TABS = 16;
 
 export class Workspace {
@@ -31,6 +32,11 @@ export class Workspace {
     on("open-path", ({ path, newTab, select }) => this.openPath(path, { newTab, select }));
     on("open-terminal", ({ cwd, shell } = {}) => this.add("terminal", { cwd, shell }));
     on("open-processes", (opts = {}) => this.openProcesses(opts));
+    // { paths?, play?, focus? } — queue files/folders in the media player.
+    on("open-media", async ({ paths, play = true, focus = true } = {}) => {
+      if (paths?.length) await addPaths(paths, { play });
+      if (focus) await this.openMedia();
+    });
     on("terminal-input", ({ text }) => {
       const t = this.active?.type === "terminal" ? this.active : this.tabs.find((x) => x.type === "terminal");
       if (t) { this.activate(t); t.input(text); }
@@ -98,6 +104,7 @@ export class Workspace {
     tab.tabEl.classList.add("active");
     tab.el.classList.add("active");
     tab.tabEl.scrollIntoView({ block: "nearest", inline: "nearest" });
+    this.updateCaption();
     tab.activate();
     if (!silent) sfx.play("folder");
     this.persist();
@@ -145,6 +152,17 @@ export class Workspace {
   updateTab(tab) {
     if (tab.labelEl) setText(tab.labelEl, tab.label);
     if (tab.tabEl) tab.tabEl.title = tab.label;
+    if (tab === this.active) this.updateCaption();
+  }
+
+  // The eDEX-style caption above the frame: "TERMINAL ...... MAIN SHELL".
+  updateCaption() {
+    const tab = this.active;
+    if (!tab) return;
+    const kind = { terminal: "TERMINAL", files: "FILESYSTEM", processes: "PROCESSES", media: "MEDIA" }[tab.type] || "WORKSPACE";
+    const first = this.tabs.find((t) => t.type === "terminal");
+    setText(document.getElementById("work-title-a"), kind);
+    setText(document.getElementById("work-title-b"), tab === first && !tab.customLabel ? "MAIN SHELL" : String(tab.label).toUpperCase());
   }
 
   markDead(tab, dead) {
@@ -179,6 +197,12 @@ export class Workspace {
     if (pid) tab.select(pid);
   }
 
+  async openMedia() {
+    const tab = this.tabs.find((t) => t.type === "media");
+    if (tab) { this.activate(tab); return tab; }
+    return this.add("media");
+  }
+
   activeTerminal() {
     return this.active?.type === "terminal" ? this.active : null;
   }
@@ -188,7 +212,8 @@ export class Workspace {
       ...this.shells.map((s) => ({ label: s.name, icon: "terminal", hint: s.id === settings.get("defaultShell") ? "default" : "", run: () => this.add("terminal", { shell: s.id }) })),
       { separator: true },
       { label: "File explorer", icon: "folder", hint: "Ctrl+Shift+E", run: () => this.add("files") },
-      { label: "Process manager", icon: "process", run: () => this.openProcesses() }
+      { label: "Process manager", icon: "process", run: () => this.openProcesses() },
+      { label: "Media player", icon: "audio", hint: "Ctrl+Shift+M", run: () => this.openMedia() }
     ]);
   }
 

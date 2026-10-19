@@ -1,7 +1,7 @@
 // Top bar: brand + mode, launcher search pill, media/volume, network,
 // battery, clock, settings and power menu.
 import { h, setText } from "../core/dom.js";
-import { icon, iconSvg } from "../core/icons.js";
+import { icon, LOGO_SVG } from "../core/icons.js";
 import { poll } from "../core/poll.js";
 import * as settings from "../core/settings.js";
 import { on } from "../core/bus.js";
@@ -14,8 +14,8 @@ const api = window.edex;
 export function initTopbar(root) {
   const mode = h("button", { class: "brand-mode", type: "button", title: "Click to switch between desktop and overlay mode" });
   const brand = h("div", { class: "brand" },
-    h("span", { class: "brand-mark", svg: iconSvg("globe", "brand-mark") }),
-    h("span", { class: "brand-name" }, "eDEX"),
+    h("span", { class: "brand-mark", svg: LOGO_SVG }),
+    h("span", { class: "brand-name" }, "eDEX-UI"),
     mode);
   mode.addEventListener("click", () => settings.set({ mode: settings.get("mode") === "overlay" ? "desktop" : "overlay" }));
   const renderMode = () => setText(mode, settings.get("mode") === "overlay" ? "Overlay" : "Desktop");

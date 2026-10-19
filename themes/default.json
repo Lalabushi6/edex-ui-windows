@@ -2,6 +2,29 @@
     "name": "Default Green",
     "author": "eDEX-UI",
     "description": "The classic eDEX phosphor green.",
-    "colors": { "r": 0, "g": 255, "b": 120, "black": "#000000", "light_black": "#020a05", "grey": "#0f2a18" },
-    "terminal": { "foreground": "#00ff78", "background": "#020a05", "cursor": "#00ff78", "selectionBackground": "rgba(0,255,120,0.28)" }
+    "colors": {
+        "r": 0,
+        "g": 255,
+        "b": 120,
+        "black": "#000000",
+        "light_black": "#020a05",
+        "grey": "#0f2a18"
+    },
+    "cssvars": {
+        "font_main": "United Sans Medium",
+        "font_main_light": "United Sans Light"
+    },
+    "terminal": {
+        "foreground": "#00ff78",
+        "background": "#020a05",
+        "cursor": "#00ff78",
+        "selection": "rgba(0,255,120,0.28)",
+        "fontFamily": "Fira Mono"
+    },
+    "globe": {
+        "base": "#000000",
+        "marker": "#00ff78",
+        "pin": "#00ff78",
+        "satellite": "#00ff78"
+    }
 }

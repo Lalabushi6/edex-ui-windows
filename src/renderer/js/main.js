@@ -11,12 +11,14 @@ import { mountWidgets } from "./widgets/registry.js";
 import "./widgets/system.js";
 import "./widgets/tools.js";
 import "./widgets/globe.js";
+import "./widgets/media.js";
+import { player } from "./media/player.js";
 import { Workspace } from "./workspace/workspace.js";
 import { initTopbar } from "./shell/topbar.js";
 import { initDock } from "./shell/dock.js";
 import { openLauncher, launcherIsOpen, closeLauncher, preloadLauncher, loadAppsCached } from "./shell/launcher.js";
 import { openSettings } from "./shell/settings-panel.js";
-import { openHelp, openFileSearch, initKeyboard, runBoot } from "./shell/extras.js";
+import { openHelp, openFileSearch, initKeyboard, runBoot, showGreeting } from "./shell/extras.js";
 
 const api = window.edex;
 let workspace;
@@ -68,6 +70,14 @@ async function registerCommands() {
   cmd("app.quit", "Quit eDEX", () => api.app.quit(), { icon: "close", keywords: "exit close" });
   cmd("apps.refresh", "Refresh installed apps", async () => { await loadAppsCached(true); dock?.refresh(); toast("App list refreshed", { level: "ok" }); }, { icon: "apps", keywords: "rescan start menu" });
   cmd("taskmgr.open", "Windows Task Manager", () => api.shell.taskManager().catch((e) => toast(cleanError(e), { level: "warn" })), { icon: "process" });
+  cmd("player.open", "Media player", () => workspace.openMedia(), { keys: "Ctrl+Shift+M", icon: "audio", keywords: "music video playlist play songs" });
+  cmd("player.toggle", "Media player: play / pause", () => player().toggle(), { icon: "playpause", keywords: "music pause resume" });
+  cmd("player.next", "Media player: next track", () => player().next(), { icon: "next", keywords: "music skip" });
+  cmd("player.prev", "Media player: previous track", () => player().prev(), { icon: "prev", keywords: "music back" });
+  cmd("player.add", "Media player: add files…", async () => {
+    const files = await api.player.pickFiles().catch(() => []);
+    if (files.length) emit("open-media", { paths: files, play: !player().playing });
+  }, { icon: "plus", keywords: "music video open queue" });
   cmd("notes.new", "New note", () => emit("new-note", { title: `Note ${new Date().toLocaleString()}` }), { icon: "note" });
   cmd("clipboard.clear", "Clear clipboard history", () => api.clip.clear(), { icon: "clipboard" });
   cmd("explorer.thispc", "This PC (all drives)", () => emit("open-path", { path: "" }), { icon: "drive", keywords: "drives disks computer" });
@@ -105,7 +115,7 @@ async function main() {
   initHotkeys();
   initTopbar($("#topbar"));
   dock = initDock($("#dock"));
-  mountWidgets($("#col-left"), $("#col-right"));
+  mountWidgets($("#col-left-body"), $("#col-right-body"));
   workspace = new Workspace($("#workspace"));
   await registerCommands();
   initKeyboard($("#keyboard"), () => workspace.activeTerminal());
@@ -115,6 +125,7 @@ async function main() {
   window.addEventListener("drop", (e) => e.preventDefault());
 
   await boot;
+  showGreeting($("#workspace"));
   workspace.focus();
 }
 

@@ -8,7 +8,6 @@
     "start": "electron .",
     "dev": "set EDEX_DEV_WINDOWED=1&& electron .",
     "check": "node scripts/check.js",
-    "icons": "node scripts/make-icons.js",
     "build": "electron-builder build --windows"
   },
   "build": {
@@ -31,7 +30,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
@@ -49,7 +48,7 @@
     "windows"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-only",
   "type": "commonjs",
   "devDependencies": {
     "electron": "^41.1.0",

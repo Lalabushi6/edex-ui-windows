@@ -3,7 +3,7 @@ import { Terminal } from "../../vendor/xterm/lib/xterm.mjs";
 import { FitAddon } from "../../vendor/xterm-fit/lib/addon-fit.mjs";
 import { h, debounce } from "../core/dom.js";
 import { icon } from "../core/icons.js";
-import { terminalTheme } from "../core/theme.js";
+import { terminalTheme, terminalFont, terminalCursorStyle } from "../core/theme.js";
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { on } from "../core/bus.js";
@@ -19,7 +19,7 @@ function wireOnce() {
   api.term.onData(({ id, data }) => sessions.get(id)?.receive(data));
   api.term.onExit(({ id, exitCode }) => sessions.get(id)?.exited(exitCode));
   on("theme", () => { for (const t of sessions.values()) t.applyOptions(); });
-  settings.watch(["termFontSize", "termCursorStyle", "termCursorBlink", "termScrollback"], () => {
+  settings.watch(["termFontSize", "termFontFamily", "termCursorStyle", "termCursorBlink", "termScrollback"], () => {
     for (const t of sessions.values()) t.applyOptions();
   });
 }
@@ -48,11 +48,12 @@ export class TerminalTab {
   }
 
   options() {
+    const cursor = settings.get("termCursorStyle");
     return {
-      fontFamily: '"Fira Mono", Consolas, monospace',
+      fontFamily: terminalFont(),
       fontSize: settings.get("termFontSize"),
       lineHeight: 1.12,
-      cursorStyle: settings.get("termCursorStyle"),
+      cursorStyle: cursor === "theme" ? (terminalCursorStyle() || "block") : cursor,
       cursorBlink: settings.get("termCursorBlink"),
       scrollback: settings.get("termScrollback"),
       theme: terminalTheme()
@@ -66,7 +67,7 @@ export class TerminalTab {
   }
 
   async mount() {
-    await document.fonts.load('14px "Fira Mono"').catch(() => {});
+    await Promise.all(['14px "Fira Mono"', '14px "Fira Code"'].map((f) => document.fonts.load(f))).catch(() => {});
     this.term = new Terminal({ ...this.options(), allowProposedApi: false, macOptionIsMeta: false, rightClickSelectsWord: false });
     this.fit = new FitAddon();
     this.term.loadAddon(this.fit);
@@ -132,7 +133,7 @@ export class TerminalTab {
       if (e.ctrlKey && key === "0") { settings.set({ termFontSize: 14 }); return false; }
       // Let app-level shortcuts (tabs, launcher, settings) reach the document.
       if (e.ctrlKey && (e.key === "Tab" || /^[1-9]$/.test(e.key) || e.key === ",")) return false;
-      if (e.ctrlKey && e.shiftKey && ["t", "e", "w", "p", "f", "s", "k"].includes(key)) return false;
+      if (e.ctrlKey && e.shiftKey && ["t", "e", "w", "p", "f", "s", "k", "m", "a"].includes(key)) return false;
       if (e.key === "F1") return false;
       return true;
     });

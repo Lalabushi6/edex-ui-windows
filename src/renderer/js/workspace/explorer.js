@@ -8,6 +8,7 @@ import * as sfx from "../core/audio.js";
 import { emit } from "../core/bus.js";
 import { toast, contextMenu, prompt, confirm, copyText, cleanError } from "../core/ui.js";
 import { openViewer } from "../shell/viewer.js";
+import { isMediaPath } from "../media/player.js";
 
 const api = window.edex;
 const shared = { clipboard: { mode: null, paths: [] }, places: null, drives: null, drivesAt: 0 };
@@ -704,9 +705,13 @@ export class ExplorerTab {
     const one = items.length === 1 ? items[0] : null;
     const paths = items.map((x) => x.path);
     const hasClip = !!shared.clipboard.mode;
+    const media = items.filter((x) => !x.isDir && isMediaPath(x.path)).map((x) => x.path);
     contextMenu(e, [
       { label: one?.isDir ? "Open" : "Open", icon: "external", hint: "Enter", run: () => this.openSelection() },
       one && !one.isDir && { label: "Preview", icon: "eye", hint: "Space", run: () => this.preview(one) },
+      media.length && { label: "Play in media player", icon: "play", run: () => emit("open-media", { paths: media, play: true }) },
+      media.length && { label: "Add to playlist", icon: "plus", run: () => emit("open-media", { paths: media, play: false, focus: false }) },
+      one?.isDir && !one.drive && { label: "Play folder in media player", icon: "audio", run: () => emit("open-media", { paths: [one.path], play: true }) },
       one && !one.isDir && { label: "Open with…", icon: "app", run: () => api.fs.openWith(one.path).catch((err) => toast(cleanError(err), { level: "warn" })) },
       one?.isDir && { label: "Open in new tab", icon: "plus", run: () => emit("open-path", { path: one.path, newTab: true }) },
       one?.isDir && { label: "Open terminal here", icon: "terminal", run: () => emit("open-terminal", { cwd: one.path }) },

@@ -14,6 +14,7 @@ const { registerSystem } = require("./ipc/system");
 const { registerFiles } = require("./ipc/files");
 const { registerDesktop } = require("./ipc/desktop");
 const { registerNetwork, registerClipboard, registerNotes, registerThemes } = require("./ipc/extras");
+const { registerMedia } = require("./ipc/media");
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -80,6 +81,7 @@ function start() {
     clip = registerClipboard({ settings, windows });
     notes = registerNotes();
     registerThemes();
+    registerMedia({ windows });
 
     windows.create();
     createTray({ windows, settings, quit });

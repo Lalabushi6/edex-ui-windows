@@ -102,7 +102,11 @@ async function handleLocalFile(request) {
   const headers = {
     "Content-Type": mimeFor(filePath),
     "Accept-Ranges": "bytes",
-    "Cache-Control": "no-cache"
+    "Cache-Control": "no-cache",
+    // The media player routes audio through a Web Audio analyser, which only
+    // receives samples from CORS-enabled media. Page scripts still cannot
+    // fetch() these URLs: the CSP's connect-src stays 'self'.
+    "Access-Control-Allow-Origin": APP_ORIGIN
   };
   const range = parseRange(request.headers.get("Range"), stat.size);
   if (range === "invalid") {
