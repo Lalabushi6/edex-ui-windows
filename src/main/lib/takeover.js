@@ -105,11 +105,22 @@ class Takeover {
     else if (!this.active && this.timer) { clearInterval(this.timer); this.timer = null; }
   }
 
+  // Shows the hidden taskbar for a while (tray icons, Start), then hides it
+  // again; the auto-hide state is left alone.
+  async peek(ms = 15000) {
+    if (!this.hidden) return false;
+    this.peekUntil = Date.now() + ms;
+    await this.bridge.call("taskbarPeek", {}, 4000);
+    clearTimeout(this.peekTimer);
+    this.peekTimer = setTimeout(() => { this.peekUntil = 0; this._tick(); }, ms);
+    return true;
+  }
+
   async _tick() {
     const win = this.windows.win;
     if (!win || win.isDestroyed()) return;
     if (this.settings.get("takeoverKeepVisible") !== false && this.settings.get("mode") === "desktop" && win.isMinimized()) win.restore();
-    if (!this.hidden) return;
+    if (!this.hidden || Date.now() < (this.peekUntil || 0)) return;
     this.queue = this.queue.then(async () => {
       if (!this.hidden) return;
       const st = await this.bridge.call("taskbarState", {}, 4000);

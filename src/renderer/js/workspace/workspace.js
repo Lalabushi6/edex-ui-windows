@@ -41,6 +41,19 @@ export class Workspace {
       const t = this.active?.type === "terminal" ? this.active : this.tabs.find((x) => x.type === "terminal");
       if (t) { this.activate(t); t.input(text); }
     });
+    // Run a command (launcher "$ …"): the active terminal, another live one,
+    // or a new tab once its shell has started.
+    on("terminal-run", async ({ command }) => {
+      if (!command) return;
+      let t = this.active?.type === "terminal" && this.active.alive ? this.active : this.tabs.find((x) => x.type === "terminal" && x.alive);
+      if (!t) t = await this.add("terminal");
+      if (!t) return;
+      this.activate(t);
+      for (let i = 0; i < 50 && !t.alive; i++) await new Promise((r) => setTimeout(r, 100));
+      if (!t.alive) return;
+      t.sendKeys(`${command}\r`);
+      t.focus();
+    });
   }
 
   async init() {

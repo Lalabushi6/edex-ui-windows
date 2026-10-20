@@ -6,6 +6,7 @@ import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { toast, prompt, contextMenu } from "../core/ui.js";
+import { on, emit } from "../core/bus.js";
 import { defineWidget } from "./registry.js";
 
 const api = window.edex;
@@ -100,7 +101,37 @@ const state = {
   watch: { elapsed: 0, startedAt: 0, running: false, laps: [] }
 };
 const ALARM_ID = "edex-timer";
-let alarmWired = false;
+
+// Module level so timers started from the launcher work (and ring) even when
+// the Timer widget is hidden; a mounted widget re-renders on "timer-changed".
+api.alarm.onFired(({ id }) => {
+  if (id !== ALARM_ID) return;
+  const t = state.timer;
+  t.running = false;
+  t.remaining = 0;
+  sfx.play("alarm");
+  toast(`${t.label || "Timer"} finished`, { level: "ok", timeout: 8000 });
+  emit("timer-changed");
+});
+on("timer-start", ({ ms, label = "" } = {}) => {
+  const t = state.timer;
+  if (!(ms > 0)) return;
+  t.duration = ms;
+  t.remaining = ms;
+  t.label = String(label).slice(0, 60);
+  t.endsAt = Date.now() + ms;
+  t.running = true;
+  state.mode = "timer";
+  api.alarm.set({ id: ALARM_ID, inMs: ms, label: t.label }).catch(() => {});
+  toast(`Timer started: ${clockText(ms, false)}${t.label ? ` — ${t.label}` : ""}`, { level: "ok", timeout: 2200 });
+  emit("timer-changed");
+});
+on("stopwatch-start", () => {
+  const w = state.watch;
+  if (!w.running) { w.startedAt = Date.now(); w.running = true; }
+  state.mode = "watch";
+  emit("timer-changed");
+});
 
 defineWidget({
   id: "timer",
@@ -126,18 +157,6 @@ defineWidget({
       face, progress, presets,
       h("div", { class: "timer-actions" }, startBtn, secondBtn),
       laps);
-
-    if (!alarmWired) {
-      alarmWired = true;
-      api.alarm.onFired(({ id }) => {
-        if (id !== ALARM_ID) return;
-        const t = state.timer;
-        t.running = false;
-        t.remaining = 0;
-        sfx.play("alarm");
-        toast(`${t.label || "Timer"} finished`, { level: "ok", timeout: 8000 });
-      });
-    }
 
     let frame = null;
     const now = () => Date.now();
@@ -253,6 +272,7 @@ defineWidget({
     ]));
     renderLaps();
     render();
-    return { destroy() { clearTimeout(frame); wake.stop(); } };
+    const offChanged = on("timer-changed", () => { renderLaps(); render(); });
+    return { destroy() { clearTimeout(frame); wake.stop(); offChanged(); } };
   }
 });

@@ -56,6 +56,10 @@ class NativeBridge {
       try { script = this._materializeScript(); }
       catch (e) { reject(e); return; }
 
+      // Not `detached`: a detached PowerShell has no console and exits at
+      // once. Ctrl+C in eDEX's console is ignored inside the helper instead
+      // (see GuardConsole in bridge.ps1), so it outlives eDEX long enough to
+      // put the taskbar back when its input closes.
       const proc = spawn("powershell.exe", [
         "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", script, "-CacheDir", this.workDir

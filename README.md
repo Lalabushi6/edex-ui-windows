@@ -9,14 +9,16 @@ telemetry from one surface — without dropping back to the Windows desktop.
 
 - **Launcher** (`Ctrl+Shift+Space`, works from any app): installed apps (Start
   menu, Store apps, desktop shortcuts), open windows, recent and indexed files,
-  commands, themes, Windows Settings pages, a calculator (`=2*(3+4)`), path
-  browsing with Tab completion (`C:\Users\`) and web search.
+  commands, themes, Windows Settings pages, a calculator (`=2*(3+4)`), unit
+  conversion (`10 km to mi`, `72 f in c`), timers (`timer 5m tea`), shell
+  commands (`$ ipconfig`), path browsing with Tab completion (`C:\Users\`)
+  and web search.
 - **Dock**: pinned apps plus every open window — click to switch, click again
   to minimize, right-click to maximize or close.
 - **Terminal tabs**: PowerShell, PowerShell 7, Command Prompt, WSL and Git Bash
   (whichever are installed) via `node-pty` + `xterm.js`, drawn on the GPU
-  (WebGL) for fast output. Clickable links, copy/paste, font zoom, restart on
-  exit.
+  (WebGL) for fast output. Find in terminal (`Ctrl+Shift+F`), clickable
+  links, copy/paste, font zoom, restart on exit.
 - **File explorer tabs**: list/grid views, sorting, filter, breadcrumbs,
   copy/cut/paste, rename in place, drag files out to other apps or in from
   them, Recycle Bin deletes, pins, recents, "Open with…", Windows Properties.
@@ -48,7 +50,8 @@ telemetry from one surface — without dropping back to the Windows desktop.
   and a Windows notification when a countdown ends), notes (auto-saved),
   clipboard history (memory only), quick links.
 - **Top bar**: media keys, master volume slider, display brightness (laptop
-  panels), screen snip, network, battery, clock with a month calendar,
+  panels), screen snip, network with a Wi-Fi panel (nearby networks,
+  connect / disconnect), battery, clock with a month calendar,
   settings and power menu (lock, sleep, sign out, restart, shut down).
 - **Light on resources**: telemetry comes from one long-lived native helper
   (no process launches while running), every panel refreshes from one shared

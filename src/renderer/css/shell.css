@@ -41,6 +41,28 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .status-clock.open, .icon-btn.open { background: var(--c-12); border-color: var(--c-35); }
 .vol-slider { width: 5.5rem; height: 1rem; }
 
+/* ── Wi-Fi panel ────────────────────────────────────────────────────────── */
+.wifi-panel { width: 21rem; display: flex; flex-direction: column; gap: .45rem; }
+.wifi-title { display: flex; align-items: center; gap: .4rem; font-size: .78rem; letter-spacing: .16em; color: var(--c-70); }
+.wifi-title .grow { flex: 1; }
+.wifi-current { display: flex; align-items: center; gap: .55rem; padding: .45rem .5rem; border: 1px solid var(--c-35); background: var(--c-06); }
+.wifi-cur-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wifi-cur-text b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wifi-cur-text span { font-size: .72rem; color: var(--c-50); }
+.wifi-list { display: flex; flex-direction: column; max-height: 16rem; overflow-y: auto; }
+.wifi-row { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr) auto auto; align-items: center; gap: .45rem; padding: .3rem .2rem; border-bottom: 1px solid var(--c-06); font-size: .86rem; }
+.wifi-ssid { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wifi-lock .ico { width: .9rem; height: .9rem; color: var(--c-50); }
+.wifi-open { font-size: .66rem; color: var(--warn); letter-spacing: .08em; text-transform: uppercase; }
+.wifi-empty { font-size: .8rem; color: var(--c-50); padding: .4rem .2rem; line-height: 1.5; }
+.wifi-foot { display: flex; justify-content: flex-end; }
+.wifi-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: .9rem; width: 1.2rem; }
+.wifi-bars > i { flex: 1; background: var(--c-20); }
+.wifi-bars > i:nth-child(1) { height: 25%; } .wifi-bars > i:nth-child(2) { height: 50%; }
+.wifi-bars > i:nth-child(3) { height: 75%; } .wifi-bars > i:nth-child(4) { height: 100%; }
+.wifi-bars > i.on { background: var(--c); }
+.status-item.open { background: var(--c-12); border-color: var(--c-35); }
+
 /* ── Popovers (brightness, calendar) ────────────────────────────────────── */
 .popover { position: fixed; z-index: 400; padding: .55rem .65rem; border: 1px solid var(--c-50); background: var(--bg); box-shadow: 0 12px 40px rgb(0 0 0 / .7); }
 .bright-pop { display: flex; align-items: center; gap: .55rem; }

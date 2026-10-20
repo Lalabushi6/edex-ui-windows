@@ -826,6 +826,13 @@ public static class EdexShell {
         return State();
     }
 
+    // Shows the bars without touching the auto-hide state (a short "peek"
+    // for the notification area while eDEX keeps the desktop).
+    public static string Peek() {
+        foreach (IntPtr b in Bars()) ShowWindow(b, SW_SHOWNA);
+        return State();
+    }
+
     public static string State() {
         bool visible = false;
         foreach (IntPtr b in Bars()) if (IsWindowVisible(b)) visible = true;
@@ -839,6 +846,26 @@ public static class EdexShell {
 
     public static void RestoreIfHidden() {
         if (hidden) Show(-1);
+    }
+
+    // Console control events. eDEX is often started from a console
+    // (npm start); Ctrl+C / Ctrl+Break there must not kill the helper before
+    // eDEX has asked it to restore the taskbar, so those are ignored (the
+    // helper still exits when eDEX closes its input). On console close,
+    // log-off or shutdown the taskbar is restored before Windows ends us.
+    delegate bool ConsoleCtrlDelegate(int ctrlType);
+    [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(ConsoleCtrlDelegate handler, bool add);
+    static ConsoleCtrlDelegate ctrlHandler;
+
+    public static void GuardConsole() {
+        ctrlHandler = OnConsoleCtrl;
+        SetConsoleCtrlHandler(ctrlHandler, true);
+    }
+
+    static bool OnConsoleCtrl(int ctrlType) {
+        if (ctrlType == 0 || ctrlType == 1) return true;
+        try { RestoreIfHidden(); } catch { }
+        return false;
     }
 }
 '@
@@ -864,6 +891,8 @@ try {
 } catch {
     Add-Type -TypeDefinition $source -ReferencedAssemblies $refs
 }
+
+try { [EdexShell]::GuardConsole() } catch { }
 
 Write-Line '{"ready":true}'
 
@@ -901,6 +930,7 @@ while ($true) {
             'taskbarHide'  { $data = [EdexShell]::Hide([int]$a.prev) }
             'taskbarShow'  { $data = [EdexShell]::Show([int]$a.prev) }
             'taskbarState' { $data = [EdexShell]::State() }
+            'taskbarPeek'  { $data = [EdexShell]::Peek() }
             'properties' { $data = if ([EdexNative]::Properties([string]$a.path)) { 'true' } else { 'false' } }
             'lock'      { $data = if ([EdexNative]::Lock()) { 'true' } else { 'false' } }
             'sleep'     { $data = if ([EdexNative]::Sleep()) { 'true' } else { 'false' } }

@@ -41,6 +41,13 @@ const loadWebgl = () => (webglModule ||= import("../../vendor/xterm-webgl/lib/ad
 }));
 const GPU_RELEASE_MS = 60000;
 
+// Find in terminal (loaded the first time it is used).
+let searchModule = null;
+const loadSearch = () => (searchModule ||= import("../../vendor/xterm-search/lib/addon-search.mjs").catch((e) => {
+  console.warn("xterm search unavailable", e);
+  return null;
+}));
+
 const URL_RE = /\bhttps?:\/\/[^\s"'<>`)\]]+[^\s"'<>`)\].,;:!?]/g;
 
 export class TerminalTab {
@@ -142,6 +149,7 @@ export class TerminalTab {
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       const key = e.key.toLowerCase();
+      if (e.ctrlKey && e.shiftKey && key === "f") { e.preventDefault(); this.openFind(); return false; }
       if (e.ctrlKey && e.shiftKey && key === "c") { this.copy(); return false; }
       if (e.ctrlKey && e.shiftKey && key === "v") { this.paste(); return false; }
       if (e.ctrlKey && !e.shiftKey && key === "c" && term.hasSelection()) { this.copy(); term.clearSelection(); return false; }
@@ -164,6 +172,7 @@ export class TerminalTab {
           { label: "Copy", icon: "copy", hint: "Ctrl+Shift+C", disabled: !term.hasSelection(), run: () => this.copy() },
           { label: "Paste", icon: "paste", hint: "Ctrl+Shift+V", run: () => this.paste() },
           { label: "Select all", icon: "list", run: () => term.selectAll() },
+          { label: "Find…", icon: "search", hint: "Ctrl+Shift+F", run: () => this.openFind() },
           { label: "Clear", icon: "trash", run: () => term.clear() },
           { separator: true },
           { label: "Restart shell", icon: "restart", run: () => this.restart() }
@@ -259,6 +268,93 @@ export class TerminalTab {
   input(text) {
     if (!this.alive || !text) return;
     this.term.paste(text);
+  }
+
+  // Find bar: Enter / Shift+Enter step through matches, Esc closes.
+  async openFind() {
+    if (!this.term) return;
+    if (!this.search) {
+      const mod = await loadSearch();
+      if (!mod) { toast("Find is unavailable", { level: "warn" }); return; }
+      this.search = new mod.SearchAddon();
+      this.term.loadAddon(this.search);
+      // When match highlighting is available the addon also reports the
+      // current position; otherwise the counter shows the total only.
+      this.search.onDidChangeResults?.(({ resultIndex, resultCount }) => {
+        if (this.findCount && resultCount > 0 && resultIndex >= 0) this.findCount.textContent = `${resultIndex + 1}/${resultCount}`;
+      });
+    }
+    if (!this.findBar) {
+      this.findInput = h("input", { class: "input term-find-input", spellcheck: false, placeholder: "Find in terminal" });
+      this.findCount = h("span", { class: "term-find-count" });
+      const caseBtn = h("button", { class: "icon-btn sm term-find-case", type: "button", title: "Match case" }, "Aa");
+      const step = (back) => this.findStep(back);
+      this.findBar = h("div", { class: "term-find" }, this.findInput, this.findCount, caseBtn,
+        h("button", { class: "icon-btn sm", type: "button", title: "Previous (Shift+Enter)", onclick: () => step(true) }, icon("up")),
+        h("button", { class: "icon-btn sm", type: "button", title: "Next (Enter)", onclick: () => step(false) }, icon("chevronDown")),
+        h("button", { class: "icon-btn sm", type: "button", title: "Close (Esc)", onclick: () => this.closeFind() }, icon("close")));
+      caseBtn.addEventListener("click", () => { caseBtn.classList.toggle("active"); this.findCase = caseBtn.classList.contains("active"); step(false); });
+      this.findInput.addEventListener("input", () => step(false));
+      this.findInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey); }
+        else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); this.closeFind(); }
+      });
+      this.el.append(this.findBar);
+    }
+    this.findBar.hidden = false;
+    const sel = this.term.getSelection();
+    if (sel && !sel.includes("\n")) this.findInput.value = sel;
+    this.findInput.focus();
+    this.findInput.select();
+    if (this.findInput.value) this.findStep(false);
+  }
+
+  // Matches in the whole buffer (wrapped lines joined), for the counter.
+  countMatches(needle, caseSensitive) {
+    const buf = this.term.buffer.active;
+    const n = caseSensitive ? needle : needle.toLowerCase();
+    let count = 0;
+    let line = "";
+    const flush = () => {
+      const hay = caseSensitive ? line : line.toLowerCase();
+      for (let i = hay.indexOf(n); i >= 0; i = hay.indexOf(n, i + n.length)) count++;
+      line = "";
+    };
+    for (let y = 0; y < buf.length; y++) {
+      const l = buf.getLine(y);
+      if (!l) continue;
+      if (!l.isWrapped && line) flush();
+      line += l.translateToString(true);
+    }
+    flush();
+    return count;
+  }
+
+  findStep(back) {
+    const term = this.findInput?.value || "";
+    if (!this.search) return;
+    if (!term) { this.search.clearDecorations(); this.findCount.textContent = ""; return; }
+    const total = this.countMatches(term, !!this.findCase);
+    this.findCount.textContent = total ? `${total} match${total === 1 ? "" : "es"}` : "no match";
+    this.findCount.classList.toggle("none", !total);
+    const opts = {
+      caseSensitive: !!this.findCase,
+      decorations: { matchBackground: "#ffffff33", activeMatchBackground: "#ffb54788", matchOverviewRuler: "#ffffff66", activeMatchColorOverviewRuler: "#ffb547" }
+    };
+    try {
+      if (back) this.search.findPrevious(term, opts); else this.search.findNext(term, opts);
+    } catch (_) {
+      // Decorations need a renderer that supports them; plain selection still works.
+      delete opts.decorations;
+      if (back) this.search.findPrevious(term, opts); else this.search.findNext(term, opts);
+    }
+  }
+
+  closeFind() {
+    if (!this.findBar) return;
+    this.findBar.hidden = true;
+    this.search?.clearDecorations();
+    this.term?.focus();
   }
 
   // Key presses from the on-screen keyboard: sent exactly as if typed

@@ -252,6 +252,7 @@ function registerFiles({ windows, bridge, icons }) {
 
   handle("fs:openWith", async (_e, target) => {
     const p = await paths.forRead(asString(target, "path"));
+    if (paths.isUncPath(p)) throw new Error("Refusing to open items from network paths");
     windows.yieldFocus();
     spawn("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", p], { detached: true, stdio: "ignore", windowsHide: false }).unref();
     return true;

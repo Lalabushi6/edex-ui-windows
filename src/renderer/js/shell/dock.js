@@ -15,7 +15,19 @@ export function initDock(root) {
   const pins = h("div", { class: "dock-pins" });
   const wins = h("div", { class: "dock-windows" });
   const kbBtn = h("button", { class: "icon-btn", type: "button", title: "On-screen keyboard (Ctrl+Shift+K)", onclick: () => settings.set({ showKeyboard: !settings.get("showKeyboard") }) }, icon("keyboard"));
+  // While desktop takeover hides the Windows taskbar: bring it back briefly
+  // for tray icons and the Start menu.
+  const winBarBtn = h("button", {
+    class: "icon-btn", type: "button", title: "Show the Windows taskbar for 15 seconds (tray icons, Start)",
+    onclick: () => api.app.takeoverPeek().then((ok) => ok && toast("Windows taskbar shown for 15 seconds", { timeout: 1800 })).catch((e) => toast(cleanError(e), { level: "warn" }))
+  }, icon("desktop"));
+  const syncWinBar = () => {
+    winBarBtn.hidden = !(settings.get("takeover") === true && settings.get("takeoverHideTaskbar") !== false && settings.get("mode") === "desktop");
+  };
+  settings.watch(["takeover", "takeoverHideTaskbar", "mode"], syncWinBar);
+  syncWinBar();
   const tray = h("div", { class: "dock-tray" },
+    winBarBtn,
     kbBtn,
     h("button", { class: "icon-btn", type: "button", title: "Process manager", onclick: () => runCommand("processes.open") }, icon("process")),
     h("button", { class: "icon-btn", type: "button", title: "Hide eDEX (show the Windows desktop)", onclick: () => api.app.hide() }, icon("minimize")));

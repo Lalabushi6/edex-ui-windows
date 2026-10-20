@@ -177,7 +177,13 @@ function registerMedia({ windows }) {
     if (/\.mp3$/i.test(p)) {
       try { tags = await readId3(p); } catch (_) {}
       if (!tags?.title) {
-        try { tags = { ...(await readId3v1(p)), ...(tags || {}) }; } catch (_) {}
+        // Fall back to ID3v1 field by field; empty ID3v2 values never win.
+        try {
+          const v1 = (await readId3v1(p)) || {};
+          const v2 = tags || {};
+          tags = { ...v2 };
+          for (const k of ["title", "artist", "album"]) if (!v2[k] && v1[k]) tags[k] = v1[k];
+        } catch (_) {}
       }
     }
     if (tagCache.size > 300) tagCache.delete(tagCache.keys().next().value);

@@ -9,6 +9,7 @@ import { emit } from "../core/bus.js";
 import { toast, contextMenu, popover, cleanError } from "../core/ui.js";
 import { openLauncher } from "./launcher.js";
 import { buildCalendar } from "./calendar.js";
+import { openWifiPanel } from "./wifi.js";
 import { runCommand } from "../core/commands.js";
 
 const api = window.edex;
@@ -64,7 +65,7 @@ export function initTopbar(root) {
   const snipBtn = h("button", { class: "icon-btn", type: "button", title: "Screen snip (Win+Shift+S)", onclick: () => runCommand("shell.snip") }, icon("snip"));
 
   // Network + battery + clock
-  const net = h("span", { class: "status-item", title: "Network" }, icon("wifi"));
+  const net = h("button", { class: "status-item", type: "button", title: "Network", onclick: () => openWifiPanel(net) }, icon("wifi"));
   let netSig = "";
   const offNet = onLive(({ net: n }) => {
     const sig = `${n.online}|${n.type}|${n.iface}|${n.ip4}`;
