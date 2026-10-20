@@ -102,7 +102,9 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 |---|---|
 | an app name | Start-menu apps, Store apps, desktop shortcuts |
 | a window title | switches to that window |
-| a file name | recent files and your Desktop / Documents / Downloads / Pictures / Music / Videos |
+| a file name | recent files and your Desktop / Documents / Downloads / Pictures / Music / Videos, then **On this PC**: matches anywhere the Windows Search index covers |
+| `"budget 2026"` (in quotes) | **Inside files**: documents containing those words (Windows Search index) |
+| `? how do I find large files` | asks Claude (needs the AI assistant, see section 15) |
 | `>` then text | commands (new tab, settings, themes, power, media …) |
 | `=2*(3+4)^2` | calculator — Enter copies the result |
 | `10 km to mi`, `72 f in c`, `5 gb to mib`, `90 kmh to mph` | unit conversion (length, mass, volume, area, speed, time, data, energy, power, temperature) — Enter copies |
@@ -122,8 +124,17 @@ result for more (pin to dock, run as administrator, open file location).
 - **Apps button** opens the launcher on the app list.
 - **Pinned apps**: pin from the launcher (right-click → Pin to dock).
 - **Open windows**: click to switch; click the active one to minimize;
-  middle-click to close; right-click for maximize / restore / close.
+  middle-click to close; right-click for maximize / restore / close, **Snap
+  left / right half**, or **Snap layouts…** (halves, quarters, thirds, two
+  thirds, centre, maximise — on the monitor the window is on).
 - **Tray**: on-screen keyboard, process manager, hide eDEX.
+
+**Window arrangements** (launcher: "Window arrangements…", or the commands
+"Windows: side by side / three columns / grid"): lay out the front-most
+visible windows, or **Save current…** to remember where every window is.
+Restoring an arrangement moves each window back, starts programs that
+aren't running (Store apps are reported as not found) and minimises the
+ones that were minimised.
 
 ## 6. Terminal
 
@@ -138,9 +149,18 @@ New tab: `Ctrl+Shift+T` (default shell) or the ⌄ menu for a specific shell.
 | Font size | `Ctrl+=`, `Ctrl+-`, `Ctrl+0` |
 | Open a link | `Ctrl`+click |
 | Find in the terminal | `Ctrl+Shift+F` (Enter / Shift+Enter for next / previous, Aa for match case, Esc to close). Outside a terminal the same keys find files. |
+| Split pane right / down | `Alt+Shift+=` / `Alt+Shift+-` (or `Ctrl+Shift+D`), or Shift+right-click → Split |
+| Move between panes | `Alt`+arrow keys, or click a pane |
+| Close the focused pane | `Ctrl+Shift+W` (closes the tab when it has one pane) |
+| Explain output with Claude | Shift+right-click → Explain with Claude (the selection, or the last screenful) |
+
+A tab holds up to four panes (side by side, stacked, or 2 × 2), each with its
+own shell starting in the same folder. Input, find, the on-screen keyboard
+and the file browser panel follow the focused pane, which is outlined.
 
 When a shell exits, press Enter in its tab to restart it. Double-click a tab to
-rename it. Tabs are restored the next time eDEX starts.
+rename it. Tabs (and their split panes) are restored the next time eDEX
+starts.
 
 ## 7. File explorer
 
@@ -170,6 +190,18 @@ links, Show in Windows Explorer and Properties.
 In **grid view** pictures, videos and PDFs show a preview instead of an
 icon. Previews come from Windows' own thumbnail cache, load only for the
 items you scroll to, and are never made for network paths.
+
+### Disk usage map
+
+Right-click a folder (or empty space) → **Analyse disk usage**, the tab menu
+(⌄ → Disk usage), or the launcher ("Disk usage map"). Pick a drive or a
+folder; the scan runs in the background (a whole SSD takes a few seconds to
+a minute) and then shows a sunburst: the centre is the current folder, each
+ring a level deeper, sized by space used. Hover for name, size and share;
+click a ring to drill in, the centre to go back up. The list beside it has
+the largest folders and files; right-click for Open in explorer, Terminal
+here or Copy path. Junctions and symbolic links aren't followed, so nothing
+is counted twice.
 
 ## 8. Media player
 
@@ -265,13 +297,28 @@ Up to 120 lines × 240 columns. Leave it empty for the default logo.
 
 ## 11. Top bar and tools
 
+- **Now playing**: when another app plays something (Spotify, YouTube in a
+  browser, VLC, Media Player …), its title shows next to the media keys;
+  click it for cover art, a seek bar and play / pause / skip. The **Media**
+  widget shows the same when eDEX's own player is idle.
+- **Volume mixer** (sliders icon next to the volume, or right-click the
+  speaker): switch the output device (speakers, headphones, HDMI …) and set
+  the volume or mute for each app that's using sound.
+- **Bluetooth** (shown when the PC has Bluetooth): turn the radio on or off
+  and see paired devices and which are connected. Pairing and connecting
+  happen in Windows' Bluetooth settings (the panel links there).
+- **Battery** (laptops): click it for charge, time left, battery saver and
+  **health** — what the battery holds now against its design capacity, and
+  its charge-cycle count, from Windows' battery report.
 - **Network** (Wi-Fi / LAN): click it for the Wi-Fi panel — the current
   connection (band, security, speed) with Disconnect, nearby networks with
   signal and security, **Connect** for saved networks and **Join…** (Windows
   Wi-Fi settings) for new ones that need a password. Windows 11 may ask for
   location access before it lists networks; the panel links to that setting.
 - **Clock**: click it for a month calendar with ISO week numbers (scroll or
-  use the arrows to change month, **Today** to jump back).
+  use the arrows to change month, **Today** to jump back). Days with events
+  have a dot; click a day to see its events and add one, with an optional
+  time and reminder (at the time, 5 / 15 / 30 / 60 minutes or a day before).
 - **Brightness** (☀, laptop screens only): click for a slider, or scroll over
   the icon to step by 5%. External monitors don't expose brightness to
   Windows, so the icon is hidden on them.
@@ -295,7 +342,23 @@ Up to 120 lines × 240 columns. Leave it empty for the default logo.
   today, and a bar for each day of the past week; the arrow button switches
   between today and yesterday. Idle time (2 minutes without input) and the lock screen aren't
   counted. Only program names and durations are stored, on this PC, for two
-  weeks; Settings → Privacy turns it off or clears it.
+  weeks; Settings → Privacy turns it off or clears it. Right-click an app →
+  **Daily limit…** for a once-a-day notice when it passes that much time (the
+  bar shows the limit; the app turns amber past it).
+- **Tasks** widget: today's calendar events, then your to-do list. Type a
+  time to get a reminder — `call mum at 6pm`, `report in 2h`, `dentist
+  tomorrow 9:30`, `gym friday` — with the alarm sound and a Windows
+  notification even while eDEX is hidden (reminders missed while eDEX was
+  closed show once when it starts). Tick tasks off; done ones fold away.
+- **Git** widget: the branch, commits to push / pull, staged / changed / new
+  file counts, the last commit and the changed files for the folder the
+  active terminal is in (click a file to show it in the explorer). Needs Git
+  on the PATH.
+- **Command widgets** (Settings → Layout → Command widgets, or the launcher
+  "New command widget…"): any PowerShell or cmd command's output as a panel,
+  refreshed every few seconds to once a day while eDEX is on screen (disk
+  space, uptime, a status API, `git log` …). Commands run as you, in your
+  home folder, with a 20-second limit. Right-click one to edit or remove it.
 
 **Alerts** (Settings → General → Alerts): eDEX warns once when the battery
 drops below the level you choose (20% by default) and again at half that,
@@ -305,6 +368,18 @@ Windows notification. Plugging in or freeing space re-arms it.
 
 New widgets appear at the end of their column; drag them where you want them
 or hide them in Settings → Layout.
+
+**Multi-monitor HUD** (Settings → General → Other displays): every display
+except the main one shows eDEX's telemetry panels, the globe and a large
+clock. It sits behind your windows on that display like the desktop does,
+and hides and returns with eDEX.
+
+**Idle screen** (Settings → General → Idle screen): after the minutes you
+choose without typing or clicking — and only when eDEX is the window in
+front — eDEX switches to an animated screen (matrix rain, hex grid,
+starfield or globe) with the clock, date and weather. Any input brings it
+back. **Animated background** (Settings → Appearance) draws the same effects
+faintly behind the panels.
 
 ## 12. Performance
 
@@ -343,6 +418,7 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 | `Ctrl+Shift+F` | Find files |
 | `Ctrl+Shift+K` | On-screen keyboard |
 | `Ctrl+Shift+M` | Media player |
+| `Ctrl+Shift+J` | Ask Claude (AI assistant) |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |
 | `F1` | Shortcut sheet |
@@ -356,7 +432,7 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
   with Windows, desktop takeover, hotkeys, web search engine, sounds,
-  battery and disk alerts.
+  multi-monitor HUD, idle screen, battery and disk alerts.
 - **Appearance**: themes, the theme editor (every colour, fonts, terminal
   palette, globe, layout hints and theme CSS, with live preview), theme
   import / export, custom CSS, interface scale, clock format, temperature
@@ -366,11 +442,15 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 - **Keyboard**: on-screen keyboard, layout, custom layouts folder and import,
   password mode (see section 9).
 - **Layout**: presets, every region, panel side and widths, file browser,
-  widgets (see section 2).
-- **Files**: hidden items, delete confirmation, default view, history.
+  widgets and command widgets (see section 2).
+- **Files**: hidden items, delete confirmation, default view, whole-PC
+  search, history.
 - **Performance**: profile, background slow-down, GPU terminal, eDEX's own
   resource use (see section 12).
-- **Privacy**: outbound network lookups, screen time, clipboard history.
+- **Privacy**: outbound network lookups, screen time and daily limits, the AI
+  assistant, clipboard history.
+- **About**: version, **Back up settings** (Export… / Import… — every setting,
+  your own themes and keyboard layouts in one `.json` file), developer tools.
 
 Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
@@ -389,6 +469,19 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 
 Turn it off and eDEX makes no outbound requests. Clipboard history is kept in
 memory only and can be disabled.
+
+**AI assistant** (off until you turn it on in Settings → Privacy and add
+your own Anthropic API key from console.anthropic.com): the key is
+encrypted with your Windows account and never shown again. Only what you
+ask — plus terminal text you choose to include with "Explain with Claude" —
+is sent to Anthropic's Claude API (api.anthropic.com), and only when you
+ask. Pick Claude Opus 5.5 (best answers), Sonnet 5.5 or Haiku 5.5 (faster,
+cheaper); usage is billed to your API account. If Opus or Sonnet declines a
+request, the API retries it on a fallback model automatically. Commands in
+answers run in the terminal only when you click **Run in terminal**.
+
+Whole-PC search, the disk map, Bluetooth, Now playing and the mixer all work
+locally through Windows; they send nothing anywhere.
 
 ## 16. Troubleshooting
 

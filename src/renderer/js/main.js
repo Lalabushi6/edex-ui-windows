@@ -5,15 +5,21 @@ import * as settings from "./core/settings.js";
 import { applyTheme } from "./core/theme.js";
 import { setWindowVisible, configure, profile, onSchedulingChange } from "./core/poll.js";
 import { onBattery } from "./core/live.js";
-import { emit, markBooted } from "./core/bus.js";
+import { emit, on, markBooted } from "./core/bus.js";
 import { command, initHotkeys } from "./core/commands.js";
 import { toast, cleanError, closeMenu } from "./core/ui.js";
-import { mountWidgets } from "./widgets/registry.js";
+import { mountWidgets, mountFixed } from "./widgets/registry.js";
+import { initBackgroundFx } from "./shell/fx.js";
+import { initIdleScreen, showIdleScreen } from "./shell/idle.js";
+import { loadAgenda } from "./shell/agenda.js";
+import { initAi, openAiPanel } from "./shell/ai.js";
 import "./widgets/system.js";
 import "./widgets/tools.js";
 import "./widgets/globe.js";
 import "./widgets/media.js";
 import "./widgets/utility.js";
+import { initCommandWidgets, editCommandWidget } from "./widgets/extra.js";
+import "./widgets/tasks.js";
 import { player } from "./media/player.js";
 import { Workspace } from "./workspace/workspace.js";
 import { initTopbar } from "./shell/topbar.js";
@@ -25,6 +31,7 @@ import { initKeyboard, openLayoutsFolder, importLayouts } from "./shell/keyboard
 import { initLayout, applyPreset, PRESETS } from "./core/layout.js";
 import { initFilePanel } from "./shell/filepanel.js";
 import { openThemeEditor, openCssEditor, initCustomCss } from "./shell/theme-studio.js";
+import { openArrangements, quickLayout, saveArrangement } from "./shell/arrange.js";
 
 const api = window.edex;
 let workspace;
@@ -108,6 +115,20 @@ async function registerCommands() {
     settings.set({ takeover: on });
     toast(on ? "eDEX has taken over the desktop" : "Desktop takeover off — Windows taskbar restored", { timeout: 2200 });
   }, { icon: "desktop", keywords: "fullscreen taskbar hide windows desktop shell replace kiosk" });
+  cmd("ai.open", "Ask Claude", () => openAiPanel({}), { keys: "Ctrl+Shift+J", icon: "ai", keywords: "ai assistant chat claude help question" });
+  cmd("disk.open", "Disk usage map", () => workspace.openDisk(), { icon: "disk", keywords: "storage space analyzer treemap sunburst large files folders windirstat" });
+  cmd("widgets.command", "New command widget…", () => editCommandWidget(), { icon: "terminal", keywords: "custom widget script output panel powershell" });
+  cmd("idle.show", "Show idle screen", () => showIdleScreen(), { icon: "moon", keywords: "screensaver idle clock matrix" });
+  cmd("hud.toggle", "Toggle multi-monitor HUD", () => {
+    const on = !settings.get("hudDisplays");
+    settings.set({ hudDisplays: on });
+    toast(on ? "HUD on: other displays show eDEX panels" : "HUD off", { timeout: 2000 });
+  }, { icon: "desktop", keywords: "second monitor display screen hud telemetry" });
+  cmd("windows.arrangements", "Window arrangements…", () => openArrangements(), { icon: "grid4", keywords: "tile snap layout restore save windows workspace fancyzones" });
+  cmd("windows.side", "Windows: side by side", () => quickLayout("side"), { icon: "layout", keywords: "tile snap split two windows" });
+  cmd("windows.columns", "Windows: three columns", () => quickLayout("columns"), { icon: "layout", keywords: "tile snap split windows" });
+  cmd("windows.grid", "Windows: grid", () => quickLayout("grid"), { icon: "grid4", keywords: "tile snap four windows quarters" });
+  cmd("windows.save", "Save window arrangement…", () => saveArrangement(), { icon: "grid4", keywords: "layout remember windows positions workspace" });
   cmd("mode.toggle", "Switch desktop / overlay mode", () => settings.set({ mode: settings.get("mode") === "overlay" ? "desktop" : "overlay" }), { icon: "window", keywords: "overlay desktop hud always on top" });
   cmd("app.hide", "Hide eDEX", () => api.app.hide(), { icon: "minimize", keywords: "show desktop minimize" });
   cmd("app.reload", "Reload interface", () => api.app.reload(), { icon: "refresh" });
@@ -147,7 +168,47 @@ async function registerCommands() {
   } catch (_) {}
 }
 
+// Multi-monitor HUD (a second window on another display): telemetry panels,
+// globe and a large clock; no top bar, dock or workspace.
+async function mainHud() {
+  document.documentElement.classList.add("hud");
+  await settings.loadSettings();
+  initCustomCss();
+  await applyTheme(settings.get("theme")).catch(() => applyTheme("tron"));
+  document.getElementById("boot")?.remove();
+  settings.watch("theme", (id) => applyTheme(id).catch(() => {}));
+  applyPerformance();
+  settings.watch(["perfProfile", "throttleUnfocused"], applyPerformance);
+  onBattery((b) => configure({ battery: !!b.hasBattery && (!b.ac || !!b.saver) }));
+  api.app.onVisibility(({ visible, focused }) => setWindowVisible(visible, focused));
+  initBackgroundFx();
+  const work = $("#work");
+  const clock = document.createElement("div");
+  clock.className = "hud-clock";
+  const time = document.createElement("div");
+  const date = document.createElement("div");
+  date.className = "hud-date";
+  clock.append(time, date);
+  const center = document.createElement("div");
+  center.className = "column hud-center";
+  work.replaceChildren(clock, center);
+  const tick = () => {
+    const now = new Date();
+    time.textContent = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: !settings.get("clock24h") });
+    date.textContent = now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).toUpperCase();
+  };
+  tick();
+  setInterval(tick, 1000);
+  mountFixed([
+    [$("#col-left-body"), ["system", "cpu", "memory", "gpu", "top"]],
+    [center, ["globe"]],
+    [$("#col-right-body"), ["network", "storage", "weather", "media", "screentime"]]
+  ]);
+  markBooted();
+}
+
 async function main() {
+  if (new URLSearchParams(location.search).has("hud")) return mainHud();
   await settings.loadSettings();
   initLayout();
   initCustomCss();
@@ -166,14 +227,19 @@ async function main() {
     if (!visible) closeMenu();
   });
   api.app.onNotice(({ level, message }) => toast(message, { level, timeout: 6000 }));
+  on("open-settings", ({ page } = {}) => openSettings(page));
   api.app.onCommand(({ name, toggle }) => {
     if (name === "launcher") toggle ? toggleLauncher() : openLauncher();
     else if (name === "settings") openSettings();
   });
 
   initHotkeys();
+  initBackgroundFx();
+  initIdleScreen();
+  initAi();
   initTopbar($("#topbar"));
   dock = initDock($("#dock"));
+  initCommandWidgets();
   mountWidgets($("#col-left-body"), $("#col-right-body"));
   workspace = new Workspace($("#workspace"));
   await registerCommands();
@@ -186,6 +252,8 @@ async function main() {
 
   await boot;
   markBooted();
+  // Re-arms task and event reminders even when the Tasks widget is hidden.
+  loadAgenda();
   showGreeting($("#workspace"));
   workspace.focus();
 }

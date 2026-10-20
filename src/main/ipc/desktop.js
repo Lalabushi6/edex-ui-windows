@@ -260,7 +260,7 @@ function registerDesktop({ windows, bridge, icons }) {
     "ms-settings:", "ms-settings:display", "ms-settings:sound", "ms-settings:network", "ms-settings:bluetooth",
     "ms-settings:windowsupdate", "ms-settings:appsfeatures", "ms-settings:personalization", "ms-settings:powersleep",
     "ms-settings:storagesense", "ms-settings:privacy", "ms-settings:defaultapps", "ms-settings:notifications",
-    "ms-settings:network-wifi", "ms-settings:privacy-location"
+    "ms-settings:network-wifi", "ms-settings:privacy-location", "ms-settings:batterysaver", "ms-settings:connecteddevices"
   ]);
   handle("shell:openSettings", async (_e, uri) => {
     if (!SETTINGS_URIS.has(uri)) throw new Error("Unknown settings page");

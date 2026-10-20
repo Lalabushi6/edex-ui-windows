@@ -25,7 +25,7 @@ function wireOnce() {
   settings.watch("termGpu", (on) => {
     for (const t of sessions.values()) {
       if (!on) t.disableGpu();
-      else if (t.el.classList.contains("active")) t.enableGpu();
+      else if (t.root.el.classList.contains("active")) t.enableGpu();
     }
   });
 }
@@ -50,10 +50,17 @@ const loadSearch = () => (searchModule ||= import("../../vendor/xterm-search/lib
 
 const URL_RE = /\bhttps?:\/\/[^\s"'<>`)\]]+[^\s"'<>`)\].,;:!?]/g;
 
+const MAX_PANES = 4;
+
+// A terminal tab is its first pane; split panes are further TerminalTab
+// instances (with `parent` set) that live inside the tab's grid. Each pane
+// has its own shell session. Input, find and the on-screen keyboard go to
+// the focused pane.
 export class TerminalTab {
-  constructor(ws, { shell, cwd, label, welcome } = {}) {
+  constructor(ws, { shell, cwd, label, welcome, splits, splitDir } = {}, parent = null) {
     wireOnce();
     this.ws = ws;
+    this.parent = parent;
     this.welcome = !!welcome;
     this.type = "terminal";
     this.shell = shell || settings.get("defaultShell");
@@ -62,13 +69,141 @@ export class TerminalTab {
     this.label = label || "Terminal";
     this.ptyId = null;
     this.alive = false;
-    this.el = h("div", { class: "pane" });
     this.host = h("div", { class: "term-host" });
-    this.el.append(this.host);
+    this.cell = h("div", { class: "term-cell" }, this.host);
+    this.cell.addEventListener("mousedown", () => this.root.setFocused(this), true);
+    if (parent) {
+      this.el = this.cell;
+    } else {
+      this.panes = [this];
+      this.focused = this;
+      this.splitDir = splitDir === "down" ? "down" : "right";
+      this.pendingSplits = Array.isArray(splits) ? splits.slice(0, MAX_PANES - 1) : [];
+      this.grid = h("div", { class: "term-grid", dataset: { count: "1" } }, this.cell);
+      this.el = h("div", { class: "pane" }, this.grid);
+    }
+  }
+
+  get root() {
+    return this.parent || this;
   }
 
   serialize() {
-    return { type: "terminal", shell: this.shell, label: this.customLabel || undefined };
+    const out = { type: "terminal", shell: this.shell, label: this.customLabel || undefined };
+    if (this.panes?.length > 1) {
+      out.splits = this.panes.slice(1).map((p) => ({ shell: p.shell }));
+      out.splitDir = this.splitDir;
+    }
+    return out;
+  }
+
+  // ── Split panes ──────────────────────────────────────────────────────────
+  focusedPane() {
+    return this.root.focused || this.root;
+  }
+
+  setFocused(pane) {
+    const root = this.root;
+    if (root.focused === pane) return;
+    root.focused = pane;
+    for (const p of root.panes) p.cell.classList.toggle("focused", p === pane && root.panes.length > 1);
+    if (pane.cwd) emit("terminal-cwd", { tab: pane, cwd: pane.cwd, changed: true });
+  }
+
+  layoutPanes() {
+    const root = this.root;
+    const n = root.panes.length;
+    const g = root.grid;
+    g.dataset.count = String(n);
+    g.dataset.dir = root.splitDir;
+    for (const p of root.panes) p.cell.classList.toggle("focused", n > 1 && p === root.focused);
+    for (const p of root.panes) p.fitSoon();
+  }
+
+  async split(dir = "right", { shell } = {}) {
+    const root = this.root;
+    if (root.panes.length >= MAX_PANES) { toast(`A tab holds at most ${MAX_PANES} panes`, { timeout: 1800 }); return null; }
+    if (root.panes.length === 1) root.splitDir = dir === "down" ? "down" : "right";
+    const from = this.focusedPane();
+    const pane = new TerminalTab(this.ws, { shell: shell || from.shell, cwd: from.cwd }, root);
+    const at = root.panes.indexOf(from) + 1;
+    root.panes.splice(at, 0, pane);
+    root.grid.insertBefore(pane.cell, root.grid.children[at] || null);
+    root.layoutPanes();
+    await pane.mount();
+    root.setFocused(pane);
+    pane.fitNow();
+    if (root.el.classList.contains("active")) pane.enableGpu();
+    pane.term?.focus();
+    this.ws.persist();
+    return pane;
+  }
+
+  closePane(pane = this.focusedPane()) {
+    const root = this.root;
+    if (root.panes.length < 2) return false;
+    const i = root.panes.indexOf(pane);
+    if (i < 0) return false;
+    if (pane === root) {
+      // The first pane carries the tab: hand its session to the next pane.
+      const next = root.panes[1];
+      root.swapSession(next);
+      next.disposeSession();
+      root.panes.splice(1, 1);
+      next.cell.remove();
+    } else {
+      pane.disposeSession();
+      root.panes.splice(i, 1);
+      pane.cell.remove();
+    }
+    root.focused = root.panes[Math.min(i, root.panes.length - 1)];
+    root.layoutPanes();
+    root.focused.term?.focus();
+    this.ws.persist();
+    return true;
+  }
+
+  // Moves another pane's terminal and session into this pane's cell.
+  swapSession(other) {
+    // Find bars are rebuilt on next use (their handlers belong to a pane).
+    for (const p of [this, other]) {
+      p.findBar?.remove();
+      p.findBar = p.findInput = p.findCount = null;
+    }
+    const mine = { term: this.term, fit: this.fit, host: this.host, ptyId: this.ptyId, alive: this.alive, shell: this.shell, cwd: this.cwd, webgl: this.webgl, search: this.search, atPrompt: this.atPrompt, promptTail: this.promptTail };
+    for (const k of Object.keys(mine)) { this[k] = other[k]; other[k] = mine[k]; }
+    this.cell.replaceChildren(this.host);
+    other.cell.replaceChildren(other.host);
+    if (this.alive) sessions.set(this.ptyId, this);
+    if (other.alive) sessions.set(other.ptyId, other);
+    if (this.term) this.term.edexOwner = this;
+    if (other.term) other.term.edexOwner = other;
+    this.resizeObserver?.disconnect();
+    other.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => this.fitSoon());
+    this.resizeObserver.observe(this.host);
+    other.resizeObserver = new ResizeObserver(() => other.fitSoon());
+    other.resizeObserver.observe(other.host);
+  }
+
+  focusMove(dir) {
+    const root = this.root;
+    const n = root.panes.length;
+    if (n < 2) return;
+    const i = root.panes.indexOf(this.focusedPane());
+    let j = i;
+    if (n === 4) {
+      const col = i % 2, row = Math.floor(i / 2);
+      if (dir === "left" && col > 0) j = i - 1;
+      if (dir === "right" && col < 1) j = i + 1;
+      if (dir === "up" && row > 0) j = i - 2;
+      if (dir === "down" && row < 1) j = i + 2;
+    } else {
+      const along = root.splitDir === "down" ? ["up", "down"] : ["left", "right"];
+      if (dir === along[0]) j = Math.max(0, i - 1);
+      if (dir === along[1]) j = Math.min(n - 1, i + 1);
+    }
+    if (j !== i) { root.setFocused(root.panes[j]); root.panes[j].term?.focus(); }
   }
 
   options() {
@@ -100,6 +235,13 @@ export class TerminalTab {
     this.resizeObserver = new ResizeObserver(() => this.fitSoon());
     this.resizeObserver.observe(this.host);
     await this.start();
+    // Restore the split panes a saved tab had.
+    if (!this.parent && this.pendingSplits?.length) {
+      const splits = this.pendingSplits;
+      this.pendingSplits = [];
+      for (const s of splits) await this.split(this.splitDir, { shell: s?.shell });
+      this.setFocused(this);
+    }
   }
 
   async start() {
@@ -129,18 +271,26 @@ export class TerminalTab {
     }
   }
 
+  // Handlers reach the pane through term.edexOwner, not `this`: closing the
+  // first pane of a split moves a terminal (and its handlers) to another
+  // pane object.
   wireTerminal() {
     const term = this.term;
+    term.edexOwner = this;
+    const me = () => term.edexOwner;
+    term.textarea?.addEventListener("focus", () => me().root.setFocused(me()));
     term.onData((data) => {
-      if (this.alive) {
-        api.term.write(this.ptyId, data);
+      const pane = me();
+      if (pane.alive) {
+        api.term.write(pane.ptyId, data);
         sfx.play("stdin");
       } else if (data === "\r") {
-        this.restart();
+        pane.restart();
       }
     });
     term.onTitleChange((title) => {
-      if (!this.customLabel && title) this.setLabel(title.replace(/^.*[\\/]/, "").replace(/\.exe$/i, "") || title);
+      const pane = me();
+      if (!pane.customLabel && title) pane.setLabel(title.replace(/^.*[\\/]/, "").replace(/\.exe$/i, "") || title);
     });
     term.onSelectionChange(() => {
       if (settings.get("termCopyOnSelect") && term.hasSelection()) api.clip.copy(term.getSelection()).catch(() => {});
@@ -148,18 +298,29 @@ export class TerminalTab {
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
+      const pane = me();
       const key = e.key.toLowerCase();
-      if (e.ctrlKey && e.shiftKey && key === "f") { e.preventDefault(); this.openFind(); return false; }
-      if (e.ctrlKey && e.shiftKey && key === "c") { this.copy(); return false; }
-      if (e.ctrlKey && e.shiftKey && key === "v") { this.paste(); return false; }
-      if (e.ctrlKey && !e.shiftKey && key === "c" && term.hasSelection()) { this.copy(); term.clearSelection(); return false; }
-      if (e.ctrlKey && !e.shiftKey && key === "v") { this.paste(); return false; }
-      if (e.ctrlKey && (key === "=" || key === "+")) { this.zoom(1); return false; }
-      if (e.ctrlKey && key === "-") { this.zoom(-1); return false; }
+      if (e.ctrlKey && e.shiftKey && key === "f") { e.preventDefault(); pane.openFind(); return false; }
+      // Split panes (Windows Terminal keys): Alt+Shift+= / Alt+Shift+-,
+      // Ctrl+Shift+D; Alt+arrows move between panes.
+      if (e.altKey && e.shiftKey && !e.ctrlKey && (e.code === "Equal" || e.code === "NumpadAdd")) { e.preventDefault(); pane.split("right"); return false; }
+      if (e.altKey && e.shiftKey && !e.ctrlKey && (e.code === "Minus" || e.code === "NumpadSubtract")) { e.preventDefault(); pane.split("down"); return false; }
+      if (e.ctrlKey && e.shiftKey && key === "d") { e.preventDefault(); pane.split("right"); return false; }
+      if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key.startsWith("Arrow") && pane.root.panes.length > 1) {
+        e.preventDefault();
+        pane.focusMove(e.key.slice(5).toLowerCase());
+        return false;
+      }
+      if (e.ctrlKey && e.shiftKey && key === "c") { pane.copy(); return false; }
+      if (e.ctrlKey && e.shiftKey && key === "v") { pane.paste(); return false; }
+      if (e.ctrlKey && !e.shiftKey && key === "c" && term.hasSelection()) { pane.copy(); term.clearSelection(); return false; }
+      if (e.ctrlKey && !e.shiftKey && key === "v") { pane.paste(); return false; }
+      if (e.ctrlKey && (key === "=" || key === "+")) { pane.zoom(1); return false; }
+      if (e.ctrlKey && key === "-") { pane.zoom(-1); return false; }
       if (e.ctrlKey && key === "0") { settings.set({ termFontSize: 14 }); return false; }
       // Let app-level shortcuts (tabs, launcher, settings) reach the document.
       if (e.ctrlKey && (e.key === "Tab" || /^[1-9]$/.test(e.key) || e.key === ",")) return false;
-      if (e.ctrlKey && e.shiftKey && ["t", "e", "w", "p", "f", "s", "k", "m", "a"].includes(key)) return false;
+      if (e.ctrlKey && e.shiftKey && ["t", "e", "w", "p", "f", "s", "k", "m", "a", "j"].includes(key)) return false;
       if (e.key === "F1") return false;
       return true;
     });
@@ -167,19 +328,26 @@ export class TerminalTab {
     // Windows Terminal convention: right-click copies a selection, else pastes.
     this.host.addEventListener("contextmenu", (e) => {
       e.preventDefault();
+      const pane = me();
       if (e.shiftKey) {
+        const panes = pane.root.panes.length;
         contextMenu(e, [
-          { label: "Copy", icon: "copy", hint: "Ctrl+Shift+C", disabled: !term.hasSelection(), run: () => this.copy() },
-          { label: "Paste", icon: "paste", hint: "Ctrl+Shift+V", run: () => this.paste() },
+          { label: "Copy", icon: "copy", hint: "Ctrl+Shift+C", disabled: !term.hasSelection(), run: () => pane.copy() },
+          { label: "Paste", icon: "paste", hint: "Ctrl+Shift+V", run: () => pane.paste() },
           { label: "Select all", icon: "list", run: () => term.selectAll() },
-          { label: "Find…", icon: "search", hint: "Ctrl+Shift+F", run: () => this.openFind() },
+          { label: "Find…", icon: "search", hint: "Ctrl+Shift+F", run: () => pane.openFind() },
           { label: "Clear", icon: "trash", run: () => term.clear() },
+          { label: "Explain with Claude", icon: "ai", run: () => emit("ai-ask", { context: pane.contextText(), prompt: "Explain this terminal output. If there's an error, say how to fix it." }) },
           { separator: true },
-          { label: "Restart shell", icon: "restart", run: () => this.restart() }
+          { label: "Split right", icon: "layout", hint: "Alt+Shift+=", disabled: panes >= MAX_PANES, run: () => pane.split("right") },
+          { label: "Split down", icon: "layout", hint: "Alt+Shift+-", disabled: panes >= MAX_PANES, run: () => pane.split("down") },
+          panes > 1 && { label: "Close pane", icon: "close", hint: "Ctrl+Shift+W", run: () => pane.closePane(pane) },
+          { separator: true },
+          { label: "Restart shell", icon: "restart", run: () => pane.restart() }
         ]);
         return;
       }
-      if (term.hasSelection()) { this.copy(); term.clearSelection(); } else this.paste();
+      if (term.hasSelection()) { pane.copy(); term.clearSelection(); } else pane.paste();
     });
 
     term.registerLinkProvider({
@@ -299,7 +467,7 @@ export class TerminalTab {
         if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey); }
         else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); this.closeFind(); }
       });
-      this.el.append(this.findBar);
+      this.cell.append(this.findBar);
     }
     this.findBar.hidden = false;
     const sel = this.term.getSelection();
@@ -357,6 +525,21 @@ export class TerminalTab {
     this.term?.focus();
   }
 
+  // The selection, or the last screenful or so of output (for "Explain with
+  // Claude"); trailing prompt lines are trimmed.
+  contextText(maxLines = 80) {
+    if (!this.term) return "";
+    const sel = this.term.getSelection();
+    if (sel && sel.trim()) return sel.trim().slice(-20000);
+    const buf = this.term.buffer.active;
+    const lines = [];
+    for (let y = Math.max(0, buf.baseY + buf.cursorY - maxLines); y <= buf.baseY + buf.cursorY; y++) {
+      const l = buf.getLine(y);
+      if (l) lines.push(l.translateToString(true));
+    }
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim().slice(-20000);
+  }
+
   // Key presses from the on-screen keyboard: sent exactly as if typed
   // (control and escape sequences intact), unlike paste().
   sendKeys(data) {
@@ -370,7 +553,7 @@ export class TerminalTab {
 
   setLabel(label) {
     this.label = String(label).slice(0, 40);
-    this.ws.updateTab(this);
+    if (!this.parent) this.ws.updateTab(this);
   }
 
   fitNow() {
@@ -381,22 +564,25 @@ export class TerminalTab {
   }
 
   fitSoon = debounce(() => {
-    if (this.el.classList.contains("active")) this.fitNow();
+    if (this.root.el.classList.contains("active")) this.fitNow();
   }, 60);
 
   activate() {
-    clearTimeout(this.gpuReleaseTimer);
-    if (this.cwd) emit("terminal-cwd", { tab: this, cwd: this.cwd, changed: true });
+    const panes = this.root.panes;
+    const focused = this.focusedPane();
+    for (const p of panes) clearTimeout(p.gpuReleaseTimer);
+    if (focused.cwd) emit("terminal-cwd", { tab: focused, cwd: focused.cwd, changed: true });
     requestAnimationFrame(() => {
-      this.fitNow();
-      this.term?.focus();
-      this.enableGpu();
+      for (const p of panes) { p.fitNow(); p.enableGpu(); }
+      focused.term?.focus();
     });
   }
 
   deactivate() {
-    clearTimeout(this.gpuReleaseTimer);
-    this.gpuReleaseTimer = setTimeout(() => this.disableGpu(), GPU_RELEASE_MS);
+    for (const p of this.root.panes) {
+      clearTimeout(p.gpuReleaseTimer);
+      p.gpuReleaseTimer = setTimeout(() => p.disableGpu(), GPU_RELEASE_MS);
+    }
   }
 
   async enableGpu() {
@@ -430,16 +616,22 @@ export class TerminalTab {
   }
 
   focus() {
-    this.term?.focus();
+    this.focusedPane().term?.focus();
   }
 
-  dispose() {
+  disposeSession() {
     clearTimeout(this.gpuReleaseTimer);
     this.resizeObserver?.disconnect();
     if (this.alive) api.term.kill(this.ptyId).catch(() => {});
     sessions.delete(this.ptyId);
+    this.alive = false;
     this.disableGpu();
     this.term?.dispose();
+    this.term = null;
+  }
+
+  dispose() {
+    for (const p of [...(this.root.panes || [this])].reverse()) p.disposeSession();
   }
 }
 

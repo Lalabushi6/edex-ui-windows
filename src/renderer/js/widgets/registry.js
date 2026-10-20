@@ -157,6 +157,40 @@ function wireColumn(col) {
   });
 }
 
+// A fixed set of widgets in given containers, without drag-to-reorder or
+// the saved order (the multi-monitor HUD).
+export function mountFixed(plan) {
+  for (const [container, ids] of plan) {
+    for (const id of ids) {
+      const def = defs.get(id);
+      if (!def) continue;
+      const panel = createPanel(def);
+      panel.head.removeAttribute("draggable");
+      panel.head.title = "";
+      const entry = { el: panel.el, instance: null, pending: true, cancelled: false };
+      container.append(panel.el);
+      queue.push({ id, def, panel, entry });
+    }
+  }
+  pump();
+}
+
+// Custom command widgets come and go with settings.
+export function undefineWidget(id) {
+  defs.delete(id);
+  const entry = mounted.get(id);
+  if (entry) {
+    entry.cancelled = true;
+    try { entry.instance?.destroy?.(); } catch (e) { console.error(e); }
+    entry.el.remove();
+    mounted.delete(id);
+  }
+}
+
+export function refreshWidgets() {
+  if (columns.left) render();
+}
+
 export function mountWidgets(left, right) {
   columns = { left, right };
   wireColumn(left);

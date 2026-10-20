@@ -42,8 +42,10 @@ and pusher's vec2 helpers (MIT); their notices are retained in that file.
 
 ## Runtime dependencies
 
-xterm.js and its fit and WebGL addons (MIT), node-pty (MIT), systeminformation
-(MIT) and Electron (MIT); see `node_modules/*/LICENSE`.
+xterm.js and its fit, search and WebGL addons (MIT), node-pty (MIT),
+systeminformation (MIT), the Anthropic TypeScript SDK `@anthropic-ai/sdk`
+(MIT, used only by the optional AI assistant) and Electron (MIT); see
+`node_modules/*/LICENSE`.
 
 ## Data services
 

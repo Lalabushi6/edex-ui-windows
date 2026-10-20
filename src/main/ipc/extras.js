@@ -129,12 +129,15 @@ function registerNetwork({ settings }) {
 // interface is told so it can play the alarm.
 function registerAlarms({ windows }) {
   const alarms = new Map(); // id -> timeout
-  const fire = (id, label) => {
+  // kind "reminder" (tasks, calendar events) shows the label as is.
+  const fire = (id, label, kind) => {
     alarms.delete(id);
     windows.send("alarm:fired", { id, label });
     try {
       if (Notification.isSupported()) {
-        const n = new Notification({ title: "eDEX-UI timer", body: label ? `${label} — time is up` : "Time is up", silent: false });
+        const n = kind === "reminder"
+          ? new Notification({ title: "eDEX-UI reminder", body: label || "Reminder", silent: false })
+          : new Notification({ title: "eDEX-UI timer", body: label ? `${label} — time is up` : "Time is up", silent: false });
         n.on("click", () => windows.show());
         n.show();
       }
@@ -145,8 +148,9 @@ function registerAlarms({ windows }) {
     const ms = Math.round(Number(opts.inMs));
     if (!Number.isFinite(ms) || ms < 0 || ms > 7 * 86400000) throw new Error("Invalid alarm time");
     clearTimeout(alarms.get(id));
-    const label = typeof opts.label === "string" ? opts.label.slice(0, 80) : "";
-    alarms.set(id, setTimeout(() => fire(id, label), ms));
+    const label = typeof opts.label === "string" ? opts.label.slice(0, 200) : "";
+    const kind = opts.kind === "reminder" ? "reminder" : "timer";
+    alarms.set(id, setTimeout(() => fire(id, label, kind), ms));
     return true;
   });
   handle("alarm:clear", (_e, id) => {

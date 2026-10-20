@@ -13,6 +13,7 @@ import { autoLayoutId, openLayoutsFolder, importLayouts } from "./keyboard.js";
 import { describeLogo, openBootLogoEditor, previewBootTitle } from "./boot-art.js";
 import { openThemeEditor, openCssEditor, importThemes, exportTheme, deleteTheme, openThemesFolder } from "./theme-studio.js";
 import { PRESETS, computeGrid, applyPreset } from "../core/layout.js";
+import { editCommandWidget } from "../widgets/extra.js";
 
 const api = window.edex;
 
@@ -94,6 +95,54 @@ function takeoverStatus() {
   const timer = setInterval(refresh, 1500);
   pageCleanups.push(() => clearInterval(timer));
   return row("Status", "If the taskbar ever stays hidden after eDEX closes unexpectedly, starting eDEX again puts it back.", text);
+}
+
+// Screen-time daily limits: one row per app with a limit, plus an add form.
+function screenTimeLimitsRows() {
+  const box = h("div", { class: "st-limits" });
+  const render = () => {
+    const limits = settings.get("screenTimeLimits") || {};
+    const name = h("input", { class: "input", placeholder: "Program name, as shown in Screen time", spellcheck: false });
+    const mins = h("input", { class: "input", type: "number", min: 1, max: 1440, value: "60", style: { width: "6rem" } });
+    box.replaceChildren(
+      row("Daily limits", "A notice (once a day) when a program passes its limit. You can also right-click an app in the Screen time widget.",
+        h("span", { style: { display: "flex", gap: ".4rem" } }, name, mins, h("button", { class: "btn", type: "button", onclick: () => {
+          const n = name.value.trim();
+          const m = Math.round(Number(mins.value));
+          if (!n || !(m >= 1 && m <= 1440)) { toast("Enter a program name and 1–1440 minutes", { level: "warn" }); return; }
+          settings.set({ screenTimeLimits: { ...(settings.get("screenTimeLimits") || {}), [n]: m } });
+          render();
+        } }, "Add"))),
+      ...Object.entries(limits).map(([app, m]) => row(app, `${m} min a day`, h("button", { class: "btn sm", type: "button", onclick: () => {
+        const next = { ...(settings.get("screenTimeLimits") || {}) };
+        delete next[app];
+        settings.set({ screenTimeLimits: next });
+        render();
+      } }, "Remove"))));
+  };
+  render();
+  return box;
+}
+
+// AI assistant: on/off, the API key (stored encrypted, never shown again)
+// and the model.
+async function aiRows() {
+  const status = await api.ai.status().catch(() => ({}));
+  const keyInput = h("input", { class: "input", type: "password", placeholder: status.configured ? "Key saved — paste a new one to replace it" : "sk-ant-…", spellcheck: false, autocomplete: "off" });
+  const state = h("span", { class: "muted" }, status.configured ? "Key saved (encrypted with your Windows account)" : "No key");
+  const save = async () => {
+    const k = keyInput.value.trim();
+    if (!k) return;
+    try { await api.ai.setKey(k); keyInput.value = ""; keyInput.placeholder = "Key saved — paste a new one to replace it"; state.textContent = "Key saved (encrypted with your Windows account)"; toast("API key saved", { level: "ok" }); } catch (e) { toast(cleanError(e), { level: "warn" }); }
+  };
+  keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+  return [
+    row("Use the AI assistant", "Ask Claude from the launcher (start with ?), with Ctrl+Shift+J, or “Explain with Claude” on terminal output (Shift+right-click). Uses your own Anthropic API key; only what you send is shared, and nothing is sent while this is off.", toggle("aiEnabled")),
+    row("API key", h("span", null, state, " · get one at console.anthropic.com"), h("span", { style: { display: "flex", gap: ".4rem" } }, keyInput,
+      h("button", { class: "btn", type: "button", onclick: save }, "Save"),
+      h("button", { class: "btn", type: "button", onclick: async () => { await api.ai.setKey("").catch(() => {}); state.textContent = "No key"; keyInput.placeholder = "sk-ant-…"; toast("API key removed", { level: "ok" }); } }, "Remove"))),
+    row("Model", "Opus 5.5 gives the best answers; Sonnet 5.5 and Haiku 5.5 are faster and cheaper.", select("aiModel", [["claude-opus-5-5", "Claude Opus 5.5"], ["claude-sonnet-5-5", "Claude Sonnet 5.5"], ["claude-haiku-5-5", "Claude Haiku 5.5"]]))
+  ];
 }
 
 // Boot logo: a title or ASCII art, edited in its own dialog.
@@ -215,6 +264,14 @@ async function buildPage(id) {
       row("Interface sounds", null, toggle("audioEnabled")),
       row("Volume", null, range("audioVolume", 0, 100, "%")),
       row("Typing feedback", "Click sounds for terminal input.", toggle("audioFeedback")),
+      h("h3", null, "Other displays"),
+      row("Multi-monitor HUD", "Every display except the main one shows eDEX's telemetry panels, the globe and a large clock, behind your windows. Hidden with eDEX.", toggle("hudDisplays")),
+      h("h3", null, "Idle screen"),
+      row("Show the idle screen", "When nothing has been typed or clicked for a while and eDEX is the window in front, it switches to an animated clock screen. Any input brings eDEX back.", toggle("idleScreen")),
+      row("After (minutes)", null, number("idleMinutes", 1, 120)),
+      row("Effect", null, h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } },
+        select("idleEffect", [["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"], ["globe", "Globe"]]),
+        h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("idle.show"), 250); } }, "Preview"))),
       h("h3", null, "Alerts"),
       row("Low battery", "Warns once when the charge drops below the level (again at half of it), with a Windows notification if eDEX is hidden.", toggle("alertBattery")),
       row("Battery level", null, range("alertBatteryLevel", 5, 50, "%")),
@@ -253,6 +310,7 @@ async function buildPage(id) {
         btns(h("button", { class: "btn", type: "button", onclick: () => openCssEditor() }, icon("code"), "Edit CSS…"))),
       h("h3", null, "Display"),
       row("Interface scale", "Size of text and controls.", range("uiScale", 70, 160, "%")),
+      row("Animated background", "Drawn faintly behind the panels in the theme colour, at a low frame rate (paused while eDEX is hidden).", select("backgroundFx", [["none", "None"], ["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"]])),
       row("24-hour clock", null, toggle("clock24h")),
       row("Temperature unit", null, select("temperatureUnit", [["C", "Celsius"], ["F", "Fahrenheit"]])),
       h("h3", null, "Boot screen"),
@@ -336,13 +394,22 @@ async function buildPage(id) {
       h("h3", null, "Widgets"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Drag a widget by its title bar to reorder it or move it to the other column."),
       ...widgets,
-      row("Reset widget layout", null, h("button", { class: "btn", type: "button", onclick: () => settings.set({ widgetOrder: { left: [], right: [] }, hiddenWidgets: [] }) }, "Reset")));
+      row("Reset widget layout", null, h("button", { class: "btn", type: "button", onclick: () => settings.set({ widgetOrder: { left: [], right: [] }, hiddenWidgets: [] }) }, "Reset")),
+      h("h3", null, "Command widgets"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Panels that show a command's output, refreshed on a schedule (disk space, a status API, git log …). Right-click one to edit it."),
+      ...(settings.get("commandWidgets") || []).map((c) => row(c.title, `${c.shell === "cmd" ? "cmd" : "PowerShell"} · every ${c.interval} s · ${c.command.slice(0, 80)}`,
+        h("span", { style: { display: "flex", gap: ".4rem" } },
+          h("button", { class: "btn sm", type: "button", onclick: () => editCommandWidget(c) }, "Edit"),
+          h("button", { class: "btn sm", type: "button", onclick: () => { settings.set({ commandWidgets: (settings.get("commandWidgets") || []).filter((x) => x.id !== c.id) }); rerender(); } }, "Remove")))),
+      row("New command widget", null, h("button", { class: "btn", type: "button", onclick: () => runCommand("widgets.command") }, icon("plus"), "Add…")));
   }
   if (id === "files") {
     page.push(h("h3", null, "Explorer"),
       row("Show hidden items", null, toggle("showHidden")),
       row("Confirm before deleting", "Deleted items always go to the Recycle Bin.", toggle("confirmDelete")),
       row("Default view", null, select("explorerView", [["list", "List"], ["grid", "Grid"]])),
+      h("h3", null, "Search"),
+      row("Search the whole PC from the launcher", "Uses the Windows Search index for file names everywhere it indexes; put the query in quotes (\"budget 2026\") to search inside documents.", toggle("indexSearch")),
       h("h3", null, "History"),
       row("Recent files and folders", "Shown in the launcher and explorer sidebar.", h("button", { class: "btn", type: "button", onclick: () => { settings.set({ recentFiles: [], recentFolders: [] }); toast("History cleared", { level: "ok" }); } }, "Clear history")));
   }
@@ -371,6 +438,9 @@ async function buildPage(id) {
       h("h3", null, "Screen time"),
       row("Track app usage", "Counts how long each program is the focused window (idle and locked time excluded). Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
       row("Clear screen time history", null, h("button", { class: "btn", type: "button", onclick: () => api.screenTime.clear().then(() => toast("Screen time history cleared", { level: "ok" })) }, "Clear")),
+      screenTimeLimitsRows(),
+      h("h3", null, "AI assistant"),
+      ...(await aiRows()),
       h("h3", null, "Clipboard"),
       row("Clipboard history", "Kept in memory only — never written to disk, cleared on quit.", toggle("clipboardHistory")),
       row("History size", null, number("clipboardMax", 5, 200)),
@@ -387,6 +457,13 @@ async function buildPage(id) {
       row("Version", null, h("span", { class: "mono" }, info.version || "?")),
       row("Mode", null, h("span", { class: "mono" }, info.windowed ? "development (windowed)" : info.mode)),
       row("System", null, h("span", { class: "mono" }, `${sys.os?.distro || "Windows"} ${sys.os?.release || ""}`)),
+      row("Back up settings", "Every setting, your own themes and keyboard layouts in one file, to keep or move to another PC.", h("span", { style: { display: "flex", gap: ".4rem" } },
+        h("button", { class: "btn", type: "button", onclick: async () => {
+          try { const r = await api.tools.exportSettings(); if (r) toast(`Exported (${r.themes} themes, ${r.keyboards} layouts)`, { level: "ok", action: { label: "Show", run: () => api.fs.reveal(r.file) } }); } catch (e) { toast(cleanError(e), { level: "warn" }); }
+        } }, icon("external"), "Export…"),
+        h("button", { class: "btn", type: "button", onclick: async () => {
+          try { const r = await api.tools.importSettings(); if (r) { toast(`Imported ${r.settings} settings, ${r.themes} themes, ${r.keyboards} layouts`, { level: "ok", timeout: 4000 }); openPanel?.show("about"); } } catch (e) { toast(cleanError(e), { level: "warn" }); }
+        } }, icon("download"), "Import…"))),
       row("Developer tools", "Inspect the interface.", h("button", { class: "btn", type: "button", onclick: () => api.app.devtools() }, "Toggle DevTools")),
       row("Reload interface", null, h("button", { class: "btn", type: "button", onclick: () => api.app.reload() }, "Reload")));
   }

@@ -52,6 +52,16 @@
 .pane.active { display: flex; flex-direction: column; }
 /* ── Terminal ───────────────────────────────────────────────────────────── */
 .term-host { flex: 1; min-height: 0; padding: .45rem .2rem .2rem .55rem; }
+/* Split panes: side by side, stacked, or 2 x 2 for four. */
+.term-grid { flex: 1; min-height: 0; display: grid; grid-template: 1fr / 1fr; gap: 3px; }
+.term-grid[data-count="2"][data-dir="right"] { grid-template: 1fr / 1fr 1fr; }
+.term-grid[data-count="2"][data-dir="down"] { grid-template: 1fr 1fr / 1fr; }
+.term-grid[data-count="3"][data-dir="right"] { grid-template: 1fr / 1fr 1fr 1fr; }
+.term-grid[data-count="3"][data-dir="down"] { grid-template: 1fr 1fr 1fr / 1fr; }
+.term-grid[data-count="4"] { grid-template: 1fr 1fr / 1fr 1fr; }
+.term-cell { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.term-grid:not([data-count="1"]):not(:empty) > .term-cell { outline: 1px solid var(--c-15, rgb(var(--rgb) / .15)); }
+.term-grid > .term-cell.focused { outline: 1px solid var(--c-50); }
 .term-host .xterm { height: 100%; }
 /* Find in terminal */
 .term-find { position: absolute; top: .4rem; right: 1rem; z-index: 5; display: flex; align-items: center; gap: .25rem; padding: .3rem .35rem; border: 1px solid var(--c-50); background: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .6); }

@@ -7,6 +7,7 @@ import * as settings from "../core/settings.js";
 import { runCommand } from "../core/commands.js";
 import { toast, contextMenu, cleanError } from "../core/ui.js";
 import { openLauncher, loadAppsCached, appIcons, exeIcons, launchApp, togglePinnedApp } from "./launcher.js";
+import { openSnapPicker, snapWindow } from "./arrange.js";
 
 const api = window.edex;
 
@@ -86,14 +87,17 @@ export function initDock(root) {
         setTimeout(() => winPoll.kick(), 350);
       },
       onauxclick: (e) => { if (e.button === 1) api.win.close(w.hwnd).then(() => setTimeout(() => winPoll.kick(), 500)); },
-      oncontextmenu: (e) => contextMenu(e, [
+      oncontextmenu: (e) => { const btn = e.currentTarget; contextMenu(e, [
         { label: "Switch to", icon: "window", run: () => api.win.focus(w.hwnd) },
         { label: w.minimized ? "Restore" : "Minimize", icon: "minimize", run: () => (w.minimized ? api.win.focus(w.hwnd) : api.win.minimize(w.hwnd)).then(() => winPoll.kick()) },
         { label: w.maximized ? "Restore size" : "Maximize", icon: "maximize", run: () => api.win.maximize(w.hwnd).then(() => winPoll.kick()) },
+        { label: "Snap left half", icon: "layout", run: () => snapWindow(w.hwnd, "left").then(() => winPoll.kick()) },
+        { label: "Snap right half", icon: "layout", run: () => snapWindow(w.hwnd, "right").then(() => winPoll.kick()) },
+        { label: "Snap layouts…", icon: "grid4", run: () => openSnapPicker(btn, w.hwnd, w.app || w.title) },
         w.exe && { label: "Open file location", icon: "folder", run: () => api.fs.reveal(w.exe) },
         { separator: true },
         { label: "Close window", icon: "close", danger: true, run: () => api.win.close(w.hwnd).then(() => setTimeout(() => winPoll.kick(), 500)) }
-      ])
+      ]); }
     },
     icons[w.exe] ? h("img", { src: icons[w.exe], alt: "" }) : icon("window"),
     h("span", { class: "t" }, w.title))));

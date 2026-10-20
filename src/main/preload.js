@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("edex", {
     reload: invoke("app:reload"),
     takeoverState: invoke("takeover:state"),
     takeoverPeek: invoke("takeover:peek"),
+    idle: invoke("app:idle"),
     onVisibility: subscribe("app:visibility"),
     onMode: subscribe("app:mode"),
     onCommand: subscribe("app:command"),
@@ -85,6 +86,7 @@ contextBridge.exposeInMainWorld("edex", {
     properties: invoke("fs:properties"),
     icons: invoke("fs:icons"),
     thumbnails: invoke("fs:thumbnails"),
+    indexSearch: invoke("fs:indexSearch"),
     search: invoke("fs:search"),
     quickIndex: invoke("fs:quickIndex"),
     startDrag: (paths) => ipcRenderer.send("fs:startDrag", paths),
@@ -103,7 +105,52 @@ contextBridge.exposeInMainWorld("edex", {
     focus: invoke("win:focus"),
     minimize: invoke("win:minimize"),
     maximize: invoke("win:maximize"),
-    close: invoke("win:close")
+    close: invoke("win:close"),
+    tile: invoke("win:tile"),
+    layout: invoke("win:layout"),
+    arrangements: invoke("win:arrangements"),
+    saveArrangement: invoke("win:saveArrangement"),
+    restoreArrangement: invoke("win:restoreArrangement"),
+    deleteArrangement: invoke("win:deleteArrangement")
+  },
+  mixer: {
+    list: invoke("mixer:list"),
+    set: invoke("mixer:set"),
+    devices: invoke("audio:devices"),
+    setDefault: invoke("audio:setDefault")
+  },
+  nowPlaying: {
+    get: invoke("nowplaying:get"),
+    art: invoke("nowplaying:art"),
+    control: invoke("nowplaying:control")
+  },
+  bluetooth: {
+    status: invoke("bt:status"),
+    radio: invoke("bt:radio")
+  },
+  disk: {
+    scan: invoke("disk:scan"),
+    progress: invoke("disk:progress"),
+    node: invoke("disk:node"),
+    cancel: invoke("disk:cancel"),
+    clear: invoke("disk:clear")
+  },
+  tools: {
+    runCommandWidget: invoke("cmdw:run"),
+    gitStatus: invoke("git:status"),
+    batteryHealth: invoke("battery:health"),
+    loadTasks: invoke("tasks:load"),
+    saveTasks: invoke("tasks:save"),
+    exportSettings: invoke("settings:export"),
+    importSettings: invoke("settings:import")
+  },
+  ai: {
+    status: invoke("ai:status"),
+    setKey: invoke("ai:setKey"),
+    ask: invoke("ai:ask"),
+    cancel: invoke("ai:cancel"),
+    onChunk: subscribe("ai:chunk"),
+    onDone: subscribe("ai:done")
   },
   media: {
     key: invoke("media:key"),

@@ -89,7 +89,17 @@ const P = {
   fog: '<path d="M4 9h16M3 13h18M5 17h14"/>',
   gauge: '<path d="M4.5 18a9 9 0 1 1 15 0"/><path d="M12 13l4-4M12 13h.01"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
-  eq: '<path d="M6 4v16M12 4v16M18 4v16"/><path d="M4 14h4M10 8h4M16 16h4"/>',  tomato: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 6V3M9 6.5c1-1.5 5-1.5 6 0M12 6l-2.5-2M12 6l2.5-2"/>'
+  eq: '<path d="M6 4v16M12 4v16M18 4v16"/><path d="M4 14h4M10 8h4M16 16h4"/>',
+  check: '<path d="M4.5 12.5l5 5 10-11"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  ai: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+  bluetooth: '<path d="M7 7l10 10-5 4V3l5 4L7 17"/>',
+  tasks: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/>',
+  git: '<circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8.2v7.6M18 11.2c0 3-3 3.8-6 4.3-2.5.4-4 1-4.8 1.6"/>',
+  disk: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/>',
+  grid4: '<rect x="3.5" y="3.5" width="7" height="7"/><rect x="13.5" y="3.5" width="7" height="7"/><rect x="3.5" y="13.5" width="7" height="7"/><rect x="13.5" y="13.5" width="7" height="7"/>',
+  mixer: '<path d="M5 20v-6M5 10V4M12 20v-9M12 7V4M19 20v-4M19 12V4"/><path d="M3 14h4M10 7h4M17 16h4"/>',  tomato: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 6V3M9 6.5c1-1.5 5-1.5 6 0M12 6l-2.5-2M12 6l2.5-2"/>'
 };
 
 // The eDEX-UI logo (ring, square and "e"), drawn in the theme colour.

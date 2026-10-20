@@ -44,7 +44,7 @@ function trustedShortcutDirs() {
   return dirs;
 }
 
-function registerFiles({ windows, bridge, icons }) {
+function registerFiles({ windows, bridge, icons, aux = null }) {
   const listCache = new Map();
   const LIST_TTL = 1500;
 
@@ -275,6 +275,15 @@ function registerFiles({ windows, bridge, icons }) {
       else out[raw] = null;
     }
     return Object.assign(out, await icons.get(wanted));
+  });
+
+  // Whole-PC search through the Windows Search index: file names (each word
+  // as a prefix) or, with content: true, text inside documents.
+  handle("fs:indexSearch", async (_e, query, opts = {}) => {
+    if (!aux) return [];
+    const q = asString(query, "query", 200);
+    const results = await aux.call("searchIndex", { query: q, mode: opts.content ? "content" : "name", max: Math.max(1, Math.min(60, Number(opts.max) || 25)) }, 12000);
+    return (Array.isArray(results) ? results : []).filter((r) => r && typeof r.path === "string" && !paths.isSensitive(r.path));
   });
 
   // Grid-view thumbnails from Windows' own thumbnail cache (pictures,
