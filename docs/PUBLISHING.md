@@ -105,9 +105,12 @@ repository's **Releases**.
    ```
 
 3. The Build workflow notices the `v…` tag, builds, and publishes
-   **Release v2.0.1** with `eDEX-UI-Setup-2.0.1.exe` and
-   `eDEX-UI-2.0.1-portable.exe` attached, plus notes listing the commits
-   since the last release. Edit the notes on the release page if you like.
+   **Release v2.0.1** with `eDEX-UI-Setup.exe` and `eDEX-UI-Portable.exe`
+   attached, plus notes listing the commits since the last release. Edit
+   the notes on the release page if you like. The file names stay the same
+   from release to release, so the README's download buttons
+   (`…/releases/latest/download/eDEX-UI-Setup.exe`) always fetch the newest
+   version.
 
 With GitHub Desktop: update `"version"` in `package.json`, commit, then in
 **History** right-click the commit → **Create Tag…** → `v2.0.1` → **Push

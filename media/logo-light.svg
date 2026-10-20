@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="200" viewBox="0 0 900 200" role="img" aria-label="eDEX-UI Windows Edition">
+  <title>eDEX-UI Windows Edition</title>
+  <g fill="#1e4a50">
+    <svg x="8" y="10" width="180" height="180" viewBox="0 0 459.04 459.04">
+      <g transform="translate(126.89 109.98)">
+        <circle cx="102.63" cy="119.53" r="222" fill="none" stroke="#1e4a50" stroke-width="14" opacity=".45"/>
+        <path d="m-30.735-13.833v266.73h266.74v-266.73zm15.997 15.997h234.74v234.74h-234.74z"/>
+        <g transform="matrix(3.7504 0 0 3.7504 -344.72 -397.96)"><path d="m108.83 159.42-7.4083-7.4083v-28.046l7.4083-7.4083h20.902l7.4083 7.4083v16.922h-26.576v7.6387l2.4995 2.5815h13.328l1.7691-2.1032v-4.7438h8.9792v8.6327l-6.4382 6.5264zm1.8168-26.434h17.432v-6.1964l-2.2474-2.4113h-12.931l-2.2536 2.9032z"/></g>
+      </g>
+    </svg>
+    <text x="222" y="120" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="100" font-weight="300" letter-spacing="8">eDEX-UI</text>
+    <rect x="226" y="140" width="640" height="2" opacity=".35"/>
+    <text x="228" y="178" font-family="Consolas, 'SFMono-Regular', Menlo, monospace" font-size="25" letter-spacing="11" opacity=".8">WINDOWS EDITION</text>
+  </g>
+</svg>
