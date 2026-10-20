@@ -14,9 +14,12 @@ const SCRIPT_SOURCE = path.join(__dirname, "..", "native", "bridge.ps1");
 const MAX_RESTARTS_PER_MINUTE = 3;
 
 class NativeBridge {
-  constructor({ workDir, log = console }) {
+  // waitFor: optional async gate before the first start. A second helper
+  // waits for the first so only one of them compiles the interop types.
+  constructor({ workDir, log = console, waitFor = null }) {
     this.workDir = workDir;
     this.log = log;
+    this.waitFor = waitFor;
     this.proc = null;
     this.ready = null;
     this.pending = new Map();
@@ -104,6 +107,12 @@ class NativeBridge {
   }
 
   async call(cmd, args = {}, timeoutMs = 6000) {
+    if (this.waitFor) {
+      const gate = this.waitFor;
+      this.waitFor = null;
+      this.gate = Promise.resolve().then(gate).catch(() => {});
+    }
+    if (this.gate) await this.gate;
     await this._start();
     const proc = this.proc;
     if (!proc) throw new Error("Native bridge is not running");

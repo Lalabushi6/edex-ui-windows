@@ -12,13 +12,25 @@ telemetry from one surface — without dropping back to the Windows desktop.
   commands, themes, Windows Settings pages, a calculator (`=2*(3+4)`), unit
   conversion (`10 km to mi`, `72 f in c`), timers (`timer 5m tea`,
   `pomodoro`), shell commands (`$ ipconfig`), path browsing with Tab
-  completion (`C:\Users\`) and web search.
+  completion (`C:\Users\`) and web search. **Whole-PC search** through the
+  Windows Search index — file names anywhere it indexes, or text inside
+  documents with a quoted query (`"budget 2026"`).
 - **Dock**: pinned apps plus every open window — click to switch, click again
-  to minimize, right-click to maximize or close.
+  to minimize, right-click to maximize, close or **snap** (halves, quarters,
+  thirds, centre).
+- **Window arrangements**: side by side / three columns / grid for the
+  visible windows, and saved arrangements that put every window back where
+  it was, starting programs that aren't open.
 - **Terminal tabs**: PowerShell, PowerShell 7, Command Prompt, WSL and Git Bash
   (whichever are installed) via `node-pty` + `xterm.js`, drawn on the GPU
-  (WebGL) for fast output. Find in terminal (`Ctrl+Shift+F`), clickable
-  links, copy/paste, font zoom, restart on exit.
+  (WebGL) for fast output. **Split panes** (up to four per tab), find in
+  terminal (`Ctrl+Shift+F`), clickable links, copy/paste, font zoom, restart
+  on exit.
+- **AI assistant** (optional, your own Anthropic API key): ask Claude from the
+  launcher (`? question`) or `Ctrl+Shift+J`, or "Explain with Claude" on
+  terminal output; commands in answers run in the terminal with one click.
+- **Disk usage map**: a sunburst of what fills a drive or folder — drill in,
+  see the largest folders and files.
 - **File explorer tabs**: list/grid views (with picture, video and PDF
   thumbnails in the grid), sorting, filter, breadcrumbs,
   copy/cut/paste, rename in place, drag files out to other apps or in from
@@ -46,18 +58,32 @@ telemetry from one surface — without dropping back to the Windows desktop.
   10-band equalizer with presets, resume where you left off, Windows media
   keys, and a "Now playing" widget.
   Playback continues when the tab is closed.
+- **System-wide Now playing**: whatever Spotify, a browser or any other app
+  reports to Windows — title, artist, cover art, play/pause/skip and seek —
+  in the Media widget and the top bar.
 - **Telemetry widgets**: clock with world clocks, system, CPU (per core), memory,
   GPU utilisation, drives and disk I/O, top processes and network traffic.
 - **Tools**: weather with a four-day forecast, timer, stopwatch (with laps)
   and a pomodoro focus timer (Windows notification when a countdown ends),
-  screen time (per-app usage today and over the week, kept on this PC only),
-  notes (auto-saved), clipboard history (memory only), quick links.
+  screen time (per-app usage today and over the week, with optional daily
+  limits; kept on this PC only), **tasks** with reminders ("call mum at 6pm"),
+  **Git** status for the terminal's folder, **command widgets** (any
+  command's output, refreshed on a schedule), notes (auto-saved), clipboard
+  history (memory only), quick links.
 - **Alerts**: low battery (with a second, critical warning) and low disk
   space, shown in eDEX and as Windows notifications while it is hidden.
-- **Top bar**: media keys, master volume slider, display brightness (laptop
-  panels), screen snip, network with a Wi-Fi panel (nearby networks,
-  connect / disconnect), battery, clock with a month calendar,
-  settings and power menu (lock, sleep, sign out, restart, shut down).
+- **Top bar**: now playing, media keys, master volume with a **per-app
+  volume mixer and output-device switch**, display brightness (laptop
+  panels), screen snip, **Bluetooth** (radio and paired devices), network
+  with a Wi-Fi panel (nearby networks, connect / disconnect), battery with
+  **health** (capacity vs. design, charge cycles), clock with a month
+  calendar and **events with reminders**, settings and power menu.
+- **Multi-monitor HUD**: other displays show eDEX's telemetry panels, the
+  globe and a large clock behind your windows.
+- **Idle screen and animated backgrounds**: matrix rain, hex grid, starfield
+  or globe, in the theme colour.
+- **Settings backup**: export / import every setting, custom theme and
+  keyboard layout as one file.
 - **Light on resources**: telemetry comes from one long-lived native helper
   (no process launches while running), every panel refreshes from one shared
   scheduler, and nothing runs while eDEX is hidden. Performance profiles
@@ -114,18 +140,24 @@ See [USER_MANUAL.md](USER_MANUAL.md) for usage and shortcuts, and
 src/main/            Electron main process
   main.js            lifecycle, single instance, hotkeys, IPC registration
   window.js          desktop / overlay window modes
+  hud.js             multi-monitor HUD windows
   settings.js        typed settings schema, validation, v1 migration
   tray.js            tray icon and menu
   preload.js         the renderer's only bridge (window.edex)
-  ipc/               terminal, system, files, desktop (apps/windows/media keys/power), media player, extras
-  lib/               protocols, path policy, cache, JSON store, telemetry, icon service
-  native/bridge.ps1  long-lived PowerShell helper for Win32 APIs and telemetry
+  ipc/               terminal, system, files, desktop (apps/windows/media keys/power), media player,
+                     audio mixer, now playing, Bluetooth, disk usage, window arrangements,
+                     tools (command widgets, git, battery health, tasks, settings backup), AI, extras
+  lib/               protocols, path policy, cache, JSON store, telemetry, icon service,
+                     takeover, screen time, alerts
+  native/bridge.ps1  long-lived PowerShell helper for Win32 / Core Audio / WinRT / Windows Search;
+                     a second instance handles slow calls (media sessions, Bluetooth, search, disk scans)
 src/renderer/        UI (ES modules served from app://edex)
   js/core/           DOM builder, settings, theme, commands/hotkeys, scheduler,
                      shared telemetry feeds, UI kit
-  js/widgets/        side-column widgets
-  js/workspace/      tabs: terminal, explorer, process manager, media player
-  js/shell/          top bar, dock, launcher, settings, viewer, keyboard, boot
+  js/widgets/        side-column widgets (incl. tasks, git, command widgets)
+  js/workspace/      tabs: terminal (split panes), explorer, process manager, media player, disk usage
+  js/shell/          top bar, dock, launcher, settings, viewer, keyboard, boot, mixer, Bluetooth,
+                     battery, now playing, window arrangements, agenda, AI panel, idle screen, effects
   js/media/          media player engine
   lib/encom-globe.js the ENCOM globe (from eDEX-UI)
 themes/              built-in themes (JSON, eDEX-UI format)

@@ -10,6 +10,10 @@ import { toast, contextMenu, popover, cleanError } from "../core/ui.js";
 import { openLauncher } from "./launcher.js";
 import { buildCalendar } from "./calendar.js";
 import { openWifiPanel } from "./wifi.js";
+import { onNowPlaying, openNowPlayingPopover, appName } from "./nowplaying.js";
+import { openMixer } from "./mixer.js";
+import { openBluetoothPanel } from "./bluetooth.js";
+import { openBatteryPanel } from "./battery.js";
 import { runCommand } from "../core/commands.js";
 
 const api = window.edex;
@@ -29,6 +33,18 @@ export function initTopbar(root) {
     icon("search"), h("span", { class: "grow" }, "Search apps, files, windows, commands…"), h("span", { class: "kbd" }, "Ctrl+Shift+Space"));
 
   const media = (key, name, title) => h("button", { class: "icon-btn", type: "button", title, onclick: () => api.media.key(key).catch((e) => toast(cleanError(e), { level: "warn" })) }, icon(name));
+  // What another app is playing; click for art, seek and controls.
+  const npLabel = h("button", { class: "status-item np-label", type: "button", hidden: true, onclick: () => openNowPlayingPopover(npLabel) });
+  let npSig = "";
+  const offNp = onNowPlaying((s) => {
+    npLabel.hidden = !s;
+    if (!s) return;
+    const sig = `${s.title}|${s.artist}|${s.status}`;
+    if (sig === npSig) return;
+    npSig = sig;
+    npLabel.replaceChildren(icon(s.status === "Playing" ? "audio" : "pause"), h("span", { class: "ellipsis" }, [s.title, s.artist].filter(Boolean).join(" — ")));
+    npLabel.title = `${appName(s.app)}: ${[s.title, s.artist].filter(Boolean).join(" — ")}`;
+  });
 
   // Volume
   const volIcon = h("button", { class: "icon-btn", type: "button", title: "Mute / unmute" }, icon("volume"));
@@ -57,6 +73,9 @@ export function initTopbar(root) {
     api.media.setVolume(next).then(showVolume).catch(() => {});
   }, { passive: false });
   const volPoll = poll(() => api.media.volume().then(showVolume), 5000);
+  const mixBtn = h("button", { class: "icon-btn", type: "button", title: "Volume mixer and output device" }, icon("mixer"));
+  mixBtn.addEventListener("click", () => openMixer(mixBtn));
+  volIcon.addEventListener("contextmenu", (e) => { e.preventDefault(); openMixer(mixBtn); });
 
   // Brightness (laptop panels only; hidden when the display has no control).
   const brightBtn = h("button", { class: "icon-btn status-bright", type: "button", title: "Display brightness", hidden: true }, icon("sun"));
@@ -75,7 +94,19 @@ export function initTopbar(root) {
     net.title = n.online ? `${n.iface} · ${n.ip4}` : "Offline";
     emit("net-state", n);
   });
-  const battery = h("span", { class: "status-item", hidden: true });
+  // Bluetooth: shown once a radio is found (checked after startup settles).
+  const bt = h("button", { class: "icon-btn status-bt", type: "button", title: "Bluetooth", hidden: true }, icon("bluetooth"));
+  const showBt = (s) => {
+    bt.hidden = !s?.radio;
+    if (!s?.radio) return;
+    const n = (s.devices || []).filter((d) => d.connected).length;
+    bt.classList.toggle("off", s.radio !== "On");
+    bt.title = s.radio !== "On" ? "Bluetooth off" : n ? `Bluetooth · ${n} connected` : "Bluetooth on";
+  };
+  bt.addEventListener("click", () => openBluetoothPanel(bt, showBt));
+  setTimeout(() => api.bluetooth.status().then(showBt).catch(() => {}), 15000);
+  const battery = h("button", { class: "status-item", type: "button", hidden: true });
+  battery.addEventListener("click", () => openBatteryPanel(battery));
   const offBattery = onBattery((b) => {
     battery.hidden = !b.hasBattery;
     if (!b.hasBattery) return;
@@ -105,15 +136,15 @@ export function initTopbar(root) {
   const powerBtn = h("button", { class: "icon-btn", type: "button", title: "Power", onclick: (e) => powerMenu(e) }, icon("power"));
 
   root.append(brand, pill, h("div", { class: "status" },
-    media("prev", "prev", "Previous track"), media("playpause", "playpause", "Play / pause"), media("next", "next", "Next track"),
+    npLabel, media("prev", "prev", "Previous track"), media("playpause", "playpause", "Play / pause"), media("next", "next", "Next track"),
     h("span", { class: "status-sep" }),
-    volIcon, volSlider, volLabel, brightBtn,
+    volIcon, volSlider, volLabel, mixBtn, brightBtn,
     h("span", { class: "status-sep" }),
-    snipBtn, net, battery, clock,
+    snipBtn, bt, net, battery, clock,
     h("span", { class: "status-sep" }),
     settingsBtn, powerBtn));
 
-  return { stop() { volPoll.stop(); brightness.stop(); offNet(); offBattery(); clockPoll.stop(); } };
+  return { stop() { volPoll.stop(); brightness.stop(); offNet(); offBattery(); clockPoll.stop(); offNp(); } };
 }
 
 // The brightness button opens a slider; the wheel over it nudges by 5%.

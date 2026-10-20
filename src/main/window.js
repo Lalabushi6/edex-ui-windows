@@ -19,6 +19,7 @@ class WindowManager {
     this.bridge = bridge;
     this.fitTimer = null;
     this.win = null;
+    this.satellites = new Set();
     this.quitting = false;
     this.blurHideSuppressed = 0;
     this.blurTimer = null;
@@ -38,6 +39,15 @@ class WindowManager {
   send(channel, payload) {
     const wc = this.webContents;
     if (wc && !wc.isDestroyed()) wc.send(channel, payload);
+    // HUD windows on other displays follow settings (theme, units …).
+    if (channel === "settings:changed" || channel === "kb:changed") {
+      for (const win of this.satellites) if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+  }
+
+  addSatellite(win) {
+    this.satellites.add(win);
+    win.on("closed", () => this.satellites.delete(win));
   }
 
   _targetDisplay() {

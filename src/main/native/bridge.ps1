@@ -232,6 +232,19 @@ public static class EdexNative {
             ",\"title\":" + Q(title.ToString()) + ",\"cls\":" + Q(cls.ToString()) + "}";
     }
 
+    public static string ProcessPath(uint pid) { return ExePath(pid); }
+
+    // A program's file description ("Google Chrome"), cached.
+    public static string Describe(string exe) {
+        if (string.IsNullOrEmpty(exe)) return "";
+        string desc;
+        if (DescCache.TryGetValue(exe, out desc)) return desc;
+        try { desc = (FileVersionInfo.GetVersionInfo(exe).FileDescription ?? "").Trim(); } catch { desc = ""; }
+        if (DescCache.Count > 400) DescCache.Clear();
+        DescCache[exe] = desc;
+        return desc;
+    }
+
     public static bool Minimize(long handle) {
         IntPtr hWnd = new IntPtr(handle);
         return IsWindow(hWnd) && ShowWindow(hWnd, SW_MINIMIZE);
@@ -936,11 +949,720 @@ public static class EdexShell {
         return false;
     }
 }
+
+// WinRT streams reach PowerShell as bare COM objects; this reads one through
+// the classic IStream adapter (album art for Now playing).
+public static class EdexStreams {
+    [DllImport("shcore.dll")]
+    static extern int CreateStreamOverRandomAccessStream([MarshalAs(UnmanagedType.IUnknown)] object stream, ref Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out System.Runtime.InteropServices.ComTypes.IStream result);
+
+    public static string DataUrl(object randomAccessStream, int max) {
+        Guid iid = new Guid("0000000c-0000-0000-C000-000000000046");
+        System.Runtime.InteropServices.ComTypes.IStream s;
+        Marshal.ThrowExceptionForHR(CreateStreamOverRandomAccessStream(randomAccessStream, ref iid, out s));
+        var ms = new MemoryStream();
+        var buf = new byte[65536];
+        IntPtr read = Marshal.AllocHGlobal(4);
+        try {
+            while (ms.Length <= max) {
+                s.Read(buf, buf.Length, read);
+                int n = Marshal.ReadInt32(read);
+                if (n <= 0) break;
+                ms.Write(buf, 0, n);
+            }
+        } finally { Marshal.FreeHGlobal(read); Marshal.ReleaseComObject(s); }
+        if (ms.Length == 0 || ms.Length > max) return "null";
+        byte[] b = ms.ToArray();
+        string type = b.Length > 3 && b[0] == 0xFF && b[1] == 0xD8 ? "image/jpeg"
+            : b.Length > 11 && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P' ? "image/webp"
+            : b.Length > 2 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F' ? "image/gif" : "image/png";
+        return "\"data:" + type + ";base64," + Convert.ToBase64String(b) + "\"";
+    }
+}
+
+// -- Per-app volume and output devices (Core Audio) --------------------------
+[StructLayout(LayoutKind.Sequential)] public struct EdexPropKey { public Guid fmtid; public int pid; }
+[StructLayout(LayoutKind.Explicit)]
+public struct EdexPropVariant { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public IntPtr p; [FieldOffset(16)] public IntPtr p2; }
+
+[Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexPropertyStore {
+    [PreserveSig] int GetCount(out int count);
+    [PreserveSig] int GetAt(int index, out EdexPropKey key);
+    [PreserveSig] int GetValue(ref EdexPropKey key, out EdexPropVariant value);
+}
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexAMMDeviceEnumerator {
+    [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IEdexAMMDeviceCollection devices);
+    [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IEdexAMMDevice endpoint);
+}
+[Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexAMMDeviceCollection {
+    [PreserveSig] int GetCount(out int count);
+    [PreserveSig] int Item(int index, out IEdexAMMDevice device);
+}
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexAMMDevice {
+    [PreserveSig] int Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
+    [PreserveSig] int OpenPropertyStore(int access, out IEdexPropertyStore store);
+    [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
+}
+[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexAudioSessionManager2 {
+    [PreserveSig] int GetAudioSessionControl(IntPtr guid, int flags, out IntPtr ctl);
+    [PreserveSig] int GetSimpleAudioVolume(IntPtr guid, int flags, out IntPtr vol);
+    [PreserveSig] int GetSessionEnumerator(out IEdexAudioSessionEnumerator sessions);
+}
+[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexAudioSessionEnumerator {
+    [PreserveSig] int GetCount(out int count);
+    [PreserveSig] int GetSession(int index, [MarshalAs(UnmanagedType.IUnknown)] out object session);
+}
+[Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexAudioSessionControl2 {
+    [PreserveSig] int GetState(out int state);
+    [PreserveSig] int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+    [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid ctx);
+    [PreserveSig] int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string path);
+    [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid ctx);
+    [PreserveSig] int GetGroupingParam(out Guid g);
+    [PreserveSig] int SetGroupingParam(ref Guid g, ref Guid ctx);
+    [PreserveSig] int RegisterAudioSessionNotification(IntPtr n);
+    [PreserveSig] int UnregisterAudioSessionNotification(IntPtr n);
+    [PreserveSig] int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    [PreserveSig] int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    [PreserveSig] int GetProcessId(out uint pid);
+    [PreserveSig] int IsSystemSoundsSession();
+}
+[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexSimpleAudioVolume {
+    [PreserveSig] int SetMasterVolume(float level, ref Guid ctx);
+    [PreserveSig] int GetMasterVolume(out float level);
+    [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid ctx);
+    [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+}
+// The interface Windows' own Sound settings use to change the default device.
+// Only SetDefaultEndpoint is called; the earlier slots just keep the layout.
+[Guid("F8679F50-850A-41CF-9C72-430F290290C8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexPolicyConfig {
+    [PreserveSig] int GetMixFormat(); [PreserveSig] int GetDeviceFormat(); [PreserveSig] int ResetDeviceFormat(); [PreserveSig] int SetDeviceFormat();
+    [PreserveSig] int GetProcessingPeriod(); [PreserveSig] int SetProcessingPeriod(); [PreserveSig] int GetShareMode(); [PreserveSig] int SetShareMode();
+    [PreserveSig] int GetPropertyValue(); [PreserveSig] int SetPropertyValue();
+    [PreserveSig] int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string id, int role);
+}
+[ComImport, Guid("870AF99C-171D-4F9E-AF0D-E63DF40C2BC9")]
+class EdexPolicyConfigClient { }
+
+public static class EdexAudio {
+    [DllImport("ole32.dll")] static extern int PropVariantClear(ref EdexPropVariant pv);
+    static readonly Guid IID_SESSION_MANAGER2 = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+    static readonly Dictionary<string, string> NameCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    static IEdexAMMDeviceEnumerator Enumerator() { return (IEdexAMMDeviceEnumerator)new EdexMMDeviceEnumeratorComObject(); }
+
+    static string FriendlyName(IEdexAMMDevice dev) {
+        IEdexPropertyStore store;
+        if (dev.OpenPropertyStore(0, out store) != 0 || store == null) return "";
+        var key = new EdexPropKey { fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), pid = 14 };
+        var pv = new EdexPropVariant();
+        try {
+            if (store.GetValue(ref key, out pv) != 0) return "";
+            return pv.vt == 31 && pv.p != IntPtr.Zero ? Marshal.PtrToStringUni(pv.p) : "";
+        } finally { PropVariantClear(ref pv); }
+    }
+
+    static string DefaultId() {
+        IEdexAMMDevice def;
+        string id = "";
+        if (Enumerator().GetDefaultAudioEndpoint(0, 1, out def) == 0 && def != null) def.GetId(out id);
+        return id ?? "";
+    }
+
+    public static string Devices() {
+        string defId = DefaultId();
+        IEdexAMMDeviceCollection col;
+        Marshal.ThrowExceptionForHR(Enumerator().EnumAudioEndpoints(0, 1, out col)); // render, active
+        int n;
+        col.GetCount(out n);
+        var sb = new StringBuilder("[");
+        for (int i = 0; i < n; i++) {
+            IEdexAMMDevice d;
+            if (col.Item(i, out d) != 0 || d == null) continue;
+            string id;
+            d.GetId(out id);
+            if (sb.Length > 1) sb.Append(',');
+            sb.Append("{\"id\":").Append(EdexNative.Q(id)).Append(",\"name\":").Append(EdexNative.Q(FriendlyName(d)))
+              .Append(",\"default\":").Append(id == defId ? "true" : "false").Append('}');
+        }
+        return sb.Append(']').ToString();
+    }
+
+    public static string SetDefault(string id) {
+        var pc = (IEdexPolicyConfig)new EdexPolicyConfigClient();
+        for (int role = 0; role < 3; role++) Marshal.ThrowExceptionForHR(pc.SetDefaultEndpoint(id, role));
+        return Devices();
+    }
+
+    static IEdexAudioSessionEnumerator SessionList() {
+        IEdexAMMDevice dev;
+        Marshal.ThrowExceptionForHR(Enumerator().GetDefaultAudioEndpoint(0, 1, out dev));
+        Guid iid = IID_SESSION_MANAGER2;
+        object o;
+        Marshal.ThrowExceptionForHR(dev.Activate(ref iid, 23, IntPtr.Zero, out o));
+        IEdexAudioSessionEnumerator list;
+        Marshal.ThrowExceptionForHR(((IEdexAudioSessionManager2)o).GetSessionEnumerator(out list));
+        return list;
+    }
+
+    // One entry per audio session on the default output device: pid -1 is
+    // Windows' system sounds.
+    public static string Sessions() {
+        var list = SessionList();
+        int n;
+        list.GetCount(out n);
+        var sb = new StringBuilder("[");
+        var seen = new HashSet<long>();
+        for (int i = 0; i < n; i++) {
+            object o;
+            if (list.GetSession(i, out o) != 0 || o == null) continue;
+            var ctl = o as IEdexAudioSessionControl2;
+            var vol = o as IEdexSimpleAudioVolume;
+            if (ctl == null || vol == null) continue;
+            int state;
+            ctl.GetState(out state);
+            if (state == 2) continue; // expired
+            bool system = ctl.IsSystemSoundsSession() == 0;
+            uint pid = 0;
+            ctl.GetProcessId(out pid);
+            long key = system ? -1L : (long)pid;
+            if (!seen.Add(key)) continue;
+            float level;
+            bool muted;
+            vol.GetMasterVolume(out level);
+            vol.GetMute(out muted);
+            string exe = system ? "" : EdexNative.ProcessPath(pid);
+            string name = system ? "System sounds" : EdexNative.Describe(exe);
+            if (string.IsNullOrEmpty(name)) {
+                string display;
+                ctl.GetDisplayName(out display);
+                name = !string.IsNullOrEmpty(display) && !display.StartsWith("@") ? display : (exe.Length > 0 ? Path.GetFileNameWithoutExtension(exe) : "Process " + pid);
+            }
+            if (sb.Length > 1) sb.Append(',');
+            sb.Append("{\"pid\":").Append(key.ToString(CultureInfo.InvariantCulture))
+              .Append(",\"name\":").Append(EdexNative.Q(name))
+              .Append(",\"exe\":").Append(EdexNative.Q(exe))
+              .Append(",\"level\":").Append(Math.Round(level * 100).ToString(CultureInfo.InvariantCulture))
+              .Append(",\"muted\":").Append(muted ? "true" : "false")
+              .Append(",\"active\":").Append(state == 1 ? "true" : "false").Append('}');
+        }
+        return sb.Append(']').ToString();
+    }
+
+    // level: 0-100 or -1 to keep; mute: 0/1 or -1 to keep.
+    public static string SetSession(long pid, double level, int mute) {
+        var list = SessionList();
+        int n;
+        list.GetCount(out n);
+        Guid ctx = Guid.Empty;
+        for (int i = 0; i < n; i++) {
+            object o;
+            if (list.GetSession(i, out o) != 0 || o == null) continue;
+            var ctl = o as IEdexAudioSessionControl2;
+            var vol = o as IEdexSimpleAudioVolume;
+            if (ctl == null || vol == null) continue;
+            uint p = 0;
+            ctl.GetProcessId(out p);
+            bool system = ctl.IsSystemSoundsSession() == 0;
+            if (pid == -1 ? !system : (system || p != pid)) continue;
+            if (level >= 0) vol.SetMasterVolume((float)Math.Max(0, Math.Min(1, level / 100.0)), ref ctx);
+            if (mute >= 0) vol.SetMute(mute == 1, ref ctx);
+        }
+        return Sessions();
+    }
+}
+
+// -- Window placement (tiling and saved arrangements) ------------------------
+// Coordinates are physical pixels: the helper is not DPI-aware, so each call
+// switches its thread to per-monitor awareness first.
+public static class EdexWin {
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left, top, right, bottom; }
+    [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+    delegate bool MonitorEnumProc(IntPtr hMon, IntPtr hdc, ref RECT rc, IntPtr data);
+    [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc cb, IntPtr data);
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out RECT r, int size);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int cmd);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
+
+    const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+
+    static IntPtr Aware() { try { return SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { return IntPtr.Zero; } }
+    static void Restore(IntPtr old) { if (old != IntPtr.Zero) { try { SetThreadDpiAwarenessContext(old); } catch { } } }
+
+    // What the user sees as the window: without the invisible resize borders.
+    static RECT Frame(IntPtr h) {
+        RECT r;
+        if (DwmGetWindowAttribute(h, 9, out r, Marshal.SizeOf(typeof(RECT))) != 0) GetWindowRect(h, out r);
+        return r;
+    }
+
+    static string R(RECT r) { return "[" + r.left + "," + r.top + "," + (r.right - r.left) + "," + (r.bottom - r.top) + "]"; }
+
+    public static string Monitors() {
+        IntPtr old = Aware();
+        try {
+            var sb = new StringBuilder("[");
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate (IntPtr hMon, IntPtr hdc, ref RECT rc, IntPtr data) {
+                var mi = new MONITORINFO();
+                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+                if (GetMonitorInfo(hMon, ref mi)) {
+                    if (sb.Length > 1) sb.Append(',');
+                    sb.Append("{\"bounds\":").Append(R(mi.rcMonitor)).Append(",\"work\":").Append(R(mi.rcWork))
+                      .Append(",\"primary\":").Append((mi.dwFlags & 1) != 0 ? "true" : "false").Append('}');
+                }
+                return true;
+            }, IntPtr.Zero);
+            return sb.Append(']').ToString();
+        } finally { Restore(old); }
+    }
+
+    public static string GetRect(long handle) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd)) return "null";
+        IntPtr old = Aware();
+        try {
+            return "{\"rect\":" + R(Frame(hWnd)) + ",\"minimized\":" + (IsIconic(hWnd) ? "true" : "false") +
+                ",\"maximized\":" + (IsZoomed(hWnd) ? "true" : "false") + "}";
+        } finally { Restore(old); }
+    }
+
+    static void PlaceAware(IntPtr hWnd, int x, int y, int w, int h, string state) {
+        if (IsIconic(hWnd) || IsZoomed(hWnd)) ShowWindow(hWnd, 9); // SW_RESTORE
+        RECT wr;
+        GetWindowRect(hWnd, out wr);
+        RECT fr = Frame(hWnd);
+        int l = Math.Max(0, fr.left - wr.left), t = Math.Max(0, fr.top - wr.top);
+        int r = Math.Max(0, wr.right - fr.right), b = Math.Max(0, wr.bottom - fr.bottom);
+        SetWindowPos(hWnd, IntPtr.Zero, x - l, y - t, w + l + r, h + t + b, SWP_NOZORDER | SWP_NOACTIVATE);
+        if (state == "max") ShowWindow(hWnd, 3);
+        else if (state == "min") ShowWindow(hWnd, 7); // SW_SHOWMINNOACTIVE
+    }
+
+    // Places a window so its visible frame covers x, y, w, h.
+    public static string Place(long handle, int x, int y, int w, int h, string state) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd) || w < 50 || h < 50) return "false";
+        IntPtr old = Aware();
+        try { PlaceAware(hWnd, x, y, w, h, state); return "true"; } finally { Restore(old); }
+    }
+
+    // Puts a window at the bottom of the z-order without activating it (the
+    // HUD on secondary displays stays behind ordinary windows).
+    public static string SendToBack(long handle) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd)) return "false";
+        return SetWindowPos(hWnd, new IntPtr(1), 0, 0, 0, 0, 0x0001 | 0x0002 | SWP_NOACTIVATE) ? "true" : "false";
+    }
+
+    // A share of the work area of the monitor the window is on (fractions).
+    public static string Tile(long handle, double fx, double fy, double fw, double fh) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd)) return "false";
+        IntPtr old = Aware();
+        try {
+            var mi = new MONITORINFO();
+            mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+            if (!GetMonitorInfo(MonitorFromWindow(hWnd, 2), ref mi)) return "false";
+            RECT wa = mi.rcWork;
+            int W = wa.right - wa.left, H = wa.bottom - wa.top;
+            int x = wa.left + (int)Math.Round(W * fx), y = wa.top + (int)Math.Round(H * fy);
+            int x2 = wa.left + (int)Math.Round(W * (fx + fw)), y2 = wa.top + (int)Math.Round(H * (fy + fh));
+            PlaceAware(hWnd, x, y, x2 - x, y2 - y, fw >= 1 && fh >= 1 ? "max" : "");
+            return "true";
+        } finally { Restore(old); }
+    }
+}
+
+// -- Disk usage scan ---------------------------------------------------------
+// Runs on a background thread so the helper keeps answering while it walks
+// the tree. FindFirstFileEx with large fetches returns sizes with the listing
+// (no per-file stat). Junctions and symbolic links are not followed.
+public static class EdexDisk {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct WIN32_FIND_DATA {
+        public uint dwFileAttributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME ftCreationTime, ftLastAccessTime, ftLastWriteTime;
+        public uint nFileSizeHigh, nFileSizeLow, dwReserved0, dwReserved1;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string cFileName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string cAlternateFileName;
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern IntPtr FindFirstFileEx(string name, int infoLevel, out WIN32_FIND_DATA data, int searchOp, IntPtr filter, int flags);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool FindNextFile(IntPtr h, out WIN32_FIND_DATA data);
+    [DllImport("kernel32.dll")] static extern bool FindClose(IntPtr h);
+
+    class Node {
+        public string Name; public long Size; public long Files; public long Own;
+        public List<Node> Dirs = new List<Node>();
+        public List<KeyValuePair<string, long>> Big;
+    }
+
+    static Node root;
+    static string rootPath = "";
+    static System.Threading.Thread worker;
+    static volatile bool cancel, done;
+    static long files, dirs, bytes, denied;
+    static string current = "";
+    static DateTime started;
+
+    public static string Start(string path) {
+        Cancel();
+        rootPath = path.TrimEnd('\\');
+        if (rootPath.Length == 2 && rootPath[1] == ':') rootPath += "\\";
+        files = dirs = bytes = denied = 0;
+        done = false;
+        cancel = false;
+        root = null;
+        started = DateTime.UtcNow;
+        worker = new System.Threading.Thread(Run);
+        worker.IsBackground = true;
+        worker.Priority = System.Threading.ThreadPriority.BelowNormal;
+        worker.Start();
+        return Progress();
+    }
+
+    public static string Cancel() {
+        cancel = true;
+        if (worker != null && worker.IsAlive) worker.Join(3000);
+        worker = null;
+        return "true";
+    }
+
+    public static string Clear() { Cancel(); root = null; done = false; return "true"; }
+
+    static void Run() {
+        var r = new Node { Name = rootPath };
+        try { Walk(r, rootPath); } catch { }
+        root = r;
+        done = !cancel;
+    }
+
+    static string LongPath(string p) {
+        if (p.StartsWith(@"\\?\")) return p;
+        return p.StartsWith(@"\\") ? @"\\?\UNC\" + p.Substring(2) : @"\\?\" + p;
+    }
+
+    static void Walk(Node node, string dir) {
+        current = dir;
+        WIN32_FIND_DATA d;
+        IntPtr h = FindFirstFileEx(LongPath(dir.TrimEnd('\\')) + "\\*", 1, out d, 0, IntPtr.Zero, 2);
+        if (h == new IntPtr(-1)) { denied++; return; }
+        try {
+            do {
+                if (cancel) return;
+                string n = d.cFileName;
+                if (n == "." || n == "..") continue;
+                bool isDir = (d.dwFileAttributes & 0x10) != 0;
+                bool link = (d.dwFileAttributes & 0x400) != 0 && (d.dwReserved0 == 0xA0000003 || d.dwReserved0 == 0xA000000C);
+                if (isDir) {
+                    if (link) continue;
+                    var child = new Node { Name = n };
+                    node.Dirs.Add(child);
+                    dirs++;
+                    Walk(child, dir.TrimEnd('\\') + "\\" + n);
+                    node.Size += child.Size;
+                    node.Files += child.Files;
+                } else {
+                    long sz = ((long)d.nFileSizeHigh << 32) | d.nFileSizeLow;
+                    node.Size += sz;
+                    node.Own += sz;
+                    node.Files++;
+                    files++;
+                    bytes += sz;
+                    if (sz >= 1048576) {
+                        if (node.Big == null) node.Big = new List<KeyValuePair<string, long>>();
+                        node.Big.Add(new KeyValuePair<string, long>(n, sz));
+                        if (node.Big.Count > 24) {
+                            node.Big.Sort((a, b) => b.Value.CompareTo(a.Value));
+                            node.Big.RemoveRange(12, node.Big.Count - 12);
+                        }
+                    }
+                }
+            } while (FindNextFile(h, out d));
+        } finally { FindClose(h); }
+    }
+
+    public static string Progress() {
+        return "{\"root\":" + EdexNative.Q(rootPath) + ",\"running\":" + (worker != null && worker.IsAlive ? "true" : "false") +
+            ",\"done\":" + (done ? "true" : "false") + ",\"files\":" + files + ",\"dirs\":" + dirs + ",\"bytes\":" + bytes +
+            ",\"denied\":" + denied + ",\"seconds\":" + ((int)(DateTime.UtcNow - started).TotalSeconds) +
+            ",\"current\":" + EdexNative.Q(current) + "}";
+    }
+
+    static Node Find(string path) {
+        if (root == null) return null;
+        string rel = path.TrimEnd('\\');
+        string rp = rootPath.TrimEnd('\\');
+        if (!rel.StartsWith(rp, StringComparison.OrdinalIgnoreCase)) return null;
+        rel = rel.Substring(rp.Length).Trim('\\');
+        Node node = root;
+        if (rel.Length == 0) return node;
+        foreach (var part in rel.Split('\\')) {
+            Node next = null;
+            foreach (var c in node.Dirs) if (string.Equals(c.Name, part, StringComparison.OrdinalIgnoreCase)) { next = c; break; }
+            if (next == null) return null;
+            node = next;
+        }
+        return node;
+    }
+
+    static readonly int[] Caps = { 36, 14, 7 };
+
+    static void Emit(StringBuilder sb, Node node, int level, int depth) {
+        sb.Append("{\"name\":").Append(EdexNative.Q(node.Name)).Append(",\"size\":").Append(node.Size)
+          .Append(",\"files\":").Append(node.Files).Append(",\"dir\":true");
+        if (level < depth) {
+            var items = new List<KeyValuePair<object, long>>();
+            foreach (var c in node.Dirs) items.Add(new KeyValuePair<object, long>(c, c.Size));
+            long bigTotal = 0;
+            if (node.Big != null) {
+                node.Big.Sort((a, b) => b.Value.CompareTo(a.Value));
+                for (int i = 0; i < Math.Min(12, node.Big.Count); i++) { items.Add(new KeyValuePair<object, long>(node.Big[i], node.Big[i].Value)); bigTotal += node.Big[i].Value; }
+            }
+            items.Sort((a, b) => b.Value.CompareTo(a.Value));
+            int cap = Caps[Math.Min(level, Caps.Length - 1)];
+            long shown = 0;
+            sb.Append(",\"children\":[");
+            int count = 0;
+            foreach (var it in items) {
+                if (count >= cap || (level > 0 && it.Value < node.Size / 400)) break;
+                if (count > 0) sb.Append(',');
+                if (it.Key is Node) Emit(sb, (Node)it.Key, level + 1, depth);
+                else {
+                    var f = (KeyValuePair<string, long>)it.Key;
+                    sb.Append("{\"name\":").Append(EdexNative.Q(f.Key)).Append(",\"size\":").Append(f.Value).Append(",\"dir\":false}");
+                }
+                shown += it.Value;
+                count++;
+            }
+            long rest = node.Size - shown;
+            if (rest > 0 && rest >= node.Size / 400) {
+                if (count > 0) sb.Append(',');
+                sb.Append("{\"name\":\"\",\"rest\":true,\"size\":").Append(rest).Append(",\"dir\":false}");
+            }
+            sb.Append(']');
+        }
+        sb.Append('}');
+    }
+
+    public static string Children(string path, int depth) {
+        Node node = Find(path);
+        if (node == null) return "null";
+        var sb = new StringBuilder();
+        Emit(sb, node, 0, Math.Max(1, Math.Min(4, depth)));
+        return sb.ToString();
+    }
+}
 '@
 
 function Write-Line([string]$text) {
     [Console]::Out.WriteLine($text)
     [Console]::Out.Flush()
+}
+
+function J([string]$s) { [EdexNative]::Q($s) }
+
+# -- WinRT helpers (media sessions, Bluetooth) --------------------------------
+# Windows PowerShell can call WinRT APIs directly; async operations are
+# awaited through the .NET AsTask bridge with a timeout.
+$script:asTaskOp = $null
+function Initialize-WinRT {
+    if ($script:asTaskOp) { return }
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime
+    $script:asTaskOp = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+        $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+    } | Select-Object -First 1
+}
+function Await($op, [Type]$type, [int]$ms = 4000) {
+    $task = $script:asTaskOp.MakeGenericMethod($type).Invoke($null, @($op))
+    if (-not $task.Wait($ms)) { throw 'WinRT call timed out' }
+    $task.Result
+}
+
+# -- Now playing (any app that reports to Windows' media controls) ------------
+$script:mediaManager = $null
+function Get-MediaManager {
+    if (-not $script:mediaManager) {
+        Initialize-WinRT
+        $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
+        $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
+        $script:mediaManager = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+    }
+    $script:mediaManager
+}
+
+function Select-MediaSession($a) {
+    $mgr = Get-MediaManager
+    $skip = [string]$a.skip
+    $sessions = @($mgr.GetSessions() | Where-Object { -not $skip -or $_.SourceAppUserModelId -notmatch $skip })
+    if (-not $sessions.Count) { return $null }
+    if ($a.app) {
+        $match = $sessions | Where-Object { $_.SourceAppUserModelId -eq [string]$a.app } | Select-Object -First 1
+        if ($match) { return $match }
+    }
+    $cur = $mgr.GetCurrentSession()
+    if ($cur -and (-not $skip -or $cur.SourceAppUserModelId -notmatch $skip)) { return $cur }
+    $playing = $sessions | Where-Object { [string]$_.GetPlaybackInfo().PlaybackStatus -eq 'Playing' } | Select-Object -First 1
+    if ($playing) { return $playing }
+    $sessions[0]
+}
+
+function Read-Thumbnail($ref) {
+    $stream = Await ($ref.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
+    try { [EdexStreams]::DataUrl($stream, 3MB) }
+    finally { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($stream) } catch { } }
+}
+
+function Get-NowPlaying($a) {
+    $s = Select-MediaSession $a
+    if (-not $s) { return 'null' }
+    $p = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+    $info = $s.GetPlaybackInfo()
+    $tl = $s.GetTimelineProperties()
+    $status = [string]$info.PlaybackStatus
+    $pos = $tl.Position.TotalSeconds
+    $end = $tl.EndTime.TotalSeconds
+    if ($status -eq 'Playing' -and $end -gt 0 -and $tl.LastUpdatedTime.Year -gt 2000) {
+        $pos += ([DateTimeOffset]::Now - $tl.LastUpdatedTime).TotalSeconds
+    }
+    if ($end -gt 0 -and $pos -gt $end) { $pos = $end }
+    $c = $info.Controls
+    $art = 'null'
+    if ($a.art -and $p.Thumbnail) { try { $art = Read-Thumbnail $p.Thumbnail } catch { $art = 'null' } }
+    $b = { param($v) if ($v) { 'true' } else { 'false' } }
+    '{"app":' + (J $s.SourceAppUserModelId) + ',"title":' + (J $p.Title) + ',"artist":' + (J $p.Artist) +
+        ',"album":' + (J $p.AlbumTitle) + ',"status":' + (J $status) +
+        ',"position":' + [Math]::Round([Math]::Max(0, $pos), 1).ToString([Globalization.CultureInfo]::InvariantCulture) +
+        ',"duration":' + [Math]::Round([Math]::Max(0, $end), 1).ToString([Globalization.CultureInfo]::InvariantCulture) +
+        ',"hasArt":' + (& $b ($null -ne $p.Thumbnail)) + ',"art":' + $art +
+        ',"canPlay":' + (& $b $c.IsPlayEnabled) + ',"canPause":' + (& $b $c.IsPauseEnabled) +
+        ',"canNext":' + (& $b $c.IsNextEnabled) + ',"canPrev":' + (& $b $c.IsPreviousEnabled) +
+        ',"canSeek":' + (& $b $c.IsPlaybackPositionEnabled) + '}'
+}
+
+function Invoke-MediaControl($a) {
+    $s = Select-MediaSession $a
+    if (-not $s) { return 'false' }
+    switch ([string]$a.action) {
+        'toggle' { $op = $s.TryTogglePlayPauseAsync() }
+        'play'   { $op = $s.TryPlayAsync() }
+        'pause'  { $op = $s.TryPauseAsync() }
+        'next'   { $op = $s.TrySkipNextAsync() }
+        'prev'   { $op = $s.TrySkipPreviousAsync() }
+        'seek'   { $op = $s.TryChangePlaybackPositionAsync([long]([double]$a.position * 10000000)) }
+        default  { throw 'Unknown media action' }
+    }
+    if (Await $op ([bool])) { 'true' } else { 'false' }
+}
+
+# -- Bluetooth ------------------------------------------------------------------
+function Get-BluetoothRadio {
+    Initialize-WinRT
+    $null = [Windows.Devices.Radios.Radio, Windows.Devices.Radios, ContentType = WindowsRuntime]
+    $radios = Await ([Windows.Devices.Radios.Radio]::GetRadiosAsync()) ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Radios.Radio]])
+    $radios | Where-Object { [string]$_.Kind -eq 'Bluetooth' } | Select-Object -First 1
+}
+
+function Get-Bluetooth {
+    $radio = Get-BluetoothRadio
+    if (-not $radio) { return '{"radio":null,"devices":[]}' }
+    $null = [Windows.Devices.Enumeration.DeviceInformation, Windows.Devices.Enumeration, ContentType = WindowsRuntime]
+    $null = [Windows.Devices.Bluetooth.BluetoothDevice, Windows.Devices.Bluetooth, ContentType = WindowsRuntime]
+    $null = [Windows.Devices.Bluetooth.BluetoothLEDevice, Windows.Devices.Bluetooth, ContentType = WindowsRuntime]
+    $items = New-Object System.Collections.Generic.List[string]
+    $seen = @{}
+    $on = [string]$radio.State -eq 'On'
+    if ($on) {
+        foreach ($kind in 'classic', 'le') {
+            try {
+                $sel = if ($kind -eq 'classic') { [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true) } else { [Windows.Devices.Bluetooth.BluetoothLEDevice]::GetDeviceSelectorFromPairingState($true) }
+                $infos = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($sel)) ([Windows.Devices.Enumeration.DeviceInformationCollection])
+                foreach ($i in $infos) {
+                    $connected = $false; $major = ''; $address = ''
+                    try {
+                        if ($kind -eq 'classic') {
+                            $d = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($i.Id)) ([Windows.Devices.Bluetooth.BluetoothDevice]) 2500
+                            if ($d) { $connected = [string]$d.ConnectionStatus -eq 'Connected'; $major = [string]$d.ClassOfDevice.MajorClass; $address = $d.BluetoothAddress.ToString('X'); $d.Dispose() }
+                        } else {
+                            $d = Await ([Windows.Devices.Bluetooth.BluetoothLEDevice]::FromIdAsync($i.Id)) ([Windows.Devices.Bluetooth.BluetoothLEDevice]) 2500
+                            if ($d) { $connected = [string]$d.ConnectionStatus -eq 'Connected'; $major = 'LowEnergy'; $address = $d.BluetoothAddress.ToString('X'); $d.Dispose() }
+                        }
+                    } catch { }
+                    $name = [string]$i.Name
+                    if (-not $name) { continue }
+                    $key = if ($address) { $address } else { $name }
+                    if ($seen.ContainsKey($key)) {
+                        if ($connected) { $items[$seen[$key]] = '{"name":' + (J $name) + ',"connected":true,"kind":' + (J $major) + '}' }
+                        continue
+                    }
+                    $seen[$key] = $items.Count
+                    $items.Add('{"name":' + (J $name) + ',"connected":' + $(if ($connected) { 'true' } else { 'false' }) + ',"kind":' + (J $major) + '}')
+                }
+            } catch { }
+        }
+    }
+    '{"radio":' + (J ([string]$radio.State)) + ',"devices":[' + ($items -join ',') + ']}'
+}
+
+function Set-BluetoothRadio([bool]$on) {
+    $radio = Get-BluetoothRadio
+    if (-not $radio) { throw 'No Bluetooth radio' }
+    $access = Await ([Windows.Devices.Radios.Radio]::RequestAccessAsync()) ([Windows.Devices.Radios.RadioAccessStatus])
+    if ([string]$access -ne 'Allowed') { throw "Bluetooth access: $access" }
+    $state = if ($on) { [Windows.Devices.Radios.RadioState]::On } else { [Windows.Devices.Radios.RadioState]::Off }
+    $result = Await ($radio.SetStateAsync($state)) ([Windows.Devices.Radios.RadioAccessStatus]) 8000
+    if ([string]$result -ne 'Allowed') { throw "Bluetooth: $result" }
+    Get-Bluetooth
+}
+
+# -- Windows Search index -----------------------------------------------------
+# Names (prefix match per word) or, in content mode, text inside documents.
+# Only letters, digits and a few joiners reach the query, so input can't
+# change its structure.
+function Search-Index($a) {
+    $words = @([regex]::Matches([string]$a.query, '[\p{L}\p{N}_\-\.]+') | ForEach-Object { $_.Value.Trim('.') } | Where-Object { $_ } | Select-Object -First 6)
+    if (-not $words.Count) { return '[]' }
+    $max = [Math]::Min(60, [Math]::Max(1, [int]$a.max))
+    $terms = ($words | ForEach-Object { '"' + $_ + '*"' }) -join ' AND '
+    $where = if ([string]$a.mode -eq 'content') { "CONTAINS(*, '$terms')" } else { "CONTAINS(System.FileName, '$terms')" }
+    $sql = "SELECT TOP $max System.ItemPathDisplay, System.ItemNameDisplay, System.Size, System.DateModified, System.ItemType FROM SystemIndex WHERE SCOPE='file:' AND $where ORDER BY System.Search.Rank DESC"
+    $conn = New-Object System.Data.OleDb.OleDbConnection "Provider=Search.CollatorDSO;Extended Properties='Application=Windows';"
+    try {
+        $conn.Open()
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = $sql
+        $cmd.CommandTimeout = 8
+        $r = $cmd.ExecuteReader()
+        $out = New-Object System.Collections.Generic.List[string]
+        while ($r.Read()) {
+            $path = [string]$r.GetValue(0)
+            if (-not $path) { continue }
+            $size = if ($r.IsDBNull(2)) { 'null' } else { ([double]$r.GetValue(2)).ToString([Globalization.CultureInfo]::InvariantCulture) }
+            $mtime = 'null'
+            if (-not $r.IsDBNull(3)) { $mtime = ([DateTimeOffset]::new([DateTime]::SpecifyKind([DateTime]$r.GetValue(3), [DateTimeKind]::Utc))).ToUnixTimeMilliseconds().ToString() }
+            $isDir = (-not $r.IsDBNull(4)) -and ([string]$r.GetValue(4) -eq 'Directory')
+            $out.Add('{"path":' + (J $path) + ',"name":' + (J ([string]$r.GetValue(1))) + ',"size":' + $size + ',"mtime":' + $mtime + ',"isDir":' + $(if ($isDir) { 'true' } else { 'false' }) + '}')
+        }
+        $r.Close()
+        '[' + ($out -join ',') + ']'
+    } finally { $conn.Close() }
 }
 
 # Compiling the interop types costs ~1-2 s, so the assembly is cached on disk
@@ -1001,6 +1723,25 @@ while ($true) {
             'taskbarState' { $data = [EdexShell]::State() }
             'taskbarPeek'  { $data = [EdexShell]::Peek() }
             'fitWindow'    { $data = [EdexShell]::FitWindow([long]$a.hwnd, [bool]$a.cover) }
+            'audioSessions'  { $data = [EdexAudio]::Sessions() }
+            'audioSetSession' { $data = [EdexAudio]::SetSession([long]$a.pid, [double]$a.level, [int]$a.mute) }
+            'audioDevices'   { $data = [EdexAudio]::Devices() }
+            'audioSetDefault' { $data = [EdexAudio]::SetDefault([string]$a.id) }
+            'monitors'     { $data = [EdexWin]::Monitors() }
+            'windowRect'   { $data = [EdexWin]::GetRect([long]$a.hwnd) }
+            'placeWindow'  { $data = [EdexWin]::Place([long]$a.hwnd, [int]$a.x, [int]$a.y, [int]$a.w, [int]$a.h, [string]$a.state) }
+            'sendToBack'   { $data = [EdexWin]::SendToBack([long]$a.hwnd) }
+            'tileWindow'   { $data = [EdexWin]::Tile([long]$a.hwnd, [double]$a.x, [double]$a.y, [double]$a.w, [double]$a.h) }
+            'diskScan'     { $data = [EdexDisk]::Start([string]$a.path) }
+            'diskProgress' { $data = [EdexDisk]::Progress() }
+            'diskNode'     { $data = [EdexDisk]::Children([string]$a.path, [int]$a.depth) }
+            'diskCancel'   { $data = [EdexDisk]::Cancel() }
+            'diskClear'    { $data = [EdexDisk]::Clear() }
+            'nowPlaying'   { $data = Get-NowPlaying $a }
+            'mediaControl' { $data = Invoke-MediaControl $a }
+            'bluetooth'    { $data = Get-Bluetooth }
+            'bluetoothRadio' { $data = Set-BluetoothRadio ([bool]$a.on) }
+            'searchIndex'  { $data = Search-Index $a }
             'properties' { $data = if ([EdexNative]::Properties([string]$a.path)) { 'true' } else { 'false' } }
             'lock'      { $data = if ([EdexNative]::Lock()) { 'true' } else { 'false' } }
             'sleep'     { $data = if ([EdexNative]::Sleep()) { 'true' } else { 'false' } }

@@ -35,12 +35,41 @@ const workspace = () => (v, d) => {
   if (v === null) return null;
   if (!v || !Array.isArray(v.tabs)) return d;
   const tabs = v.tabs.slice(0, 16).map((t) => ({
-    type: ["terminal", "files", "processes", "media"].includes(t?.type) ? t.type : "terminal",
+    type: ["terminal", "files", "processes", "media", "disk"].includes(t?.type) ? t.type : "terminal",
     shell: typeof t?.shell === "string" ? t.shell.slice(0, 32) : undefined,
     cwd: typeof t?.cwd === "string" ? t.cwd.slice(0, 1024) : undefined,
-    label: typeof t?.label === "string" ? t.label.slice(0, 32) : undefined
+    label: typeof t?.label === "string" ? t.label.slice(0, 32) : undefined,
+    splits: t?.type === "terminal" && Array.isArray(t.splits)
+      ? t.splits.slice(0, 3).map((s) => ({ shell: typeof s?.shell === "string" ? s.shell.slice(0, 32) : undefined }))
+      : undefined,
+    splitDir: t?.splitDir === "down" ? "down" : t?.splitDir === "right" ? "right" : undefined
   }));
   return { tabs, active: int(0, 15)(v.active, 0) };
+};
+
+// Custom command widgets: a title, the command, its shell and refresh rate.
+const commandWidgets = () => (v, d) => {
+  if (!Array.isArray(v)) return d;
+  return v.slice(0, 12)
+    .filter((w) => w && typeof w.command === "string" && w.command.trim())
+    .map((w, i) => ({
+      id: typeof w.id === "string" && /^[\w-]{1,32}$/.test(w.id) ? w.id : `cmd${Date.now().toString(36)}${i}`,
+      title: typeof w.title === "string" && w.title.trim() ? w.title.trim().slice(0, 40) : "Command",
+      command: w.command.slice(0, 2000),
+      shell: w.shell === "cmd" ? "cmd" : "powershell",
+      interval: int(5, 86400)(w.interval, 60),
+      column: w.column === "left" ? "left" : "right"
+    }));
+};
+// Screen-time daily limits: program name -> minutes.
+const limits = () => (v, d) => {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return d;
+  const out = {};
+  for (const [k, n] of Object.entries(v).slice(0, 60)) {
+    const m = Math.round(Number(n));
+    if (typeof k === "string" && k.length <= 120 && m >= 1 && m <= 1440) out[k] = m;
+  }
+  return out;
 };
 
 const SCHEMA = {
@@ -143,6 +172,20 @@ const SCHEMA = {
   alertBatteryLevel: [int(5, 50), 20],
   alertDisk: [bool(), true],
   alertDiskGb: [int(1, 200), 5],
+
+  // Desktop extras
+  hudDisplays: [bool(), false],
+  idleScreen: [bool(), false],
+  idleMinutes: [int(1, 120), 10],
+  idleEffect: [oneOf("matrix", "hex", "stars", "globe"), "matrix"],
+  backgroundFx: [oneOf("none", "matrix", "hex", "stars"), "none"],
+  indexSearch: [bool(), true],
+  commandWidgets: [commandWidgets(), []],
+  screenTimeLimits: [limits(), {}],
+
+  // AI assistant (Claude); the API key lives encrypted outside settings.
+  aiEnabled: [bool(), false],
+  aiModel: [oneOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"), "claude-opus-5-5"],
 
   // Network & privacy
   allowNetworkGeolocation: [bool(), true],

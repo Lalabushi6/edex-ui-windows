@@ -10,9 +10,10 @@ import { TerminalTab } from "./terminal.js";
 import { ExplorerTab } from "./explorer.js";
 import { ProcessesTab } from "./processes.js";
 import { MediaTab, addPaths } from "./media.js";
+import { DiskTab } from "./disk.js";
 
-const TYPES = { terminal: TerminalTab, files: ExplorerTab, processes: ProcessesTab, media: MediaTab };
-const TYPE_ICON = { terminal: "terminal", files: "folder", processes: "process", media: "audio" };
+const TYPES = { terminal: TerminalTab, files: ExplorerTab, processes: ProcessesTab, media: MediaTab, disk: DiskTab };
+const TYPE_ICON = { terminal: "terminal", files: "folder", processes: "process", media: "audio", disk: "disk" };
 const MAX_TABS = 16;
 
 export class Workspace {
@@ -32,23 +33,26 @@ export class Workspace {
     on("open-path", ({ path, newTab, select }) => this.openPath(path, { newTab, select }));
     on("open-terminal", ({ cwd, shell } = {}) => this.add("terminal", { cwd, shell }));
     on("open-processes", (opts = {}) => this.openProcesses(opts));
+    on("open-disk", (opts = {}) => this.openDisk(opts));
     // { paths?, play?, focus? } — queue files/folders in the media player.
     on("open-media", async ({ paths, play = true, focus = true } = {}) => {
       if (paths?.length) await addPaths(paths, { play });
       if (focus) await this.openMedia();
     });
     on("terminal-input", ({ text }) => {
-      const t = this.active?.type === "terminal" ? this.active : this.tabs.find((x) => x.type === "terminal");
-      if (t) { this.activate(t); t.input(text); }
+      const tab = this.active?.type === "terminal" ? this.active : this.tabs.find((x) => x.type === "terminal");
+      if (tab) { this.activate(tab); tab.focusedPane().input(text); }
     });
-    // Run a command (launcher "$ …"): the active terminal, another live one,
-    // or a new tab once its shell has started.
+    // Run a command (launcher "$ …", an AI answer): the focused pane of the
+    // active terminal, another live one, or a new tab once its shell started.
     on("terminal-run", async ({ command }) => {
       if (!command) return;
-      let t = this.active?.type === "terminal" && this.active.alive ? this.active : this.tabs.find((x) => x.type === "terminal" && x.alive);
-      if (!t) t = await this.add("terminal");
-      if (!t) return;
-      this.activate(t);
+      const live = (tab) => tab?.type === "terminal" && tab.focusedPane().alive;
+      let tab = live(this.active) ? this.active : this.tabs.find(live);
+      if (!tab) tab = await this.add("terminal");
+      if (!tab) return;
+      this.activate(tab);
+      const t = tab.focusedPane();
       for (let i = 0; i < 50 && !t.alive; i++) await new Promise((r) => setTimeout(r, 100));
       if (!t.alive) return;
       t.sendKeys(`${command}\r`);
@@ -85,8 +89,11 @@ export class Workspace {
     tab.tabEl.addEventListener("dblclick", () => this.rename(tab));
     tab.tabEl.addEventListener("contextmenu", (e) => contextMenu(e, [
       { label: "Rename tab", icon: "edit", run: () => this.rename(tab) },
-      tab.type === "terminal" && { label: "Restart shell", icon: "restart", run: () => tab.restart() },
+      tab.type === "terminal" && { label: "Restart shell", icon: "restart", run: () => tab.focusedPane().restart() },
       tab.type === "terminal" && { label: "Duplicate tab", icon: "copy", run: () => this.add("terminal", { shell: tab.shell }) },
+      tab.type === "terminal" && { label: "Split right", icon: "layout", hint: "Alt+Shift+=", run: () => { this.activate(tab); tab.split("right"); } },
+      tab.type === "terminal" && { label: "Split down", icon: "layout", hint: "Alt+Shift+-", run: () => { this.activate(tab); tab.split("down"); } },
+      tab.type === "terminal" && tab.panes?.length > 1 && { label: "Close pane", icon: "close", run: () => tab.closePane() },
       tab.type === "files" && tab.cwd && { label: "Duplicate tab", icon: "copy", run: () => this.add("files", { cwd: tab.cwd }) },
       { separator: true },
       { label: "Close tab", icon: "close", run: () => this.close(tab) },
@@ -139,8 +146,11 @@ export class Workspace {
     this.persist();
   }
 
+  // Ctrl+Shift+W: the focused pane of a split terminal, else the tab.
   closeActive() {
-    if (this.active) this.close(this.active);
+    if (!this.active) return;
+    if (this.active.type === "terminal" && this.active.panes?.length > 1) this.active.closePane();
+    else this.close(this.active);
   }
 
   cycle(delta) {
@@ -172,7 +182,7 @@ export class Workspace {
   updateCaption() {
     const tab = this.active;
     if (!tab) return;
-    const kind = { terminal: "TERMINAL", files: "FILESYSTEM", processes: "PROCESSES", media: "MEDIA" }[tab.type] || "WORKSPACE";
+    const kind = { terminal: "TERMINAL", files: "FILESYSTEM", processes: "PROCESSES", media: "MEDIA", disk: "DISK USAGE" }[tab.type] || "WORKSPACE";
     const first = this.tabs.find((t) => t.type === "terminal");
     setText(document.getElementById("work-title-a"), kind);
     setText(document.getElementById("work-title-b"), tab === first && !tab.customLabel ? "MAIN SHELL" : String(tab.label).toUpperCase());
@@ -210,6 +220,17 @@ export class Workspace {
     if (pid) tab.select(pid);
   }
 
+  // { path? } — the disk usage map, scanning `path` when given.
+  async openDisk({ path } = {}) {
+    const tab = this.tabs.find((t) => t.type === "disk");
+    if (tab) {
+      this.activate(tab);
+      if (path) tab.scan(path);
+      return tab;
+    }
+    return this.add("disk", { cwd: path });
+  }
+
   async openMedia() {
     const tab = this.tabs.find((t) => t.type === "media");
     if (tab) { this.activate(tab); return tab; }
@@ -217,7 +238,7 @@ export class Workspace {
   }
 
   activeTerminal() {
-    return this.active?.type === "terminal" ? this.active : null;
+    return this.active?.type === "terminal" ? this.active.focusedPane() : null;
   }
 
   newTabMenu(e) {
@@ -226,7 +247,8 @@ export class Workspace {
       { separator: true },
       { label: "File explorer", icon: "folder", hint: "Ctrl+Shift+E", run: () => this.add("files") },
       { label: "Process manager", icon: "process", run: () => this.openProcesses() },
-      { label: "Media player", icon: "audio", hint: "Ctrl+Shift+M", run: () => this.openMedia() }
+      { label: "Media player", icon: "audio", hint: "Ctrl+Shift+M", run: () => this.openMedia() },
+      { label: "Disk usage", icon: "disk", run: () => this.openDisk() }
     ]);
   }
 

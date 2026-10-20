@@ -154,8 +154,12 @@ export function openLauncher(opts = {}) {
   let themes = [];
   let pathEntries = { dir: null, entries: [] };
   let renderToken = 0;
+  // Windows Search index results for the current query (names, or text
+  // inside files when the query is in quotes).
+  let indexHits = { q: "", content: false, items: [] };
+  let indexTimer = null;
 
-  const input = h("input", { class: "launcher-input", spellcheck: false, placeholder: "Search apps, files, windows — or type > for commands, = to calculate", "data-autofocus": true });
+  const input = h("input", { class: "launcher-input", spellcheck: false, placeholder: "Search apps, files, windows — > commands, = calculate, \"text\" inside files, ? ask Claude", "data-autofocus": true });
   input.value = query;
   const chips = h("div", { class: "launcher-filters" });
   const list = h("div", { class: "launcher-results" });
@@ -240,6 +244,17 @@ export function openLauncher(opts = {}) {
       // Shell commands: "$ ipconfig /all"
       const shellCmd = /^\$\s*(\S.*)$/.exec(q);
       if (shellCmd) out.push({ key: "shellcmd", group: "Terminal", title: `Run  ${shellCmd[1]}`, sub: "In the active terminal (or a new one)", icon: "terminal", run: () => emit("terminal-run", { command: shellCmd[1] }) });
+
+      // Ask Claude: "? how do I find large files"
+      const ask = /^\?\s*(\S.*)$/.exec(q);
+      if (ask) {
+        const on = !!settings.get("aiEnabled");
+        out.push({
+          key: "ai", group: "Claude", title: `Ask Claude: ${ask[1]}`, icon: "ai",
+          sub: on ? "AI assistant · answers stream into a panel" : "Turn the AI assistant on in Settings → Privacy",
+          run: () => emit("ai-ask", { prompt: ask[1] })
+        });
+      }
     }
 
     // Paths typed directly
@@ -338,6 +353,19 @@ export function openLauncher(opts = {}) {
         const indexed = (cache.index || []).filter((e) => !recentSet.has(fmt.pathKey(e.path)));
         const items = [...recentItems, ...indexed.map((e) => fileItem(e.path, e.isDir, false))];
         add(q ? "Files" : "Recent & indexed files", items, lim(8, 200));
+      }
+      // Whole-PC results from the Windows Search index, in its rank order.
+      // A quoted query searches inside documents and is listed first.
+      if (q && indexHits.q === raw.trim() && indexHits.items.length) {
+        const seen = new Set([...recentSet, ...(cache.index || []).map((e) => fmt.pathKey(e.path))]);
+        const fresh = indexHits.items.filter((e) => !seen.has(fmt.pathKey(e.path)));
+        const items = fresh.slice(0, lim(indexHits.content ? 10 : 6, 60)).map((e) => ({
+          ...fileItem(e.path, e.isDir, false),
+          group: indexHits.content ? "Inside files" : "On this PC",
+          sub: `${e.path}${e.mtime ? `  ·  ${fmt.dateTime(e.mtime)}` : ""}`,
+          score: 0
+        }));
+        if (items.length) groups.push({ items, best: indexHits.content ? 5000 : 420 });
       }
     }
 
@@ -477,7 +505,26 @@ export function openLauncher(opts = {}) {
     render();
   }
 
-  input.addEventListener("input", () => { refresh(); updatePathEntries(); });
+  // Queries the index a moment after typing stops; results that arrive
+  // after the text changed are dropped.
+  function scheduleIndex() {
+    clearTimeout(indexTimer);
+    const raw = input.value.trim();
+    const quoted = /^"([^"]{2,})"?$/.exec(raw);
+    const text = quoted ? quoted[1].trim() : raw;
+    const skip = settings.get("indexSearch") === false || text.length < 2 || /^[>=$?]/.test(raw) ||
+      /^([a-z]:[\\/]|\\\\|~)/i.test(raw) || /^https?:/i.test(raw) || looksLikeMath(raw);
+    if (skip) { if (indexHits.items.length) { indexHits = { q: "", content: false, items: [] }; render(); } return; }
+    indexTimer = setTimeout(async () => {
+      let items = [];
+      try { items = await api.fs.indexSearch(text, { content: !!quoted, max: quoted ? 25 : 30 }); } catch (_) {}
+      if (input.value.trim() !== raw) return;
+      indexHits = { q: raw, content: !!quoted, items };
+      render();
+    }, 220);
+  }
+
+  input.addEventListener("input", () => { refresh(); updatePathEntries(); scheduleIndex(); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setActive(activeIdx + 1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive(activeIdx - 1); }
@@ -501,6 +548,7 @@ export function openLauncher(opts = {}) {
       activeFilter = f || activeFilter;
       renderChips();
       refresh();
+      scheduleIndex();
       input.focus();
     },
     focus() {
@@ -518,6 +566,7 @@ export function openLauncher(opts = {}) {
   loadIndex().then(render);
   api.themes.list().then((t) => { themes = t; render(); }).catch(() => {});
   updatePathEntries();
+  scheduleIndex();
 }
 
 export function launcherIsOpen() {

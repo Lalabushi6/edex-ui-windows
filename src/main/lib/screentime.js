@@ -19,10 +19,12 @@ const SKIP_CLASSES = new Set(["Progman", "WorkerW", "Shell_TrayWnd", "Shell_Seco
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 class ScreenTime {
-  constructor({ bridge, settings, userData, ownPids }) {
+  constructor({ bridge, settings, userData, ownPids, notify = null }) {
     this.bridge = bridge;
     this.settings = settings;
     this.ownPids = ownPids;
+    this.notify = notify;
+    this.limitNoticed = new Set(); // `${day}|${app}` already told today
     this.store = new JsonStore(path.join(userData, "screentime.json"), { fallback: { days: {} } });
     if (!this.store.data || typeof this.store.data.days !== "object") this.store.data = { days: {} };
     this.timer = null;
@@ -50,6 +52,7 @@ class ScreenTime {
       const days = this.store.data.days;
       const day = (days[key] ||= {});
       day[name] = (day[name] || 0) + SAMPLE_MS / 1000;
+      this.checkLimit(key, name, day[name]);
       this.prune();
       // Written at most every 30 s (and on quit), not on every sample.
       this.dirty = true;
@@ -76,6 +79,18 @@ class ScreenTime {
     return stem.charAt(0).toUpperCase() + stem.slice(1);
   }
 
+  // A gentle nudge, once per app per day, when it passes its daily limit.
+  checkLimit(day, name, seconds) {
+    const minutes = (this.settings.get("screenTimeLimits") || {})[name];
+    if (!minutes || seconds < minutes * 60 || !this.notify) return;
+    const key = `${day}|${name}`;
+    if (this.limitNoticed.has(key)) return;
+    this.limitNoticed.add(key);
+    const h = Math.floor(minutes / 60);
+    const label = h ? `${h} h${minutes % 60 ? ` ${minutes % 60} min` : ""}` : `${minutes} min`;
+    this.notify(`Screen time: ${name}`, `You've used ${name} for ${label} today, your daily limit.`);
+  }
+
   prune() {
     const keys = Object.keys(this.store.data.days).sort();
     while (keys.length > KEEP_DAYS) delete this.store.data.days[keys.shift()];
@@ -94,7 +109,11 @@ class ScreenTime {
       const k = dayKey(w);
       week.push({ day: k, seconds: Object.values(this.store.data.days[k] || {}).reduce((a, b) => a + b, 0) });
     }
-    return { day: key, enabled: this.settings.get("screenTime") !== false, total: apps.reduce((a, b) => a + b.seconds, 0), apps: apps.slice(0, 30), week };
+    const limits = this.settings.get("screenTimeLimits") || {};
+    return {
+      day: key, enabled: this.settings.get("screenTime") !== false, total: apps.reduce((a, b) => a + b.seconds, 0),
+      apps: apps.slice(0, 30).map((a) => (limits[a.name] ? { ...a, limit: limits[a.name] * 60 } : a)), week
+    };
   }
 
   clear() {

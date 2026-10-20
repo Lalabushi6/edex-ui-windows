@@ -120,10 +120,29 @@ defineWidget({
       }));
       const top = d.apps.slice(0, 6);
       const topMax = Math.max(1, top[0]?.seconds || 1);
-      list.replaceChildren(...(top.length ? top.map((a) => h("div", { class: "st-row", title: `${a.name}: ${hm(a.seconds)}` },
+      list.replaceChildren(...(top.length ? top.map((a) => {
+        const over = a.limit && a.seconds >= a.limit;
+        return h("div", {
+          class: `st-row${over ? " over" : ""}`, dataset: { app: a.name },
+          title: `${a.name}: ${hm(a.seconds)}${a.limit ? ` of ${hm(a.limit)} daily limit` : ""}`
+        },
         h("span", { class: "st-name" }, a.name),
-        h("span", { class: "st-bar" }, h("i", { style: { width: `${(a.seconds / topMax) * 100}%` } })),
-        h("span", { class: "st-time" }, hm(a.seconds)))) : [h("div", { class: "empty" }, offset ? "Nothing recorded yesterday" : "Counting — check back in a few minutes")]));
+        h("span", { class: "st-bar" }, h("i", { style: { width: `${(a.seconds / topMax) * 100}%` } }),
+          a.limit ? h("b", { class: "st-limit", style: { left: `${Math.min(100, (a.limit / topMax) * 100)}%` } }) : null),
+        h("span", { class: "st-time" }, hm(a.seconds)));
+      }) : [h("div", { class: "empty" }, offset ? "Nothing recorded yesterday" : "Counting — check back in a few minutes")]));
+    };
+    const setLimit = async (app) => {
+      const current = (settings.get("screenTimeLimits") || {})[app];
+      const value = await prompt({ title: `Daily limit: ${app}`, message: "Minutes a day (a notice when it's reached). Leave empty to remove the limit.", value: current ? String(current) : "" });
+      if (value === null) return;
+      const next = { ...(settings.get("screenTimeLimits") || {}) };
+      const m = Math.round(Number(value));
+      if (!value.trim()) delete next[app];
+      else if (m >= 1 && m <= 1440) next[app] = m;
+      else { toast("Enter 1–1440 minutes", { level: "warn" }); return; }
+      settings.set({ screenTimeLimits: next });
+      setTimeout(() => p.kick(), 300);
     };
     const p = poll(async () => render(await api.screenTime.get(offset)), 60000);
     dayBtn.addEventListener("click", () => {
@@ -134,6 +153,7 @@ defineWidget({
     });
     const unwatch = settings.watch("screenTime", () => p.kick());
     panel.el.addEventListener("contextmenu", (e) => contextMenu(e, [
+      e.target.closest?.(".st-row") && { label: `Daily limit for ${e.target.closest(".st-row").dataset.app}…`, icon: "bell", run: () => setLimit(e.target.closest(".st-row").dataset.app) },
       { label: settings.get("screenTime") !== false ? "Pause tracking" : "Resume tracking", icon: "timer", run: () => settings.set({ screenTime: settings.get("screenTime") === false }) },
       { label: "Clear history", icon: "trash", danger: true, run: async () => { await api.screenTime.clear(); p.kick(); toast("Screen time history cleared", { level: "ok" }); } }
     ]));
