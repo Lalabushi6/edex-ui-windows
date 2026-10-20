@@ -1,2 +1,13 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Text files are stored and checked out with LF line endings, so commits
+# don't churn between Windows and other systems. Batch files need CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets
+*.ico binary
+*.png binary
+*.jpg binary
+*.wav binary
+*.woff binary
+*.woff2 binary

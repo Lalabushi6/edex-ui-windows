@@ -634,7 +634,3 @@ export class TerminalTab {
     for (const p of [...(this.root.panes || [this])].reverse()) p.disposeSession();
   }
 }
-
-export function newTerminalIcon() {
-  return icon("terminal");
-}

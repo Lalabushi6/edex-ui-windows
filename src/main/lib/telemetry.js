@@ -161,7 +161,8 @@ class Telemetry {
       };
     } catch (_) {
       const b = await fallback().battery();
-      return { hasBattery: b.hasBattery, percent: b.percent, charging: b.isCharging, ac: b.acConnected, timeRemaining: b.timeRemaining };
+      // The fallback can report slightly over 100% on worn batteries.
+      return { hasBattery: b.hasBattery, percent: Math.min(100, b.percent), charging: b.isCharging, ac: b.acConnected, timeRemaining: b.timeRemaining };
     }
   }
 

@@ -70,8 +70,3 @@ export function initHotkeys() {
     }
   }, true);
 }
-
-export function shortcutFor(id) {
-  const cmd = commands.get(id);
-  return cmd?.keys ? [].concat(cmd.keys)[0] : "";
-}

@@ -2,7 +2,8 @@
 "use strict";
 
 const path = require("path");
-const { app, globalShortcut, Menu, powerMonitor } = require("electron");
+const { app, globalShortcut, Menu, powerMonitor, session } = require("electron");
+const paths = require("./lib/paths");
 const { registerSchemes, registerHandlers, APP_ORIGIN } = require("./lib/protocol");
 const { NativeBridge } = require("./lib/native-bridge");
 const { Settings } = require("./settings");
@@ -80,6 +81,17 @@ function start() {
 
   app.whenReady().then(() => {
     registerHandlers();
+    // The interface never needs camera, microphone, location, notifications
+    // from web content, USB/HID/serial devices or downloads; only fullscreen
+    // (media player video) is granted.
+    const ses = session.defaultSession;
+    const ALLOWED_PERMISSIONS = new Set(["fullscreen"]);
+    ses.setPermissionRequestHandler((_wc, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
+    ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
+    ses.setDevicePermissionHandler(() => false);
+    ses.on("will-download", (event) => event.preventDefault());
+    // The encrypted AI key never becomes readable through file previews.
+    paths.addSensitive(path.join(app.getPath("userData"), "ai-key.bin"));
     settings = new Settings(app.getPath("userData"));
     bridge = new NativeBridge({ workDir: path.join(app.getPath("userData"), "native") });
     // A second helper for slow or long-running calls (media sessions,

@@ -462,7 +462,13 @@ async function buildPage(id) {
           try { const r = await api.tools.exportSettings(); if (r) toast(`Exported (${r.themes} themes, ${r.keyboards} layouts)`, { level: "ok", action: { label: "Show", run: () => api.fs.reveal(r.file) } }); } catch (e) { toast(cleanError(e), { level: "warn" }); }
         } }, icon("external"), "Export…"),
         h("button", { class: "btn", type: "button", onclick: async () => {
-          try { const r = await api.tools.importSettings(); if (r) { toast(`Imported ${r.settings} settings, ${r.themes} themes, ${r.keyboards} layouts`, { level: "ok", timeout: 4000 }); openPanel?.show("about"); } } catch (e) { toast(cleanError(e), { level: "warn" }); }
+          try {
+            const r = await api.tools.importSettings();
+            if (r) {
+              toast(`Imported ${r.settings} settings, ${r.themes} themes, ${r.keyboards} layouts${r.skippedCommands ? ` (${r.skippedCommands} command widgets left out)` : ""}`, { level: "ok", timeout: 5000 });
+              openPanel?.show("about");
+            }
+          } catch (e) { toast(cleanError(e), { level: "warn" }); }
         } }, icon("download"), "Import…"))),
       row("Developer tools", "Inspect the interface.", h("button", { class: "btn", type: "button", onclick: () => api.app.devtools() }, "Toggle DevTools")),
       row("Reload interface", null, h("button", { class: "btn", type: "button", onclick: () => api.app.reload() }, "Reload")));

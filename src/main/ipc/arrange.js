@@ -126,4 +126,4 @@ function registerArrange({ bridge, windows, ownPids }) {
   return { flush: () => store.flushSync() };
 }
 
-module.exports = { registerArrange, LAYOUT_PRESETS: Object.keys(PRESETS) };
+module.exports = { registerArrange };

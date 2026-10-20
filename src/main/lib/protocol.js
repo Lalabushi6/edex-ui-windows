@@ -93,7 +93,8 @@ async function handleLocalFile(request) {
   let stat;
   try {
     const real = await fs.promises.realpath(filePath);
-    if (isSensitive(real)) return new Response("Forbidden", { status: 403 });
+    // A link can point at a network share; refuse those like UNC paths.
+    if (isSensitive(real) || isUncPath(real)) return new Response("Forbidden", { status: 403 });
     filePath = real;
     stat = await fs.promises.stat(filePath);
   } catch (_) {

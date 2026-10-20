@@ -23,10 +23,6 @@ export function toast(message, { level = "info", timeout = 2600, action } = {}) 
   }
 }
 
-export function errorToast(prefix, error) {
-  toast(`${prefix}: ${error?.message || error}`.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), { level: "warn", timeout: 4200 });
-}
-
 // Strips Electron's IPC wrapper from error messages shown to the user.
 export function cleanError(error) {
   return String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
@@ -84,10 +80,6 @@ export function openModal(build, { className = "", onClose, dismissible = true, 
   const focusable = box.querySelector("[data-autofocus], input, textarea, button");
   focusable?.focus();
   return { close, box };
-}
-
-export function closeAllModals() {
-  for (const m of [...modalStack].reverse()) m.close(null);
 }
 
 export function prompt({ title, message = "", value = "", placeholder = "", confirmLabel = "OK", multiline = false }) {
