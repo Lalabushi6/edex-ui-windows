@@ -2,7 +2,7 @@
 // cached; playback is skipped entirely while audio is disabled.
 import * as settings from "./settings.js";
 
-const SOUNDS = ["alarm", "denied", "error", "expand", "folder", "granted", "info", "keyboard", "panels", "scan", "stdin", "stdout", "theme"];
+const SOUNDS = ["alarm", "denied", "expand", "folder", "granted", "keyboard", "scan", "stdin", "stdout", "theme"];
 const GAIN = { stdin: 0.35, stdout: 0.3, keyboard: 0.6, scan: 0.5, theme: 0.6 };
 
 let ctx = null;

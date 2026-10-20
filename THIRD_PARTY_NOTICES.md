@@ -12,8 +12,8 @@ Used here: the theme files in `themes/` (colour, font, terminal and globe
 values), the on-screen keyboard layouts in `keyboards/` (by eDEX-UI and its
 contributors; `en-WORKMAN.json` had its missing closing brace restored), the
 keyboard's dead-key tables and arrow icons, the logo and application icons (`build/icon.*`,
-`src/main/assets/icon.png`, `src/main/assets/tray.png`,
-`src/renderer/assets/logo.svg`), the boot log text
+`src/main/assets/icon.png`, `src/main/assets/tray.png`, and the logo drawn
+in `src/renderer/js/core/icons.js`), the boot log text
 (`src/renderer/assets/misc/boot_log.txt`), the globe tile grid
 (`src/renderer/assets/misc/grid.json`), the interface sounds and fonts in
 `src/renderer/assets/`, and its fork of the ENCOM globe
