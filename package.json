@@ -71,10 +71,10 @@
       "createStartMenuShortcut": true,
       "shortcutName": "eDEX-UI",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "eDEX-UI-Setup-${version}.${ext}"
+      "artifactName": "eDEX-UI-Setup.${ext}"
     },
     "portable": {
-      "artifactName": "eDEX-UI-${version}-portable.${ext}"
+      "artifactName": "eDEX-UI-Portable.${ext}"
     },
     "publish": null
   },
