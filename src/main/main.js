@@ -18,6 +18,8 @@ const { registerMedia } = require("./ipc/media");
 const { registerKeyboards } = require("./ipc/keyboards");
 const { Takeover } = require("./lib/takeover");
 const { registerWifi } = require("./ipc/wifi");
+const { ScreenTime } = require("./lib/screentime");
+const { Alerts } = require("./lib/alerts");
 const { Telemetry } = require("./lib/telemetry");
 const { IconService } = require("./lib/icon-service");
 
@@ -43,6 +45,7 @@ function start() {
   let alarms;
   let keyboards;
   let takeover;
+  let screenTime;
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -66,7 +69,7 @@ function start() {
     registerHandlers();
     settings = new Settings(app.getPath("userData"));
     bridge = new NativeBridge({ workDir: path.join(app.getPath("userData"), "native") });
-    windows = new WindowManager({ settings });
+    windows = new WindowManager({ settings, bridge });
 
     handle("app:info", () => ({
       version: app.getVersion(),
@@ -98,6 +101,14 @@ function start() {
     registerMedia({ windows });
     keyboards = registerKeyboards({ windows });
     registerWifi();
+    screenTime = new ScreenTime({
+      bridge, settings, userData: app.getPath("userData"),
+      ownPids: () => [process.pid, ...app.getAppMetrics().map((m) => m.pid)]
+    });
+    screenTime.apply();
+    handle("screentime:get", (_e, offset) => screenTime.get(offset));
+    handle("screentime:clear", () => screenTime.clear());
+    new Alerts({ telemetry, settings, windows }).start();
 
     // The bridge starts right away (the panels' first readings come from
     // it) and primes CPU/process/network deltas so first values are real.
@@ -192,6 +203,7 @@ function start() {
     alarms?.stop();
     keyboards?.stop();
     notes?.flush();
+    screenTime?.flush();
     icons?.flush();
     settings?.flush();
     bridge?.stop();

@@ -277,6 +277,30 @@ function registerFiles({ windows, bridge, icons }) {
     return Object.assign(out, await icons.get(wanted));
   });
 
+  // Grid-view thumbnails from Windows' own thumbnail cache (pictures,
+  // videos, PDFs, documents). Small batches, same read policy as fs:read.
+  handle("fs:thumbnails", async (_e, targets, size) => {
+    const px = Math.max(64, Math.min(320, Number(size) || 192));
+    const out = {};
+    const list = (Array.isArray(targets) ? targets.slice(0, 24) : []).filter((t) => typeof t === "string" && t);
+    for (const raw of list) {
+      try {
+        const p = await paths.forRead(raw);
+        if (paths.isUncPath(p)) { out[raw] = null; continue; }
+        const img = await nativeImage.createThumbnailFromPath(p, { width: px, height: px });
+        if (img.isEmpty()) { out[raw] = null; continue; }
+        // PNG keeps transparency for images that have it; JPEG is far
+        // smaller for photos and video frames.
+        out[raw] = /\.(png|gif|webp|svg|ico)$/i.test(p)
+          ? img.toDataURL()
+          : `data:image/jpeg;base64,${img.toJPEG(82).toString("base64")}`;
+      } catch (_) {
+        out[raw] = null;
+      }
+    }
+    return out;
+  });
+
   // Drag files out of eDEX into other applications.
   on("fs:startDrag", async (event, targets) => {
     try {

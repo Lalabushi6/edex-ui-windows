@@ -10,16 +10,17 @@ telemetry from one surface — without dropping back to the Windows desktop.
 - **Launcher** (`Ctrl+Shift+Space`, works from any app): installed apps (Start
   menu, Store apps, desktop shortcuts), open windows, recent and indexed files,
   commands, themes, Windows Settings pages, a calculator (`=2*(3+4)`), unit
-  conversion (`10 km to mi`, `72 f in c`), timers (`timer 5m tea`), shell
-  commands (`$ ipconfig`), path browsing with Tab completion (`C:\Users\`)
-  and web search.
+  conversion (`10 km to mi`, `72 f in c`), timers (`timer 5m tea`,
+  `pomodoro`), shell commands (`$ ipconfig`), path browsing with Tab
+  completion (`C:\Users\`) and web search.
 - **Dock**: pinned apps plus every open window — click to switch, click again
   to minimize, right-click to maximize or close.
 - **Terminal tabs**: PowerShell, PowerShell 7, Command Prompt, WSL and Git Bash
   (whichever are installed) via `node-pty` + `xterm.js`, drawn on the GPU
   (WebGL) for fast output. Find in terminal (`Ctrl+Shift+F`), clickable
   links, copy/paste, font zoom, restart on exit.
-- **File explorer tabs**: list/grid views, sorting, filter, breadcrumbs,
+- **File explorer tabs**: list/grid views (with picture, video and PDF
+  thumbnails in the grid), sorting, filter, breadcrumbs,
   copy/cut/paste, rename in place, drag files out to other apps or in from
   them, Recycle Bin deletes, pins, recents, "Open with…", Windows Properties.
 - **Quick-look viewer**: images, audio, video, PDF and text, with in-place
@@ -42,13 +43,17 @@ telemetry from one surface — without dropping back to the Windows desktop.
   falls back to a canvas globe without WebGL.
 - **Media player** (`Ctrl+Shift+M`): playlist with drag-to-reorder, shuffle
   and repeat, MP3 tags and cover art, video playback, spectrum visualizer,
-  resume where you left off, Windows media keys, and a "Now playing" widget.
+  10-band equalizer with presets, resume where you left off, Windows media
+  keys, and a "Now playing" widget.
   Playback continues when the tab is closed.
 - **Telemetry widgets**: clock with world clocks, system, CPU (per core), memory,
   GPU utilisation, drives and disk I/O, top processes and network traffic.
-- **Tools**: weather with a four-day forecast, timer and stopwatch (with laps
-  and a Windows notification when a countdown ends), notes (auto-saved),
-  clipboard history (memory only), quick links.
+- **Tools**: weather with a four-day forecast, timer, stopwatch (with laps)
+  and a pomodoro focus timer (Windows notification when a countdown ends),
+  screen time (per-app usage today and over the week, kept on this PC only),
+  notes (auto-saved), clipboard history (memory only), quick links.
+- **Alerts**: low battery (with a second, critical warning) and low disk
+  space, shown in eDEX and as Windows notifications while it is hidden.
 - **Top bar**: media keys, master volume slider, display brightness (laptop
   panels), screen snip, network with a Wi-Fi panel (nearby networks,
   connect / disconnect), battery, clock with a month calendar,
@@ -69,8 +74,9 @@ telemetry from one surface — without dropping back to the Windows desktop.
   CSS), import / export of eDEX-UI themes, a custom CSS stylesheet with
   documented hooks, and the bundled **Ember** theme for the classic orange
   look.
-- **Desktop takeover**: eDEX fills the whole screen and replaces the Windows
-  desktop — the taskbar is hidden while eDEX is showing (its dock takes over),
+- **Desktop takeover**: eDEX fills the whole screen edge to edge (square
+  corners, no border) and replaces the Windows desktop — the taskbar is
+  hidden while eDEX is showing (its dock takes over),
   Show desktop / Minimise all bring you back to eDEX, and the taskbar is
   always restored on hide, quit or crash.
 - **Two modes**: *Desktop* (full screen, sits behind your apps, so it acts as

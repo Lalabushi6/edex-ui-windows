@@ -235,6 +235,7 @@ export function openLauncher(opts = {}) {
         out.push({ key: "timer", group: "Timer", title: `Start a ${humanDuration(ms)} timer${label ? ` — ${label}` : ""}`, sub: "Alarm sound and Windows notification when it ends", icon: "timer", run: () => emit("timer-start", { ms, label }) });
       }
       if (/^stop ?watch$/i.test(q)) out.push({ key: "stopwatch", group: "Timer", title: "Start the stopwatch", sub: "Timer widget", icon: "timer", run: () => emit("stopwatch-start") });
+      if (/^(pomodoro|focus( timer| session)?)$/i.test(q)) out.push({ key: "pomodoro", group: "Timer", title: "Start a focus session", sub: "Pomodoro cycles in the Timer widget", icon: "tomato", run: () => emit("pomodoro-start") });
 
       // Shell commands: "$ ipconfig /all"
       const shellCmd = /^\$\s*(\S.*)$/.exec(q);

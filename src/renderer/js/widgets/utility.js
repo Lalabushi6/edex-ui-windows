@@ -83,6 +83,64 @@ defineWidget({
   }
 });
 
+// ── Screen time ─────────────────────────────────────────────────────────────
+// Focused-app time per day, tracked by the main process (see
+// main/lib/screentime.js); stored only on this PC.
+const hm = (s) => {
+  const m = Math.round(s / 60);
+  if (m < 1) return "<1m";
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+};
+
+defineWidget({
+  id: "screentime",
+  order: 5.5,
+  title: "Screen Time",
+  column: "right",
+  create(panel) {
+    let offset = 0;
+    const week = h("div", { class: "st-week" });
+    const list = h("div", { class: "st-list" });
+    const off = h("div", { class: "empty", hidden: true }, "Screen time is off (Settings → Privacy)");
+    const dayBtn = h("button", { class: "icon-btn sm", type: "button", title: "Show yesterday" }, icon("back"));
+    panel.tools.append(dayBtn);
+    panel.body.append(week, list, off);
+
+    const render = (d) => {
+      off.hidden = d.enabled;
+      week.hidden = list.hidden = !d.enabled;
+      panel.setSub(`${offset ? "YESTERDAY" : "TODAY"} · ${hm(d.total)}`);
+      const max = Math.max(1, ...d.week.map((w) => w.seconds));
+      const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
+      week.replaceChildren(...d.week.map((w) => {
+        const date = new Date(`${w.day}T12:00:00`);
+        return h("div", { class: `st-day${w.day === d.day ? " current" : ""}`, title: `${date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}: ${hm(w.seconds)}` },
+          h("span", { class: "st-col" }, h("i", { style: { height: `${Math.max(3, (w.seconds / max) * 100)}%` } })),
+          h("span", { class: "st-lbl" }, dayFmt.format(date)));
+      }));
+      const top = d.apps.slice(0, 6);
+      const topMax = Math.max(1, top[0]?.seconds || 1);
+      list.replaceChildren(...(top.length ? top.map((a) => h("div", { class: "st-row", title: `${a.name}: ${hm(a.seconds)}` },
+        h("span", { class: "st-name" }, a.name),
+        h("span", { class: "st-bar" }, h("i", { style: { width: `${(a.seconds / topMax) * 100}%` } })),
+        h("span", { class: "st-time" }, hm(a.seconds)))) : [h("div", { class: "empty" }, offset ? "Nothing recorded yesterday" : "Counting — check back in a few minutes")]));
+    };
+    const p = poll(async () => render(await api.screenTime.get(offset)), 60000);
+    dayBtn.addEventListener("click", () => {
+      offset = offset ? 0 : 1;
+      dayBtn.replaceChildren(icon(offset ? "forward" : "back"));
+      dayBtn.title = offset ? "Show today" : "Show yesterday";
+      p.kick();
+    });
+    const unwatch = settings.watch("screenTime", () => p.kick());
+    panel.el.addEventListener("contextmenu", (e) => contextMenu(e, [
+      { label: settings.get("screenTime") !== false ? "Pause tracking" : "Resume tracking", icon: "timer", run: () => settings.set({ screenTime: settings.get("screenTime") === false }) },
+      { label: "Clear history", icon: "trash", danger: true, run: async () => { await api.screenTime.clear(); p.kick(); toast("Screen time history cleared", { level: "ok" }); } }
+    ]));
+    return { destroy() { p.stop(); unwatch(); } };
+  }
+});
+
 // ── Timer / stopwatch ───────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, "0");
 function clockText(ms, tenths) {
@@ -98,13 +156,74 @@ function clockText(ms, tenths) {
 const state = {
   mode: "timer",
   timer: { duration: 5 * 60000, remaining: 5 * 60000, endsAt: 0, running: false, label: "" },
-  watch: { elapsed: 0, startedAt: 0, running: false, laps: [] }
+  watch: { elapsed: 0, startedAt: 0, running: false, laps: [] },
+  pomo: { phase: "work", done: 0, duration: 0, remaining: 0, endsAt: 0, running: false }
 };
 const ALARM_ID = "edex-timer";
+const POMO_ID = "edex-pomodoro";
+
+// ── Pomodoro ────────────────────────────────────────────────────────────────
+// Focus / short break cycles with a long break every N rounds. Breaks start
+// on their own when a focus session ends; the next focus waits for the user.
+const PHASES = { work: "Focus", break: "Short break", long: "Long break" };
+const pomoMinutes = (phase) => Number(settings.get(phase === "work" ? "pomodoroWork" : phase === "long" ? "pomodoroLong" : "pomodoroBreak"))
+  || { work: 25, break: 5, long: 15 }[phase];
+const pomoRounds = () => Number(settings.get("pomodoroRounds")) || 4;
+
+function pomoReset(phase = state.pomo.phase) {
+  const p = state.pomo;
+  p.phase = phase;
+  p.duration = pomoMinutes(phase) * 60000;
+  p.remaining = p.duration;
+  p.running = false;
+  api.alarm.clear(POMO_ID).catch(() => {});
+}
+function pomoStart() {
+  const p = state.pomo;
+  if (!p.duration || p.remaining <= 0) pomoReset();
+  p.endsAt = Date.now() + p.remaining;
+  p.running = true;
+  api.alarm.set({ id: POMO_ID, inMs: p.remaining, label: PHASES[p.phase] }).catch(() => {});
+}
+function pomoPause() {
+  const p = state.pomo;
+  p.remaining = Math.max(0, p.endsAt - Date.now());
+  p.running = false;
+  api.alarm.clear(POMO_ID).catch(() => {});
+}
+function pomoNext(finished) {
+  const p = state.pomo;
+  if (p.phase === "work") {
+    if (finished) p.done++;
+    pomoReset(p.done > 0 && p.done % pomoRounds() === 0 ? "long" : "break");
+    if (finished) pomoStart();
+  } else {
+    pomoReset("work");
+  }
+}
+settings.watch(["pomodoroWork", "pomodoroBreak", "pomodoroLong"], () => {
+  const p = state.pomo;
+  if (!p.running && p.remaining === p.duration) { pomoReset(); emit("timer-changed"); }
+});
+settings.watch(["pomodoroRounds"], () => emit("timer-changed"));
 
 // Module level so timers started from the launcher work (and ring) even when
 // the Timer widget is hidden; a mounted widget re-renders on "timer-changed".
 api.alarm.onFired(({ id }) => {
+  if (id === POMO_ID) {
+    const p = state.pomo;
+    if (!p.running) return;
+    const wasWork = p.phase === "work";
+    pomoNext(true);
+    sfx.play("alarm");
+    if (wasWork) {
+      toast(`Focus session done (${p.done} today) — ${PHASES[p.phase].toLowerCase()}, ${pomoMinutes(p.phase)} min`, { level: "ok", timeout: 8000 });
+    } else {
+      toast("Break over", { level: "ok", timeout: 15000, action: { label: "Start focus", run: () => { pomoStart(); emit("timer-changed"); } } });
+    }
+    emit("timer-changed");
+    return;
+  }
   if (id !== ALARM_ID) return;
   const t = state.timer;
   t.running = false;
@@ -126,6 +245,16 @@ on("timer-start", ({ ms, label = "" } = {}) => {
   toast(`Timer started: ${clockText(ms, false)}${t.label ? ` — ${t.label}` : ""}`, { level: "ok", timeout: 2200 });
   emit("timer-changed");
 });
+on("pomodoro-start", () => {
+  const p = state.pomo;
+  state.mode = "pomo";
+  if (!p.running) {
+    if (p.phase !== "work" || !p.duration || p.remaining <= 0) pomoReset("work");
+    pomoStart();
+  }
+  toast(`Focus session: ${pomoMinutes("work")} min`, { level: "ok", timeout: 2200 });
+  emit("timer-changed");
+});
 on("stopwatch-start", () => {
   const w = state.watch;
   if (!w.running) { w.startedAt = Date.now(); w.running = true; }
@@ -144,7 +273,8 @@ defineWidget({
     const progress = h("div", { class: "bar timer-bar" }, h("i"));
     const modeBtns = {
       timer: h("button", { class: "chip", type: "button", onclick: () => setMode("timer") }, "Timer"),
-      watch: h("button", { class: "chip", type: "button", onclick: () => setMode("watch") }, "Stopwatch")
+      watch: h("button", { class: "chip", type: "button", onclick: () => setMode("watch") }, "Stopwatch"),
+      pomo: h("button", { class: "chip", type: "button", title: "Pomodoro focus cycles", onclick: () => setMode("pomo") }, "Focus")
     };
     const presets = h("div", { class: "timer-presets" },
       ...[1, 5, 10, 25].map((m) => h("button", { class: "chip", type: "button", onclick: () => setDuration(m * 60000) }, `${m}m`)),
@@ -152,9 +282,12 @@ defineWidget({
     const startBtn = h("button", { class: "btn sm primary", type: "button", onclick: () => toggle() }, "Start");
     const secondBtn = h("button", { class: "btn sm", type: "button", onclick: () => second() }, "Reset");
     const laps = h("div", { class: "timer-laps" });
+    const pomoPhase = h("span", { class: "pomo-phase" });
+    const pomoDots = h("span", { class: "pomo-dots" });
+    const pomoInfo = h("div", { class: "pomo-info", title: "Right-click to change lengths" }, pomoPhase, pomoDots);
     panel.body.append(
-      h("div", { class: "timer-modes" }, modeBtns.timer, modeBtns.watch),
-      face, progress, presets,
+      h("div", { class: "timer-modes" }, modeBtns.timer, modeBtns.watch, modeBtns.pomo),
+      face, progress, presets, pomoInfo,
       h("div", { class: "timer-actions" }, startBtn, secondBtn),
       laps);
 
@@ -163,16 +296,40 @@ defineWidget({
     const timerLeft = () => (state.timer.running ? Math.max(0, state.timer.endsAt - now()) : state.timer.remaining);
     const watchElapsed = () => state.watch.elapsed + (state.watch.running ? now() - state.watch.startedAt : 0);
 
+    const pomoLeft = () => (state.pomo.running ? Math.max(0, state.pomo.endsAt - now()) : state.pomo.remaining);
+
     function render() {
       const isTimer = state.mode === "timer";
+      const isPomo = state.mode === "pomo";
       modeBtns.timer.classList.toggle("active", isTimer);
-      modeBtns.watch.classList.toggle("active", !isTimer);
+      modeBtns.watch.classList.toggle("active", state.mode === "watch");
+      modeBtns.pomo.classList.toggle("active", isPomo);
       presets.hidden = !isTimer;
-      progress.hidden = !isTimer;
-      laps.hidden = isTimer;
+      progress.hidden = state.mode === "watch";
+      laps.hidden = state.mode !== "watch";
+      pomoInfo.hidden = !isPomo;
+      panel.el.classList.toggle("pomo-break", isPomo && state.pomo.phase !== "work");
       const t = state.timer;
       const w = state.watch;
-      if (isTimer) {
+      if (isPomo) {
+        const p = state.pomo;
+        if (!p.duration) pomoReset("work");
+        const left = pomoLeft();
+        const text = clockText(left + (p.running ? 999 : 0), false);
+        if (display.data !== text) display.data = text;
+        progress.firstElementChild.style.width = `${p.duration ? (left / p.duration) * 100 : 0}%`;
+        setText(startBtn, p.running ? "Pause" : (left > 0 && left < p.duration ? "Resume" : "Start"));
+        setText(secondBtn, "Skip");
+        face.classList.remove("done");
+        const rounds = pomoRounds();
+        const filled = p.phase === "long" ? rounds : p.done % rounds;
+        setText(pomoPhase, p.phase === "work" ? `${PHASES.work} ${(p.done % rounds) + 1}/${rounds}` : PHASES[p.phase]);
+        if (pomoDots.childElementCount !== rounds || pomoDots.dataset.filled !== String(filled)) {
+          pomoDots.dataset.filled = String(filled);
+          pomoDots.replaceChildren(...Array.from({ length: rounds }, (_, i) => h("i", { class: i < filled ? "on" : "" })));
+        }
+        panel.setSub(p.running ? `ENDS ${new Date(p.endsAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : (p.done ? `${p.done} DONE` : ""));
+      } else if (isTimer) {
         const left = timerLeft();
         if (t.running && left <= 0) { t.running = false; t.remaining = 0; }
         const text = clockText(left + (t.running ? 999 : 0), false);
@@ -197,9 +354,9 @@ defineWidget({
     function schedule() {
       clearTimeout(frame);
       frame = null;
-      const running = state.mode === "timer" ? state.timer.running : state.watch.running;
+      const running = state.mode === "watch" ? state.watch.running : state.mode === "pomo" ? state.pomo.running : state.timer.running;
       if (!running || !appActive()) return;
-      frame = setTimeout(render, state.mode === "timer" ? 250 : 100);
+      frame = setTimeout(render, state.mode === "watch" ? 100 : 250);
     }
     const wake = poll(render, 5000, { fixed: true });
 
@@ -226,8 +383,18 @@ defineWidget({
       state.timer.label = rest.join(" ").slice(0, 60);
       setDuration(ms);
     }
+    async function pomoLengths() {
+      const cur = ["pomodoroWork", "pomodoroBreak", "pomodoroLong", "pomodoroRounds"].map((k) => settings.get(k));
+      const value = await prompt({ title: "Focus timer", message: "Focus / short break / long break minutes / rounds before a long break, e.g. \"25/5/15/4\".", value: cur.join("/") });
+      if (!value) return;
+      const n = value.split(/[\s/,]+/).map(Number);
+      if (n.length < 3 || n.some((x) => !Number.isFinite(x) || x <= 0)) { toast("Could not read those lengths", { level: "warn" }); return; }
+      settings.set({ pomodoroWork: n[0], pomodoroBreak: n[1], pomodoroLong: n[2], ...(n[3] ? { pomodoroRounds: n[3] } : {}) });
+    }
     function toggle() {
-      if (state.mode === "timer") {
+      if (state.mode === "pomo") {
+        if (state.pomo.running) pomoPause(); else pomoStart();
+      } else if (state.mode === "timer") {
         const t = state.timer;
         if (t.running) {
           t.remaining = timerLeft();
@@ -246,7 +413,9 @@ defineWidget({
       render();
     }
     function second() {
-      if (state.mode === "timer") {
+      if (state.mode === "pomo") {
+        pomoNext(false);
+      } else if (state.mode === "timer") {
         const t = state.timer;
         t.running = false;
         t.remaining = t.duration;
@@ -268,6 +437,8 @@ defineWidget({
     }
     panel.el.addEventListener("contextmenu", (e) => contextMenu(e, [
       { label: "Set timer…", icon: "timer", run: () => { setMode("timer"); custom(); } },
+      { label: "Focus lengths…", icon: "tomato", run: () => { setMode("pomo"); pomoLengths(); } },
+      state.mode === "pomo" && { label: "Reset focus cycle", icon: "refresh", run: () => { state.pomo.done = 0; pomoReset("work"); render(); } },
       state.mode === "watch" && state.watch.laps.length && { label: "Copy laps", icon: "copy", run: () => api.clip.copy(state.watch.laps.map((l) => `Lap ${l.n}\t${clockText(l.split, true)}\t${clockText(l.total, true)}`).join("\n")) }
     ]));
     renderLaps();

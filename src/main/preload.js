@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld("edex", {
     reveal: invoke("fs:reveal"),
     properties: invoke("fs:properties"),
     icons: invoke("fs:icons"),
+    thumbnails: invoke("fs:thumbnails"),
     search: invoke("fs:search"),
     quickIndex: invoke("fs:quickIndex"),
     startDrag: (paths) => ipcRenderer.send("fs:startDrag", paths),
@@ -132,6 +133,10 @@ contextBridge.exposeInMainWorld("edex", {
     pings: invoke("net:pings"),
     latency: invoke("net:latency"),
     weather: invoke("net:weather")
+  },
+  screenTime: {
+    get: invoke("screentime:get"),
+    clear: invoke("screentime:clear")
   },
   wifi: {
     status: invoke("wifi:status"),

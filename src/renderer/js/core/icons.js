@@ -88,7 +88,8 @@ const P = {
   storm: '<path d="M7 15a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 5.1 5 5 0 0 1 17.5 15z"/><path d="M13 13l-3 4h4l-3 4"/>',
   fog: '<path d="M4 9h16M3 13h18M5 17h14"/>',
   gauge: '<path d="M4.5 18a9 9 0 1 1 15 0"/><path d="M12 13l4-4M12 13h.01"/>',
-  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  eq: '<path d="M6 4v16M12 4v16M18 4v16"/><path d="M4 14h4M10 8h4M16 16h4"/>',  tomato: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 6V3M9 6.5c1-1.5 5-1.5 6 0M12 6l-2.5-2M12 6l2.5-2"/>'
 };
 
 // The eDEX-UI logo (ring, square and "e"), drawn in the theme colour.

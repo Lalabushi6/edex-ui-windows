@@ -209,7 +209,9 @@ export function popover(anchor, build, { className = "", onClose } = {}) {
   const r = panel.getBoundingClientRect();
   const { innerWidth: W, innerHeight: H } = window;
   panel.style.left = `${Math.max(4, Math.min(a.right - r.width, W - r.width - 4))}px`;
-  panel.style.top = `${Math.max(4, Math.min(a.bottom + 6, H - r.height - 4))}px`;
+  // Opens upward when there is no room below (anchors in bottom bars).
+  const below = a.bottom + 6 + r.height <= H - 4 || a.top - 6 - r.height < 4;
+  panel.style.top = `${Math.max(4, below ? Math.min(a.bottom + 6, H - r.height - 4) : a.top - 6 - r.height)}px`;
   const onDown = (e) => { if (!panel.contains(e.target) && !anchor.contains(e.target)) close(); };
   const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } };
   const timer = setTimeout(() => {

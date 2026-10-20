@@ -128,9 +128,25 @@ const SCHEMA = {
   mediaVolume: [int(0, 100), 80],
   mediaShuffle: [bool(), false],
   mediaRepeat: [oneOf("off", "all", "one"), "off"],
+  mediaEqOn: [bool(), false],
+  mediaEqPreset: [str(32), "flat"],
+  mediaEq: [(v, d) => (Array.isArray(v) && v.length === 10 ? v.map((x) => Math.max(-12, Math.min(12, Math.round(Number(x) * 2) / 2 || 0))) : d), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+
+  // Timer
+  pomodoroWork: [int(1, 120), 25],
+  pomodoroBreak: [int(1, 60), 5],
+  pomodoroLong: [int(1, 90), 15],
+  pomodoroRounds: [int(2, 8), 4],
+
+  // Alerts
+  alertBattery: [bool(), true],
+  alertBatteryLevel: [int(5, 50), 20],
+  alertDisk: [bool(), true],
+  alertDiskGb: [int(1, 200), 5],
 
   // Network & privacy
   allowNetworkGeolocation: [bool(), true],
+  screenTime: [bool(), true],
   clipboardHistory: [bool(), true],
   clipboardMax: [int(5, 200), 40]
 };
