@@ -80,6 +80,22 @@ function layoutSketch(values) {
   }, ...areas.map((a) => h("span", { class: `sketch-${a}`, style: { gridArea: a } }, a === "bottom" ? bottomLabel : SKETCH_LABEL[a])));
 }
 
+// Live status of the desktop takeover (refreshed while the page is open).
+function takeoverStatus() {
+  const text = h("span", { class: "mono", style: { fontSize: ".8rem" } }, "…");
+  const refresh = async () => {
+    const s = await api.app.takeoverState().catch(() => null);
+    if (!s) { text.textContent = "unavailable"; return; }
+    const bar = s.taskbar ? (s.taskbar.visible ? "visible" : "hidden") : "unknown";
+    text.textContent = !s.active ? `Off · Windows taskbar ${bar}`
+      : `On · Windows taskbar ${bar}${s.hiddenByEdex ? " (by eDEX)" : settings.get("mode") === "overlay" ? " (overlay covers it)" : ""}`;
+  };
+  refresh();
+  const timer = setInterval(refresh, 1500);
+  pageCleanups.push(() => clearInterval(timer));
+  return row("Status", "If the taskbar ever stays hidden after eDEX closes unexpectedly, starting eDEX again puts it back.", text);
+}
+
 // Boot logo: a title or ASCII art, edited in its own dialog.
 function bootLogoRow() {
   const summary = h("span", { class: "muted", style: { fontSize: ".82rem" } }, describeLogo(settings.get("bootLogo")));
@@ -185,6 +201,11 @@ async function buildPage(id) {
       row("Close button hides to tray", "Alt+F4 keeps eDEX running in the tray instead of quitting.", toggle("closeToTray")),
       row("Start with Windows", "Launch eDEX (hidden) when you sign in.", toggle("openAtLogin")),
       row("Start hidden", "Stay in the tray at launch until summoned.", toggle("startHidden")),
+      h("h3", null, "Desktop takeover"),
+      row("Take over the desktop", "eDEX fills the whole screen and stands in for the Windows desktop. In Desktop mode the Windows taskbar is hidden while eDEX is on screen (eDEX's dock lists your windows); hiding eDEX (Ctrl+`) or quitting brings it straight back.", toggle("takeover")),
+      row("Hide the Windows taskbar", "Desktop mode only. Maximised apps use the full screen.", toggle("takeoverHideTaskbar")),
+      row("Keep eDEX on screen", "If Show desktop (Win+D) or Minimise all hides eDEX, it comes straight back.", toggle("takeoverKeepVisible")),
+      takeoverStatus(),
       h("h3", null, "Global hotkeys"),
       row("Show / hide eDEX", "Works from any app. Click, then press a new combination.", hotkey("hotkeyToggle")),
       row("Open launcher", "Summons eDEX straight into search.", hotkey("hotkeyLauncher")),

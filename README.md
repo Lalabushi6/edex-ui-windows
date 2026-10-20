@@ -66,6 +66,10 @@ telemetry from one surface — without dropping back to the Windows desktop.
   CSS), import / export of eDEX-UI themes, a custom CSS stylesheet with
   documented hooks, and the bundled **Ember** theme for the classic orange
   look.
+- **Desktop takeover**: eDEX fills the whole screen and replaces the Windows
+  desktop — the taskbar is hidden while eDEX is showing (its dock takes over),
+  Show desktop / Minimise all bring you back to eDEX, and the taskbar is
+  always restored on hide, quit or crash.
 - **Two modes**: *Desktop* (full screen, sits behind your apps, so it acts as
   your desktop) and *Overlay* (always on top, summoned and dismissed by hotkey).
 - Tray icon, single instance, start with Windows, session restore of tabs,

@@ -16,6 +16,7 @@ const { registerDesktop } = require("./ipc/desktop");
 const { registerNetwork, registerClipboard, registerNotes, registerThemes, registerAlarms } = require("./ipc/extras");
 const { registerMedia } = require("./ipc/media");
 const { registerKeyboards } = require("./ipc/keyboards");
+const { Takeover } = require("./lib/takeover");
 const { Telemetry } = require("./lib/telemetry");
 const { IconService } = require("./lib/icon-service");
 
@@ -40,6 +41,7 @@ function start() {
   let icons;
   let alarms;
   let keyboards;
+  let takeover;
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -100,13 +102,20 @@ function start() {
     bridge.warmUp();
     telemetry.warm();
 
-    windows.create();
+    // Desktop takeover: first put back a taskbar a crashed session may have
+    // left hidden, then follow the window.
+    takeover = new Takeover({ settings, windows, bridge, userData: app.getPath("userData") });
+    handle("takeover:state", () => takeover.state());
+    const recovering = takeover.recover();
+
+    const win = windows.create();
+    recovering.finally(() => takeover.attach(win));
     createTray({ windows, settings, quit });
     registerHotkeys();
     applyLoginItem();
     settings.on("change", (changed) => {
       if ("hotkeyToggle" in changed || "hotkeyLauncher" in changed) registerHotkeys();
-      if ("openAtLogin" in changed) applyLoginItem();
+      if ("openAtLogin" in changed || "takeover" in changed) applyLoginItem();
     });
 
     // Rebuilding the installed-app index runs Get-StartApps (about a second
@@ -136,18 +145,29 @@ function start() {
     }
   }
 
+  // At sign-in eDEX normally starts in the tray; when it has taken over the
+  // desktop it starts on screen instead.
   function applyLoginItem() {
     const openAtLogin = settings.get("openAtLogin");
-    const opts = { openAtLogin, args: ["--hidden"] };
+    const extra = settings.get("takeover") === true ? [] : ["--hidden"];
+    const opts = { openAtLogin, args: extra };
     if (!app.isPackaged) {
       opts.path = process.execPath;
-      opts.args = [path.resolve(app.getAppPath()), "--hidden"];
+      opts.args = [path.resolve(app.getAppPath()), ...extra];
     }
     try { app.setLoginItemSettings(opts); } catch (_) {}
   }
 
-  app.on("before-quit", () => {
+  // Quitting waits (briefly) for the taskbar to be put back.
+  let restoredForQuit = false;
+  app.on("before-quit", (event) => {
     if (windows) windows.quitting = true;
+    if (restoredForQuit || !takeover?.hidden) return;
+    event.preventDefault();
+    takeover.restore().finally(() => {
+      restoredForQuit = true;
+      app.quit();
+    });
   });
 
   app.on("will-quit", () => {

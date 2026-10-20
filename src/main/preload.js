@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("edex", {
     hide: invoke("app:hide"),
     devtools: invoke("app:devtools"),
     reload: invoke("app:reload"),
+    takeoverState: invoke("takeover:state"),
     onVisibility: subscribe("app:visibility"),
     onMode: subscribe("app:mode"),
     onCommand: subscribe("app:command"),

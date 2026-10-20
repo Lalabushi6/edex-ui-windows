@@ -99,6 +99,11 @@ async function registerCommands() {
   cmd("settings.layout", "Layout settings", () => openSettings("layout"), { icon: "layout", keywords: "arrange columns panels topbar dock" });
   cmd("settings.theme", "Theme editor", () => openThemeEditor(), { icon: "palette", keywords: "colours colors fonts theme customise customize css" });
   cmd("settings.css", "Edit custom CSS", () => openCssEditor(), { icon: "code", keywords: "style css customise customize" });
+  cmd("takeover.toggle", "Toggle desktop takeover", () => {
+    const on = settings.get("takeover") !== true;
+    settings.set({ takeover: on });
+    toast(on ? "eDEX has taken over the desktop" : "Desktop takeover off — Windows taskbar restored", { timeout: 2200 });
+  }, { icon: "desktop", keywords: "fullscreen taskbar hide windows desktop shell replace kiosk" });
   cmd("mode.toggle", "Switch desktop / overlay mode", () => settings.set({ mode: settings.get("mode") === "overlay" ? "desktop" : "overlay" }), { icon: "window", keywords: "overlay desktop hud always on top" });
   cmd("app.hide", "Hide eDEX", () => api.app.hide(), { icon: "minimize", keywords: "show desktop minimize" });
   cmd("app.reload", "Reload interface", () => api.app.reload(), { icon: "refresh" });
