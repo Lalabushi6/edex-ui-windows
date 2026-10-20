@@ -1,7 +1,7 @@
 {
   "name": "edex-ui-windows",
   "productName": "eDEX-UI",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A sci-fi desktop shell for Windows: launcher, window dock, terminal, file explorer and live system telemetry in one full-screen surface.",
   "main": "src/main/main.js",
   "scripts": {
@@ -47,8 +47,18 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
