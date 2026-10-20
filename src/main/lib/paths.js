@@ -34,18 +34,30 @@ function isDriveRoot(p) {
   return normalizeKey(resolved) === normalizeKey(path.parse(resolved).root);
 }
 
+// Credential stores and token files (directories or single files).
 const SENSITIVE_PATHS = [
-  ".ssh", ".aws", ".gnupg", ".azure", ".kube", ".docker",
-  path.join(".config", "gcloud"),
+  ".ssh", ".aws", ".gnupg", ".azure", ".kube", ".docker", ".password-store",
+  ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc",
+  path.join(".config", "gcloud"), path.join(".config", "gh"),
   path.join("AppData", "Local", "Microsoft", "Credentials"),
   path.join("AppData", "Roaming", "Microsoft", "Credentials"),
   path.join("AppData", "Local", "Microsoft", "Vault"),
   path.join("AppData", "Roaming", "Microsoft", "Protect"),
+  path.join("AppData", "Roaming", "Microsoft", "Crypto"),
+  path.join("AppData", "Roaming", "GitHub CLI"),
   path.join("AppData", "Local", "Google", "Chrome", "User Data"),
   path.join("AppData", "Local", "Microsoft", "Edge", "User Data"),
   path.join("AppData", "Local", "BraveSoftware", "Brave-Browser", "User Data"),
+  path.join("AppData", "Local", "Vivaldi", "User Data"),
+  path.join("AppData", "Roaming", "Opera Software"),
   path.join("AppData", "Roaming", "Mozilla", "Firefox", "Profiles")
 ].map((rel) => path.join(HOME, rel));
+
+// Files the app itself keeps secret (e.g. the encrypted AI key), added at
+// startup once userData is known.
+function addSensitive(p) {
+  if (typeof p === "string" && p) SENSITIVE_PATHS.push(p);
+}
 
 const systemDrive = `${process.env.SystemDrive || "C:"}\\`;
 const PROTECTED_WRITE_ROOTS = [
@@ -141,6 +153,7 @@ module.exports = {
   isUncPath,
   isDriveRoot,
   isSensitive,
+  addSensitive,
   canonicalize,
   forRead,
   forWrite,

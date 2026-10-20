@@ -67,11 +67,6 @@ export function pathsEqual(a, b) {
   return pathKey(a) === pathKey(b);
 }
 
-export function isInside(parent, child) {
-  const p = pathKey(parent), c = pathKey(child);
-  return !!p && (c === p || c.startsWith(`${p}\\`));
-}
-
 export function basename(p) {
   const s = normPath(p).replace(/\\+$/, "");
   const i = s.lastIndexOf("\\");

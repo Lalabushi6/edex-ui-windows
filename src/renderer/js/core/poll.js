@@ -131,7 +131,3 @@ export function poll(fn, intervalMs, { immediate = true, runHidden = false, fixe
 export function appActive() {
   return isActive();
 }
-
-export function appFocused() {
-  return windowFocused;
-}

@@ -31,6 +31,13 @@ defineWidget({
 
     const render = (s) => {
       state = s;
+      if (s?.unsafe) {
+        for (const el of [head, counts, last, files]) el.hidden = true;
+        empty.hidden = false;
+        setText(empty, "This repository's own settings run external programs (filters or fsmonitor), so eDEX doesn't inspect it. Use git in the terminal.");
+        panel.setSub(fmt.basename(s.root).toUpperCase());
+        return;
+      }
       const repo = !!s?.repo;
       for (const el of [head, counts, last, files]) el.hidden = !repo;
       empty.hidden = repo;
@@ -73,7 +80,7 @@ defineWidget({
     });
     panel.tools.append(h("button", { class: "icon-btn sm", type: "button", title: "Refresh", onclick: () => p.kick() }, icon("refresh")));
     panel.el.addEventListener("contextmenu", (e) => {
-      if (!state?.repo) return;
+      if (!state?.repo || state.unsafe) return;
       contextMenu(e, [
         { label: "Open repository in explorer", icon: "folder", run: () => emit("open-path", { path: state.root }) },
         { label: "Terminal here", icon: "terminal", run: () => emit("open-terminal", { cwd: state.root }) },

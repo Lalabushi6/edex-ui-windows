@@ -112,10 +112,6 @@ export async function exeIcons(paths) {
   return Object.fromEntries(paths.map((p) => [p, cache.exeIcons.get(p)]));
 }
 
-export function appsCache() {
-  return cache.apps || [];
-}
-
 export function loadAppsCached(force) {
   return loadApps(force);
 }

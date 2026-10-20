@@ -40,7 +40,6 @@ export function clear(el) {
 }
 
 export const $ = (selector, root = document) => root.querySelector(selector);
-export const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
 export function isTyping(target = document.activeElement) {
   if (!target) return false;

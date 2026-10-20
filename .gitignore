@@ -1,9 +1,8 @@
-# Dependencies — restored via `npm install`, never committed. Vendoring them
-# pins unauditable prebuilt binaries (node-pty ships compiled .node artifacts)
-# into history and makes supply-chain review impractical.
+# Dependencies: restored with `npm install` / `npm ci`, never committed.
 node_modules/
 
-# Build output
+# Build output (the installer and portable .exe are built by `npm run dist`
+# or by GitHub Actions)
 dist/
 dist-smoke/
 out/
@@ -12,13 +11,17 @@ out/
 # Local copy of the pre-rebuild (v1) source
 .backup/
 
-# Runtime state
+# Local tooling and editor settings
+.claude/
+.vscode/
+.idea/
+
+# Runtime state and logs
 .edex-ui-settings.json
 *.log
 npm-debug.log*
 
-# Editor / OS
-.vscode/
-.idea/
+# OS files
 Thumbs.db
 Desktop.ini
+.DS_Store

@@ -2,17 +2,20 @@
   "name": "edex-ui-windows",
   "productName": "eDEX-UI",
   "version": "2.0.0",
-  "description": "A sci-fi desktop shell for Windows: launcher, window dock, terminal, file explorer and live system telemetry in one full-screen overlay.",
+  "description": "A sci-fi desktop shell for Windows: launcher, window dock, terminal, file explorer and live system telemetry in one full-screen surface.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "set EDEX_DEV_WINDOWED=1&& electron .",
     "check": "node scripts/check.js",
-    "build": "electron-builder build --windows"
+    "dist": "electron-builder --win --publish never",
+    "dist:dir": "electron-builder --win --dir",
+    "build": "npm run dist"
   },
   "build": {
     "appId": "com.edex-ui.windows",
     "productName": "eDEX-UI",
+    "copyright": "eDEX-UI Windows contributors. Licensed under the GPL-3.0.",
     "asar": true,
     "compression": "maximum",
     "npmRebuild": false,
@@ -24,21 +27,46 @@
       "src/**/*",
       "themes/**/*",
       "keyboards/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/node_modules/**/*.{md,markdown,d.ts,d.mts,d.cts,ts.map}",
+      "!**/node_modules/**/{test,tests,__tests__,example,examples,docs}/**",
+      "!**/node_modules/**/*.test.js",
+      "!**/node_modules/node-pty/{src,deps,scripts,build,third_party}/**",
+      "!**/node_modules/node-pty/prebuilds/{darwin-arm64,darwin-x64,win32-arm64}/**"
     ],
+    "afterPack": "./build/afterPack.js",
+    "electronFuses": {
+      "runAsNode": true,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": false,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
+    },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
-    }
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "eDEX-UI",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "eDEX-UI-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "eDEX-UI-${version}-portable.${ext}"
+    },
+    "publish": null
   },
   "keywords": [
     "edex",
@@ -48,12 +76,16 @@
     "electron",
     "windows"
   ],
-  "author": "",
+  "author": "Lalabushi6",
   "license": "GPL-3.0-only",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "electron": "^41.1.0",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "rcedit": "^5.0.2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

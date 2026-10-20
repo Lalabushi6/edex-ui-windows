@@ -111,7 +111,21 @@ telemetry from one surface — without dropping back to the Windows desktop.
   the original eDEX-UI themes (with globe colours and colour filters) plus your
   own, drag-to-reorder widgets, interface scaling.
 
-## Getting started
+## Download
+
+Grab the latest build from the repository's **Releases** page:
+
+- `eDEX-UI-Setup-<version>.exe`: installer (per user, no admin rights;
+  Start menu and desktop shortcuts, uninstaller).
+- `eDEX-UI-<version>-portable.exe`: a single file that runs without
+  installing; settings go to `%APPDATA%\eDEX-UI` like the installed version.
+
+Windows 10 (1809) or 11, 64-bit. The executables aren't code-signed, so
+SmartScreen may warn the first time: **More info → Run anyway**.
+
+## Building from source
+
+Needs [Node.js](https://nodejs.org) 20 or newer and Git.
 
 ```bash
 npm install
@@ -121,15 +135,24 @@ npm install
 npm start
 ```
 
-`npm run dev` starts it in a resizable window instead of full screen.
-`npm run check` runs the static checks. `npm run build` produces an installer
-and a portable `.exe` in `dist/`.
+| Command | What it does |
+|---|---|
+| `npm start` | Run eDEX from source (full screen) |
+| `npm run dev` | Run it in a resizable window |
+| `npm run check` | Static checks (syntax, imports, themes, keyboard layouts) |
+| `npm run dist` | Build the installer and portable `.exe` into `dist/` |
+| `npm run dist:dir` | Build just the unpacked app (`dist/win-unpacked/eDEX-UI.exe`) |
 
-The build config sets `win.signAndEditExecutable: false` because
-electron-builder's executable-editing tool cannot be unpacked without Windows
-Developer Mode (symlink privilege). The app still shows its icon in the
-taskbar, tray and installer; to embed the icon in `eDEX-UI.exe` itself, turn
-on Developer Mode and remove that flag.
+No Developer Mode, admin rights or code-signing certificate is needed:
+the icon and version details are stamped onto `eDEX-UI.exe` by
+[`build/afterPack.js`](build/afterPack.js) with `rcedit`, and the packaged
+app is hardened with Electron fuses (no `--inspect`, no `NODE_OPTIONS`,
+code loads only from the app archive).
+
+**GitHub Actions** ([`.github/workflows/build.yml`](.github/workflows/build.yml))
+builds both executables on every push; pushing a version tag (`v2.0.1`)
+publishes them as a GitHub Release. See [docs/PUBLISHING.md](docs/PUBLISHING.md)
+for putting the project on GitHub and cutting releases.
 
 See [USER_MANUAL.md](USER_MANUAL.md) for usage and shortcuts, and
 [THEME_GUIDE.md](THEME_GUIDE.md) to make themes.

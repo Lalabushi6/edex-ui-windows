@@ -50,19 +50,30 @@ function registerTools({ settings, windows }) {
   });
 
   // ── Git status ───────────────────────────────────────────────────────────
+  // This runs on its own for whatever folder the terminal enters, so a
+  // repository whose own config would make git start programs (fsmonitor,
+  // clean/smudge filters, includes that could add either) is not inspected:
+  // a downloaded folder must never be able to run code just by being opened.
+  const UNSAFE_REPO_CONFIG = /^\s*(fsmonitor|clean|smudge|process|textconv|hookspath|sshcommand|askpass|pager|editor)\s*=|^\s*\[\s*(include|includeif)\b/im;
   handle("git:status", async (_e, cwd) => {
     let dir;
     try { dir = await paths.forRead(asString(cwd, "folder")); } catch (_) { return { repo: false }; }
     if (paths.isUncPath(dir)) return { repo: false };
-    const git = (args) => run("git", ["-c", "core.quotepath=off", "-C", dir, ...args], { timeout: 8000 });
-    const [status, top, log] = await Promise.all([
-      git(["status", "--porcelain=v2", "--branch", "--untracked-files=normal"]),
-      git(["rev-parse", "--show-toplevel"]),
+    const git = (args) => run("git", ["-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "-C", dir, ...args], { timeout: 8000 });
+    const where = await git(["rev-parse", "--show-toplevel", "--absolute-git-dir"]);
+    if (where.err && where.err.code === "ENOENT") return { repo: false, error: "nogit" };
+    if (where.code !== 0) return { repo: false };
+    const [topLine, gitDir] = where.stdout.trim().split(/\r?\n/);
+    const root = (topLine || dir).replace(/\//g, "\\");
+    let config = "";
+    try { config = await fs.promises.readFile(path.join(gitDir.replace(/\//g, "\\"), "config"), "utf8"); } catch (_) {}
+    if (UNSAFE_REPO_CONFIG.test(config)) return { repo: true, unsafe: true, root };
+    const [status, log] = await Promise.all([
+      git(["--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal"]),
       git(["log", "-1", "--format=%h%x09%s%x09%cr"])
     ]);
-    if (status.err && status.err.code === "ENOENT") return { repo: false, error: "nogit" };
     if (status.code !== 0) return { repo: false };
-    const out = { repo: true, root: top.stdout.trim().replace(/\//g, "\\"), branch: "", upstream: "", ahead: 0, behind: 0, staged: 0, modified: 0, untracked: 0, conflicts: 0, files: [] };
+    const out = { repo: true, root, branch: "", upstream: "", ahead: 0, behind: 0, staged: 0, modified: 0, untracked: 0, conflicts: 0, files: [] };
     for (const line of status.stdout.split("\n")) {
       if (line.startsWith("# branch.head ")) out.branch = line.slice(14);
       else if (line.startsWith("# branch.upstream ")) out.upstream = line.slice(18);
@@ -203,8 +214,26 @@ function registerTools({ settings, windows }) {
       await fs.promises.writeFile(path.join(kbDir, name), JSON.stringify(c, null, 2), "utf8");
       keyboards++;
     }
-    const applied = settings.set(bundle.settings);
-    return { settings: Object.keys(applied || {}).length, themes, keyboards };
+    // Command widgets run commands on a schedule; a shared settings file must
+    // not be able to start them without the user seeing what they are.
+    const incoming = { ...bundle.settings };
+    const cmds = Array.isArray(incoming.commandWidgets) ? incoming.commandWidgets.filter((w) => w && typeof w.command === "string" && w.command.trim()) : [];
+    let skippedCommands = 0;
+    if (cmds.length) {
+      const list = cmds.slice(0, 8).map((w) => `• ${String(w.title || "Command").slice(0, 40)}: ${w.command.slice(0, 160)}`).join("\n");
+      const { response } = await windows.withDialog((win) => dialog.showMessageBox(win, {
+        type: "warning",
+        buttons: ["Import without them", "Import and allow them"],
+        defaultId: 0,
+        cancelId: 0,
+        title: "Command widgets in this file",
+        message: `This settings file contains ${cmds.length} command widget${cmds.length === 1 ? "" : "s"}, which run commands on your PC automatically.`,
+        detail: `${list}${cmds.length > 8 ? `\n… and ${cmds.length - 8} more` : ""}\n\nOnly allow them if you trust where this file came from.`
+      }));
+      if (response !== 1) { delete incoming.commandWidgets; skippedCommands = cmds.length; }
+    }
+    const applied = settings.set(incoming);
+    return { settings: Object.keys(applied || {}).length, themes, keyboards, skippedCommands };
   });
 
   return { flush: () => tasks.flushSync() };
