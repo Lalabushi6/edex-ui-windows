@@ -14,8 +14,10 @@ const { APP_ORIGIN } = require("./lib/protocol");
 const DEV_WINDOWED = process.env.EDEX_DEV_WINDOWED === "1";
 
 class WindowManager {
-  constructor({ settings }) {
+  constructor({ settings, bridge = null }) {
     this.settings = settings;
+    this.bridge = bridge;
+    this.fitTimer = null;
     this.win = null;
     this.quitting = false;
     this.blurHideSuppressed = 0;
@@ -71,6 +73,8 @@ class WindowManager {
       show: false,
       frame: false,
       resizable: DEV_WINDOWED,
+      // No invisible resize frame or shadow around the full-screen surface.
+      thickFrame: DEV_WINDOWED,
       maximizable: false,
       fullscreenable: false,
       backgroundColor: "#000000",
@@ -129,7 +133,23 @@ class WindowManager {
     if (overlay) win.setAlwaysOnTop(true, this.coversScreen && !DEV_WINDOWED ? "screen-saver" : "floating");
     else win.setAlwaysOnTop(false);
     win.setBounds(this._targetBounds());
+    this.fitExact();
     this.send("app:mode", { mode: this.mode });
+  }
+
+  // Square corners, no border, and the monitor's exact physical pixels (see
+  // FitWindow in native/bridge.ps1). Electron places the window in DIPs,
+  // which at 125 % / 150 % scaling can round a pixel short.
+  fitExact() {
+    const win = this.win;
+    if (DEV_WINDOWED || !this.bridge || !win || win.isDestroyed()) return;
+    clearTimeout(this.fitTimer);
+    this.fitTimer = setTimeout(() => {
+      if (win.isDestroyed()) return;
+      let hwnd;
+      try { hwnd = Number(win.getNativeWindowHandle().readBigUInt64LE(0)); } catch (_) { return; }
+      this.bridge.call("fitWindow", { hwnd, cover: this.coversScreen }, 5000).catch(() => {});
+    }, 60);
   }
 
   _maybeHideOnBlur() {
@@ -157,6 +177,7 @@ class WindowManager {
     if (this.mode === "overlay") win.setBounds(this._targetBounds());
     if (win.isMinimized()) win.restore();
     win.show();
+    this.fitExact();
     if (this.mode !== "overlay") {
       // Windows refuses focus to background apps; a momentary topmost flip
       // reliably lifts the window above whatever currently has focus.

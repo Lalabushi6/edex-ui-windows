@@ -8,8 +8,8 @@ import { appActive, animationFps } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { emit } from "../core/bus.js";
-import { toast, contextMenu, confirm, cleanError } from "../core/ui.js";
-import { player, formatTime, isMediaPath } from "../media/player.js";
+import { toast, contextMenu, confirm, cleanError, popover } from "../core/ui.js";
+import { player, formatTime, isMediaPath, EQ_BANDS, EQ_PRESETS } from "../media/player.js";
 
 const api = window.edex;
 
@@ -72,6 +72,7 @@ export class MediaTab {
       const order = ["off", "all", "one"];
       settings.set({ mediaRepeat: order[(order.indexOf(settings.get("mediaRepeat")) + 1) % 3] });
     });
+    this.eqBtn = btn("eq", "Equalizer (E)", () => this.openEq());
     this.volIcon = btn("volume", "Mute (M)", () => p.toggleMute());
     this.volFill = h("div", { class: "mp-vol-fill" }, h("i"));
     this.vol = h("div", { class: "mp-vol", title: "Volume (↑ ↓)" }, h("i", { class: "mp-vol-bg" }), this.volFill);
@@ -81,7 +82,7 @@ export class MediaTab {
       btn("next", "Next (Shift+→)", () => p.next()),
       btn("stop", "Stop", () => p.stop()),
       this.cur, this.progress, this.dur,
-      this.shuffleBtn, this.repeatBtn,
+      this.shuffleBtn, this.repeatBtn, this.eqBtn,
       this.volIcon, this.vol,
       btn("maximize", "Fullscreen (F)", () => this.fullscreen()));
 
@@ -108,6 +109,7 @@ export class MediaTab {
     on("time", () => this.renderTime());
     on("volume", () => this.renderVolume());
     this.off.push(settings.watch(["mediaShuffle", "mediaRepeat"], () => { this.renderModes(); p.rebuildOrder(); }));
+    this.off.push(settings.watch(["mediaEqOn"], () => this.renderModes()));
 
     this.renderNow();
     this.renderList();
@@ -161,6 +163,55 @@ export class MediaTab {
     this.repeatBtn.classList.toggle("on", repeat !== "off");
     this.repeatBtn.dataset.mode = repeat === "one" ? "1" : "";
     this.repeatBtn.title = `Repeat: ${repeat}`;
+    this.eqBtn.classList.toggle("on", !!settings.get("mediaEqOn"));
+  }
+
+  // Equalizer popover: on/off, presets and ten draggable band sliders.
+  openEq() {
+    popover(this.eqBtn, () => {
+      const on = h("input", { type: "checkbox", checked: !!settings.get("mediaEqOn") });
+      on.addEventListener("change", () => settings.set({ mediaEqOn: on.checked }));
+      const preset = h("select", { class: "eq-preset" },
+        ...Object.entries(EQ_PRESETS).map(([id, p]) => h("option", { value: id }, p.label)),
+        h("option", { value: "custom" }, "Custom"));
+      preset.value = settings.get("mediaEqPreset") in EQ_PRESETS ? settings.get("mediaEqPreset") : "custom";
+      preset.addEventListener("change", () => {
+        const p = EQ_PRESETS[preset.value];
+        if (!p) return;
+        settings.set({ mediaEqPreset: preset.value, mediaEq: [...p.gains], mediaEqOn: true });
+        on.checked = true;
+        paint();
+      });
+      const sliders = EQ_BANDS.map((freq, i) => {
+        const input = h("input", { type: "range", min: -12, max: 12, step: 0.5, class: "eq-range", "aria-label": `${freq} Hz` });
+        const val = h("span", { class: "eq-val" });
+        input.addEventListener("input", () => {
+          const gains = [...(settings.get("mediaEq") || EQ_PRESETS.flat.gains)];
+          gains[i] = Number(input.value);
+          settings.set({ mediaEq: gains, mediaEqPreset: "custom", mediaEqOn: true });
+          on.checked = true;
+          preset.value = "custom";
+          setText(val, fmtDb(gains[i]));
+        });
+        input.addEventListener("dblclick", () => { input.value = 0; input.dispatchEvent(new Event("input")); });
+        const label = freq >= 1000 ? `${freq / 1000}k` : String(freq);
+        return { input, val, el: h("label", { class: "eq-band", title: `${label} Hz — double-click to reset` }, val, input, h("span", { class: "eq-hz" }, label)) };
+      });
+      const fmtDb = (v) => `${v > 0 ? "+" : ""}${v}`;
+      const paint = () => {
+        const gains = settings.get("mediaEq") || EQ_PRESETS.flat.gains;
+        sliders.forEach((s, i) => { s.input.value = gains[i]; setText(s.val, fmtDb(gains[i])); });
+      };
+      paint();
+      return h("div", { class: "eq" },
+        h("div", { class: "eq-head" },
+          h("label", { class: "eq-on" }, on, " Equalizer"),
+          h("span", { class: "grow" }),
+          preset,
+          h("button", { class: "btn", type: "button", title: "Reset all bands", onclick: () => { preset.value = "flat"; preset.dispatchEvent(new Event("change")); } }, "Reset")),
+        h("div", { class: "eq-bands" }, ...sliders.map((s) => s.el)),
+        h("div", { class: "eq-foot muted" }, "dB · applies to everything the player plays"));
+    }, { className: "eq-pop" });
   }
 
   renderList() {
@@ -274,6 +325,7 @@ export class MediaTab {
       else if (e.key === "ArrowDown") { done(); p.setVolume(p.volume - 0.05); }
       else if (e.key.toLowerCase() === "m" && !e.ctrlKey) { done(); p.toggleMute(); }
       else if (e.key.toLowerCase() === "f" && !e.ctrlKey) { done(); this.fullscreen(); }
+      else if (e.key.toLowerCase() === "e" && !e.ctrlKey) { done(); this.openEq(); }
       else if (e.key === "Delete" && this.selected >= 0) { done(); p.remove(this.selected); this.selected = Math.min(this.selected, p.items.length - 1); this.paintSelection(); }
       else if (e.key === "Enter" && this.selected >= 0) { done(); p.load(this.selected); }
     });

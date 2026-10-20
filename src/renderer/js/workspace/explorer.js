@@ -13,6 +13,10 @@ import { isMediaPath } from "../media/player.js";
 const api = window.edex;
 const shared = { clipboard: { mode: null, paths: [] }, places: null, drives: null, drivesAt: 0 };
 const OPENABLE_ICON_EXTS = new Set(["exe", "lnk", "url", "msi", "appref-ms", "ico"]);
+// Grid view shows real previews for these (Windows thumbnail cache).
+const THUMB_EXTS = new Set(["jpg", "jpeg", "jfif", "png", "gif", "webp", "bmp", "tif", "tiff", "heic", "avif", "svg",
+  "mp4", "m4v", "mov", "mkv", "webm", "avi", "wmv", "pdf"]);
+const thumbCache = new Map(); // `${path}|${mtime}` -> data URL | null
 const TYPE_LABEL = {
   folder: "Folder", image: "Image", audio: "Audio", video: "Video", archive: "Archive", pdf: "PDF document",
   code: "Source file", text: "Text document", app: "Application", shortcut: "Shortcut", file: "File"
@@ -182,7 +186,7 @@ export class ExplorerTab {
 
     this.unwatch.push(
       settings.watch(["explorerSort", "explorerSortDesc"], () => { this.buildHead(); this.render(); }),
-      settings.watch(["explorerView"], () => this.applyView()),
+      settings.watch(["explorerView"], () => { this.applyView(); this.render(); }),
       settings.watch(["showHidden"], () => { this.applyView(); this.render(); }),
       settings.watch(["pinnedPaths", "recentFolders"], () => this.renderSide())
     );
@@ -382,10 +386,18 @@ export class ExplorerTab {
     this.visible = this.computeVisible();
     const cut = shared.clipboard.mode === "cut" ? new Set(shared.clipboard.paths.map(fmt.pathKey)) : null;
     const iconWanted = [];
+    const thumbWanted = [];
+    const grid = settings.get("explorerView") === "grid";
     this.rows = this.visible.map((e, i) => {
       const kind = e.drive ? "drive" : fileKind(e.name, e.isDir);
-      const iconEl = icon(kind === "drive" ? "drive" : kind);
-      if (!e.isDir && OPENABLE_ICON_EXTS.has(e.ext.replace(".", ""))) iconWanted.push({ path: e.path, slot: iconEl });
+      let iconEl = icon(kind === "drive" ? "drive" : kind);
+      const ext = e.ext.replace(".", "").toLowerCase();
+      if (!e.isDir && OPENABLE_ICON_EXTS.has(ext)) iconWanted.push({ path: e.path, slot: iconEl });
+      else if (grid && !e.isDir && THUMB_EXTS.has(ext)) {
+        const cached = thumbCache.get(`${e.path}|${e.mtime}`);
+        if (cached) iconEl = h("img", { class: "fx-thumb", src: cached, alt: "" });
+        else if (cached === undefined) thumbWanted.push({ path: e.path, mtime: e.mtime, slot: iconEl });
+      }
       const typeLabel = e.drive ? `${e.drive.type || "Drive"}` : (TYPE_LABEL[kind] || "File") + (e.ext && !e.isDir ? ` (${e.ext.replace(".", "").toUpperCase()})` : "");
       const sizeLabel = e.drive ? `${fmt.bytes(e.size)} free` : (e.isDir ? "" : fmt.bytes(e.size));
       const modLabel = e.drive ? `${Math.round(e.drive.use)}% used` : fmt.dateTime(e.mtime);
@@ -410,6 +422,40 @@ export class ExplorerTab {
     if (this.cursor >= this.visible.length) this.cursor = this.visible.length - 1;
     this.updateStatus();
     this.loadIcons(iconWanted);
+    this.loadThumbs(thumbWanted);
+  }
+
+  // Thumbnails load as their tiles scroll into view, a few at a time.
+  loadThumbs(wanted) {
+    this.thumbObserver?.disconnect();
+    if (!wanted.length) return;
+    const bySlot = new Map(wanted.map((w) => [w.slot, w]));
+    let queue = [];
+    let running = false;
+    const pump = async () => {
+      if (running || !queue.length) return;
+      running = true;
+      const batch = queue.splice(0, 12);
+      const res = await api.fs.thumbnails(batch.map((w) => w.path), 192).catch(() => ({}));
+      for (const w of batch) {
+        const url = res[w.path] ?? null;
+        if (thumbCache.size > 600) thumbCache.delete(thumbCache.keys().next().value);
+        thumbCache.set(`${w.path}|${w.mtime}`, url);
+        if (url && w.slot.isConnected) w.slot.replaceWith(h("img", { class: "fx-thumb", src: url, alt: "" }));
+      }
+      running = false;
+      pump();
+    };
+    this.thumbObserver = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        this.thumbObserver.unobserve(en.target);
+        const w = bySlot.get(en.target);
+        if (w) queue.push(w);
+      }
+      pump();
+    }, { root: this.main, rootMargin: "200px" });
+    for (const w of wanted) this.thumbObserver.observe(w.slot);
   }
 
   async loadIcons(wanted) {
@@ -762,6 +808,7 @@ export class ExplorerTab {
 
   dispose() {
     this.unwatch.forEach((fn) => fn());
+    this.thumbObserver?.disconnect();
     clearTimeout(this.typeaheadTimer);
   }
 }

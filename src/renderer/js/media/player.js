@@ -11,6 +11,20 @@ const api = window.edex;
 export const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "opus", "flac", "aac", "m4a", "weba"]);
 export const VIDEO_EXTS = new Set(["mp4", "m4v", "webm", "mkv", "mov", "ogv"]);
 
+// 10-band graphic equaliser (Hz) and its presets (dB per band).
+export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+export const EQ_PRESETS = {
+  flat: { label: "Flat", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  bass: { label: "Bass boost", gains: [7, 6, 5, 3, 1, 0, 0, 0, 0, 0] },
+  treble: { label: "Treble boost", gains: [0, 0, 0, 0, 0, 1, 2.5, 4, 5.5, 6.5] },
+  vocal: { label: "Vocal", gains: [-2, -2, -1, 1, 3, 4, 3.5, 2, 0, -1] },
+  rock: { label: "Rock", gains: [5, 4, 2.5, 0, -1.5, -1, 1, 3, 4, 4.5] },
+  electronic: { label: "Electronic", gains: [6, 5, 1.5, 0, -2, 1.5, 0.5, 1.5, 4.5, 5.5] },
+  acoustic: { label: "Acoustic", gains: [4, 3.5, 2.5, 1, 1.5, 1.5, 2.5, 3, 2.5, 1.5] },
+  loudness: { label: "Loudness", gains: [6, 4.5, 0, 0, -2, 0, -1, -4, 5, 1] },
+  night: { label: "Late night", gains: [-4, -3, -1, 1, 2, 2, 1.5, 0, -2, -4] }
+};
+
 export function isMediaPath(p) {
   const ext = fmt.extname(fmt.basename(p));
   return AUDIO_EXTS.has(ext) || VIDEO_EXTS.has(ext);
@@ -45,6 +59,7 @@ class Player extends EventTarget {
     this.restored = false;
     this.persist = debounce(() => this.save(), 600);
     this.wire();
+    settings.watch(["mediaEqOn", "mediaEq"], () => this.applyEq());
   }
 
   wire() {
@@ -139,8 +154,9 @@ class Player extends EventTarget {
     }
   }
 
-  // Graph: element -> analyser (full scale, for the visualizer)
-  //                -> gain (volume / mute) -> speakers.
+  // Graph: element -> preamp -> 10 EQ bands -> analyser (full scale, for the
+  //                                         visualizer)
+  //                                      -> gain (volume / mute) -> speakers.
   // Created on first play; once routed through Web Audio the element must
   // stay connected. Chromium applies element.volume before the graph, so
   // the element stays at 1 and volume lives on the gain node instead.
@@ -149,18 +165,41 @@ class Player extends EventTarget {
     try {
       this.ctx = new AudioContext();
       const source = this.ctx.createMediaElementSource(this.el);
+      this.preamp = this.ctx.createGain();
+      this.bands = EQ_BANDS.map((freq, i) => {
+        const f = this.ctx.createBiquadFilter();
+        f.type = i === 0 ? "lowshelf" : i === EQ_BANDS.length - 1 ? "highshelf" : "peaking";
+        f.frequency.value = freq;
+        f.Q.value = 1.1;
+        return f;
+      });
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
       this.analyser.smoothingTimeConstant = 0.78;
       this.gain = this.ctx.createGain();
-      source.connect(this.analyser);
-      source.connect(this.gain);
+      source.connect(this.preamp);
+      const last = this.bands.reduce((prev, f) => { prev.connect(f); return f; }, this.preamp);
+      last.connect(this.analyser);
+      last.connect(this.gain);
       this.gain.connect(this.ctx.destination);
     } catch (e) {
       console.warn("media analyser unavailable", e);
     }
     this.applyVolume();
+    this.applyEq();
     return this.analyser;
+  }
+
+  // Band gains come from settings; boosts are offset by a matching preamp
+  // cut so a "bass boost" doesn't clip.
+  applyEq() {
+    if (!this.bands) return;
+    const on = !!settings.get("mediaEqOn");
+    const gains = on ? (settings.get("mediaEq") || []) : [];
+    const t = this.ctx.currentTime;
+    this.bands.forEach((f, i) => f.gain.setTargetAtTime(Number(gains[i]) || 0, t, 0.03));
+    const peak = Math.max(0, ...gains.map(Number).filter(Number.isFinite));
+    this.preamp.gain.setTargetAtTime(Math.pow(10, -peak * 0.75 / 20), t, 0.03);
   }
 
   applyVolume() {

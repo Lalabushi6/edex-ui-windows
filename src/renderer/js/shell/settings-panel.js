@@ -214,7 +214,12 @@ async function buildPage(id) {
       h("h3", null, "Sound"),
       row("Interface sounds", null, toggle("audioEnabled")),
       row("Volume", null, range("audioVolume", 0, 100, "%")),
-      row("Typing feedback", "Click sounds for terminal input.", toggle("audioFeedback")));
+      row("Typing feedback", "Click sounds for terminal input.", toggle("audioFeedback")),
+      h("h3", null, "Alerts"),
+      row("Low battery", "Warns once when the charge drops below the level (again at half of it), with a Windows notification if eDEX is hidden.", toggle("alertBattery")),
+      row("Battery level", null, range("alertBatteryLevel", 5, 50, "%")),
+      row("Low disk space", "Warns when a fixed drive has less free space than this (or under 10% on small drives). Checked every ten minutes.", toggle("alertDisk")),
+      row("Free space limit (GB)", null, number("alertDiskGb", 1, 200)));
   }
   if (id === "appearance") {
     const themes = await api.themes.list().catch(() => []);
@@ -363,6 +368,9 @@ async function buildPage(id) {
   if (id === "privacy") {
     page.push(h("h3", null, "Network"),
       row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, and the weather forecast for your approximate location (open-meteo.com). Turn off to make eDEX fully offline.", toggle("allowNetworkGeolocation")),
+      h("h3", null, "Screen time"),
+      row("Track app usage", "Counts how long each program is the focused window (idle and locked time excluded). Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
+      row("Clear screen time history", null, h("button", { class: "btn", type: "button", onclick: () => api.screenTime.clear().then(() => toast("Screen time history cleared", { level: "ok" })) }, "Clear")),
       h("h3", null, "Clipboard"),
       row("Clipboard history", "Kept in memory only — never written to disk, cleared on quit.", toggle("clipboardHistory")),
       row("History size", null, number("clipboardMax", 5, 200)),

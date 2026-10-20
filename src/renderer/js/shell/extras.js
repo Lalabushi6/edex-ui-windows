@@ -22,6 +22,8 @@ const EXTRA_SHORTCUTS = [
   ["Terminal: Ctrl+Shift+F", "Find in terminal (Enter / Shift+Enter, Esc)"],
   ["Launcher: 10 km to mi · 72 f in c", "Unit conversion"],
   ["Launcher: timer 5m tea · stopwatch", "Start a timer"],
+  ["Launcher: pomodoro", "Start a focus session"],
+  ["E (media player)", "Equalizer"],
   ["Launcher: $ ipconfig", "Run a command in the terminal"],
   ["Explorer: Enter / Space", "Open / quick preview"],
   ["Explorer: F2 / Del", "Rename / move to Recycle Bin"],

@@ -73,8 +73,9 @@ Settings → General → **Take over the desktop** (also in the tray menu and
 the launcher, "Toggle desktop takeover") makes eDEX stand in for the Windows
 desktop:
 
-- eDEX fills the whole display, taskbar area included; in Overlay mode it
-  sits above everything.
+- eDEX fills the whole display, taskbar area included, right to the edges
+  (Windows 11's rounded window corners and border are switched off for it);
+  in Overlay mode it sits above everything.
 - In Desktop mode the **Windows taskbar is hidden** while eDEX is on screen
   and set to auto-hide, so maximised apps use the full screen. eDEX's dock
   lists your windows instead.
@@ -106,6 +107,7 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 | `=2*(3+4)^2` | calculator — Enter copies the result |
 | `10 km to mi`, `72 f in c`, `5 gb to mib`, `90 kmh to mph` | unit conversion (length, mass, volume, area, speed, time, data, energy, power, temperature) — Enter copies |
 | `timer 5m tea`, `remind 1h30m stretch`, `stopwatch` | starts the Timer widget's countdown (alarm + Windows notification) or stopwatch, even if the widget is hidden |
+| `pomodoro`, `focus` | starts a focus session (the Timer widget's Focus mode) |
 | `$ ipconfig /all` | runs the command in the active terminal (or a new one) |
 | `C:\Users\` | browse paths; Tab completes the highlighted folder |
 | `example.com` | opens in your browser |
@@ -165,6 +167,10 @@ Hold `Ctrl` to force copy or `Shift` to force move.
 Right-click for Open with…, Open terminal here, Pin to sidebar, Add to quick
 links, Show in Windows Explorer and Properties.
 
+In **grid view** pictures, videos and PDFs show a preview instead of an
+icon. Previews come from Windows' own thumbnail cache, load only for the
+items you scroll to, and are never made for network paths.
+
 ## 8. Media player
 
 Open it with `Ctrl+Shift+M`, the tab menu (⌄ → Media player), the launcher
@@ -184,9 +190,16 @@ Open it with `Ctrl+Shift+M`, the tab menu (⌄ → Media player), the launcher
 | Volume | `↑` / `↓`, the volume wedge, or the mouse wheel over it |
 | Mute | `M` |
 | Fullscreen | `F` or double-click the picture |
+| Equalizer | `E` or the equalizer button (three sliders) |
 | Play a track | double-click it (or select and press `Enter`) |
 | Remove a track | `Del`, or right-click → Remove |
 | Reorder | drag tracks in the playlist |
+
+The **equalizer** has ten bands (32 Hz – 16 kHz, ±12 dB) and presets (Bass
+boost, Treble boost, Vocal, Rock, Electronic, Acoustic, Loudness, Late
+night). Drag a slider to make your own curve, double-click one to reset it.
+Boosts are balanced by lowering the overall level slightly, so loud tracks
+don't distort. The button is lit while the equalizer is on.
 
 Shuffle and repeat (off → all → one) are on the control bar. MP3 titles,
 artists and cover art are read from the file's tags. The playlist, volume
@@ -272,6 +285,23 @@ Up to 120 lines × 240 columns. Leave it empty for the default logo.
   followed by a label: `25 Focus`) and a stopwatch with laps. A finished
   countdown plays the alarm sound and shows a Windows notification, even
   when eDEX is hidden. Right-click the widget to copy laps.
+- **Focus** (pomodoro) in the Timer widget: 25-minute focus sessions with
+  5-minute breaks and a 15-minute break after every fourth session. When a
+  focus session ends the break starts on its own; when a break ends, click
+  **Start focus** on the notice (or Start in the widget). **Skip** moves to
+  the next phase; the dots show progress towards the long break. Right-click
+  → **Focus lengths…** to change the times (e.g. `50/10/20/3`).
+- **Screen time** widget: how long each program has been the focused window
+  today, and a bar for each day of the past week; the arrow button switches
+  between today and yesterday. Idle time (2 minutes without input) and the lock screen aren't
+  counted. Only program names and durations are stored, on this PC, for two
+  weeks; Settings → Privacy turns it off or clears it.
+
+**Alerts** (Settings → General → Alerts): eDEX warns once when the battery
+drops below the level you choose (20% by default) and again at half that,
+and when a fixed drive has less than the free-space limit left (5 GB, or 10%
+on small drives). The warning appears in eDEX and, if eDEX is hidden, as a
+Windows notification. Plugging in or freeing space re-arms it.
 
 New widgets appear at the end of their column; drag them where you want them
 or hide them in Settings → Layout.
@@ -325,7 +355,8 @@ already owns one, eDEX shows a notice at startup.
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
-  with Windows, hotkeys, web search engine, sounds.
+  with Windows, desktop takeover, hotkeys, web search engine, sounds,
+  battery and disk alerts.
 - **Appearance**: themes, the theme editor (every colour, fonts, terminal
   palette, globe, layout hints and theme CSS, with live preview), theme
   import / export, custom CSS, interface scale, clock format, temperature
@@ -339,7 +370,7 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 - **Files**: hidden items, delete confirmation, default view, history.
 - **Performance**: profile, background slow-down, GPU terminal, eDEX's own
   resource use (see section 12).
-- **Privacy**: outbound network lookups, clipboard history.
+- **Privacy**: outbound network lookups, screen time, clipboard history.
 
 Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first

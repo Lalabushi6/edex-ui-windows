@@ -206,6 +206,32 @@ public static class EdexNative {
         return GetForegroundWindow() == hWnd;
     }
 
+    // The focused window's program, for screen time: executable path, the
+    // file's description ("Google Chrome") and, for hosted Store apps, the
+    // window title.
+    static readonly Dictionary<string, string> DescCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    public static string Foreground() {
+        IntPtr fg = GetForegroundWindow();
+        if (fg == IntPtr.Zero) return "null";
+        uint pid;
+        GetWindowThreadProcessId(fg, out pid);
+        string exe = ExePath(pid);
+        string desc = "";
+        if (exe.Length > 0 && !DescCache.TryGetValue(exe, out desc)) {
+            try { desc = (FileVersionInfo.GetVersionInfo(exe).FileDescription ?? "").Trim(); } catch { desc = ""; }
+            if (DescCache.Count > 400) DescCache.Clear();
+            DescCache[exe] = desc;
+        }
+        int len = GetWindowTextLength(fg);
+        var title = new StringBuilder(Math.Max(1, len + 1));
+        if (len > 0) GetWindowText(fg, title, title.Capacity);
+        var cls = new StringBuilder(128);
+        GetClassName(fg, cls, cls.Capacity);
+        return "{\"pid\":" + pid.ToString(CultureInfo.InvariantCulture) + ",\"exe\":" + Q(exe) + ",\"desc\":" + Q(desc ?? "") +
+            ",\"title\":" + Q(title.ToString()) + ",\"cls\":" + Q(cls.ToString()) + "}";
+    }
+
     public static bool Minimize(long handle) {
         IntPtr hWnd = new IntPtr(handle);
         return IsWindow(hWnd) && ShowWindow(hWnd, SW_MINIMIZE);
@@ -826,6 +852,48 @@ public static class EdexShell {
         return State();
     }
 
+    // Full-screen fit for the eDEX window: Windows 11 rounds (and outlines)
+    // every window that is not maximised, which leaves the four screen
+    // corners showing what is behind. Rounding and the border are switched
+    // off, and the window is placed on the monitor's exact physical pixels
+    // (fractional scaling can otherwise leave a one-pixel edge).
+    [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO info);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hWnd);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hWnd, int attr, ref int value, int size);
+
+    const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_DONOTROUND = 1;
+    const int DWMWA_BORDER_COLOR = 34;
+    const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
+    const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_NOOWNERZORDER = 0x0200;
+
+    public static string FitWindow(long handle, bool cover) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd)) return "null";
+        int pref = DWMWCP_DONOTROUND;
+        int cornerHr = DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, 4);
+        int none = DWMWA_COLOR_NONE;
+        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, ref none, 4);
+        var mi = new MONITORINFO();
+        mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+        if (!GetMonitorInfo(MonitorFromWindow(hWnd, 2), ref mi)) return "null";
+        RECT target = cover ? mi.rcMonitor : mi.rcWork;
+        RECT before;
+        GetWindowRect(hWnd, out before);
+        bool moved = false;
+        if (before.left != target.left || before.top != target.top || before.right != target.right || before.bottom != target.bottom) {
+            SetWindowPos(hWnd, IntPtr.Zero, target.left, target.top, target.right - target.left, target.bottom - target.top,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+            moved = true;
+        }
+        return "{\"moved\":" + (moved ? "true" : "false") +
+            ",\"corners\":" + (cornerHr == 0 ? "\"square\"" : "\"unsupported\"") +
+            ",\"rect\":[" + target.left + "," + target.top + "," + target.right + "," + target.bottom + "]}";
+    }
+
     // Shows the bars without touching the auto-hide state (a short "peek"
     // for the notification area while eDEX keeps the desktop).
     public static string Peek() {
@@ -909,6 +977,7 @@ while ($true) {
             'ping'      { $data = '"pong"' }
             'windows'   { $data = [EdexNative]::ListWindows([long[]]@($a.exclude | Where-Object { $_ -ne $null })) }
             'focus'     { $data = if ([EdexNative]::Focus([long]$a.hwnd)) { 'true' } else { 'false' } }
+            'foreground' { $data = [EdexNative]::Foreground() }
             'minimize'  { $data = if ([EdexNative]::Minimize([long]$a.hwnd)) { 'true' } else { 'false' } }
             'maximize'  { $data = if ([EdexNative]::ToggleMaximize([long]$a.hwnd)) { 'true' } else { 'false' } }
             'close'     { $data = if ([EdexNative]::Close([long]$a.hwnd)) { 'true' } else { 'false' } }
@@ -931,6 +1000,7 @@ while ($true) {
             'taskbarShow'  { $data = [EdexShell]::Show([int]$a.prev) }
             'taskbarState' { $data = [EdexShell]::State() }
             'taskbarPeek'  { $data = [EdexShell]::Peek() }
+            'fitWindow'    { $data = [EdexShell]::FitWindow([long]$a.hwnd, [bool]$a.cover) }
             'properties' { $data = if ([EdexNative]::Properties([string]$a.path)) { 'true' } else { 'false' } }
             'lock'      { $data = if ([EdexNative]::Lock()) { 'true' } else { 'false' } }
             'sleep'     { $data = if ([EdexNative]::Sleep()) { 'true' } else { 'false' } }
