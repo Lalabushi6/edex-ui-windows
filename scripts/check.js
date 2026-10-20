@@ -46,7 +46,7 @@ for (const f of rendererFiles) {
     let target = path.resolve(path.dirname(f), spec);
     const vendor = /[\\/]renderer[\\/]vendor[\\/]([^\\/]+)[\\/](.+)$/.exec(target);
     if (vendor) {
-      const pkg = { xterm: "@xterm/xterm", "xterm-fit": "@xterm/addon-fit", "xterm-webgl": "@xterm/addon-webgl" }[vendor[1]];
+      const pkg = { xterm: "@xterm/xterm", "xterm-fit": "@xterm/addon-fit", "xterm-webgl": "@xterm/addon-webgl", "xterm-search": "@xterm/addon-search" }[vendor[1]];
       target = pkg ? path.join(root, "node_modules", pkg, vendor[2]) : target;
     }
     if (!fs.existsSync(target)) failures.push(`Unresolved import "${spec}" in ${rel(f)}`);

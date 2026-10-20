@@ -84,11 +84,14 @@ desktop:
   tray) while takeover is on.
 
 The taskbar always comes back when you hide eDEX (`Ctrl+``), turn takeover
-off or quit, with your own auto-hide setting restored. If eDEX crashes, its
-helper restores the taskbar; if both are killed, the next start of eDEX
-does. The Windows key, Start menu and notification area keep working
-(pressing Win shows the taskbar until eDEX hides it again a moment later).
-Settings → General shows the current status.
+off or quit, with your own auto-hide setting restored — also when eDEX was
+started from a console (`npm start`) and stopped with Ctrl+C or by closing
+that console. If eDEX crashes, its helper restores the taskbar; if both are
+killed, the next start of eDEX does. The Windows key, Start menu and
+notification area keep working (pressing Win shows the taskbar until eDEX
+hides it again a moment later), and the **taskbar button in the dock**
+(next to the keyboard button) shows it for 15 seconds whenever you need the
+tray icons. Settings → General shows the current status.
 
 ## 4. Launcher
 
@@ -101,6 +104,9 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 | a file name | recent files and your Desktop / Documents / Downloads / Pictures / Music / Videos |
 | `>` then text | commands (new tab, settings, themes, power, media …) |
 | `=2*(3+4)^2` | calculator — Enter copies the result |
+| `10 km to mi`, `72 f in c`, `5 gb to mib`, `90 kmh to mph` | unit conversion (length, mass, volume, area, speed, time, data, energy, power, temperature) — Enter copies |
+| `timer 5m tea`, `remind 1h30m stretch`, `stopwatch` | starts the Timer widget's countdown (alarm + Windows notification) or stopwatch, even if the widget is hidden |
+| `$ ipconfig /all` | runs the command in the active terminal (or a new one) |
 | `C:\Users\` | browse paths; Tab completes the highlighted folder |
 | `example.com` | opens in your browser |
 | anything else | web search (engine set in Settings → General) |
@@ -129,6 +135,7 @@ New tab: `Ctrl+Shift+T` (default shell) or the ⌄ menu for a specific shell.
 | Terminal menu | `Shift`+right-click |
 | Font size | `Ctrl+=`, `Ctrl+-`, `Ctrl+0` |
 | Open a link | `Ctrl`+click |
+| Find in the terminal | `Ctrl+Shift+F` (Enter / Shift+Enter for next / previous, Aa for match case, Esc to close). Outside a terminal the same keys find files. |
 
 When a shell exits, press Enter in its tab to restart it. Double-click a tab to
 rename it. Tabs are restored the next time eDEX starts.
@@ -245,6 +252,11 @@ Up to 120 lines × 240 columns. Leave it empty for the default logo.
 
 ## 11. Top bar and tools
 
+- **Network** (Wi-Fi / LAN): click it for the Wi-Fi panel — the current
+  connection (band, security, speed) with Disconnect, nearby networks with
+  signal and security, **Connect** for saved networks and **Join…** (Windows
+  Wi-Fi settings) for new ones that need a password. Windows 11 may ask for
+  location access before it lists networks; the panel links to that setting.
 - **Clock**: click it for a month calendar with ISO week numbers (scroll or
   use the arrows to change month, **Today** to jump back).
 - **Brightness** (☀, laptop screens only): click for a slider, or scroll over

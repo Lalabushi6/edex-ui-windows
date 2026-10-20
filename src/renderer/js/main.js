@@ -61,7 +61,7 @@ async function registerCommands() {
   cmd("launcher.open", "Open launcher", () => toggleLauncher(), { keys: "Ctrl+Shift+Space", icon: "search", keywords: "search start menu run" });
   cmd("palette.open", "Command palette", () => openLauncher({ query: ">" }), { keys: "Ctrl+Shift+P", icon: "command" });
   cmd("windows.show", "Switch window", () => openLauncher({ filter: "windows" }), { keys: "Ctrl+Shift+A", icon: "window", keywords: "alt tab task switcher" });
-  cmd("settings.open", "Settings", () => openSettings(), { keys: "Ctrl+,", icon: "gear", keywords: "preferences options config" });
+  cmd("settings.open", "eDEX settings", () => openSettings(), { keys: "Ctrl+,", icon: "gear", keywords: "settings preferences options config" });
   cmd("help.open", "Keyboard shortcuts", () => openHelp(), { keys: "F1", icon: "help", keywords: "help cheatsheet" });
   cmd("terminal.new", "New terminal tab", () => workspace.add("terminal"), { keys: "Ctrl+Shift+T", icon: "terminal", keywords: "shell console powershell cmd" });
   cmd("files.new", "New file explorer tab", () => workspace.add("files"), { keys: "Ctrl+Shift+E", icon: "folder", keywords: "explorer browse" });
@@ -73,7 +73,11 @@ async function registerCommands() {
   cmd("files.search", "Find files…", () => {
     const cwd = workspace.active?.type === "files" ? workspace.active.cwd : null;
     openFileSearch(cwd || undefined);
-  }, { keys: "Ctrl+Shift+F", icon: "search", keywords: "search find locate" });
+  }, {
+    keys: "Ctrl+Shift+F", icon: "search", keywords: "search find locate",
+    // In a focused terminal the same keys open find-in-terminal instead.
+    when: () => !document.activeElement?.closest?.(".xterm")
+  });
   cmd("snapshot.export", "Export system snapshot", async () => {
     try {
       const path = await api.sys.snapshot();

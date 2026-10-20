@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("edex", {
     devtools: invoke("app:devtools"),
     reload: invoke("app:reload"),
     takeoverState: invoke("takeover:state"),
+    takeoverPeek: invoke("takeover:peek"),
     onVisibility: subscribe("app:visibility"),
     onMode: subscribe("app:mode"),
     onCommand: subscribe("app:command"),
@@ -131,6 +132,11 @@ contextBridge.exposeInMainWorld("edex", {
     pings: invoke("net:pings"),
     latency: invoke("net:latency"),
     weather: invoke("net:weather")
+  },
+  wifi: {
+    status: invoke("wifi:status"),
+    connect: invoke("wifi:connect"),
+    disconnect: invoke("wifi:disconnect")
   },
   clip: {
     list: invoke("clip:list"),

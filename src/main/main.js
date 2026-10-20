@@ -17,6 +17,7 @@ const { registerNetwork, registerClipboard, registerNotes, registerThemes, regis
 const { registerMedia } = require("./ipc/media");
 const { registerKeyboards } = require("./ipc/keyboards");
 const { Takeover } = require("./lib/takeover");
+const { registerWifi } = require("./ipc/wifi");
 const { Telemetry } = require("./lib/telemetry");
 const { IconService } = require("./lib/icon-service");
 
@@ -96,6 +97,7 @@ function start() {
     registerThemes({ windows });
     registerMedia({ windows });
     keyboards = registerKeyboards({ windows });
+    registerWifi();
 
     // The bridge starts right away (the panels' first readings come from
     // it) and primes CPU/process/network deltas so first values are real.
@@ -106,6 +108,7 @@ function start() {
     // left hidden, then follow the window.
     takeover = new Takeover({ settings, windows, bridge, userData: app.getPath("userData") });
     handle("takeover:state", () => takeover.state());
+    handle("takeover:peek", () => takeover.peek(15000));
     const recovering = takeover.recover();
 
     const win = windows.create();
@@ -156,6 +159,18 @@ function start() {
       opts.args = [path.resolve(app.getAppPath()), ...extra];
     }
     try { app.setLoginItemSettings(opts); } catch (_) {}
+  }
+
+  // Ctrl+C or closing the console eDEX was started from (npm start), and
+  // termination requests: put the taskbar back, then exit.
+  let exiting = false;
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"]) {
+    process.on(sig, () => {
+      if (exiting) return;
+      exiting = true;
+      if (windows) windows.quitting = true;
+      Promise.resolve(takeover?.restore()).finally(() => app.exit(0));
+    });
   }
 
   // Quitting waits (briefly) for the taskbar to be put back.

@@ -53,6 +53,14 @@
 /* ── Terminal ───────────────────────────────────────────────────────────── */
 .term-host { flex: 1; min-height: 0; padding: .45rem .2rem .2rem .55rem; }
 .term-host .xterm { height: 100%; }
+/* Find in terminal */
+.term-find { position: absolute; top: .4rem; right: 1rem; z-index: 5; display: flex; align-items: center; gap: .25rem; padding: .3rem .35rem; border: 1px solid var(--c-50); background: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .6); }
+.term-find[hidden] { display: none; }
+.term-find-input { width: 15rem; padding: .2rem .45rem; font-size: .85rem; }
+.term-find-count { min-width: 4.6rem; text-align: center; font-size: .75rem; color: var(--c-70); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.term-find-count.none { color: var(--warn); }
+.term-find-case { font-size: .72rem; font-weight: 600; }
+.term-find-case.active { background: var(--c-20); color: var(--c); }
 .term-host .xterm-viewport::-webkit-scrollbar { width: 5px; }
 .term-host .xterm-viewport::-webkit-scrollbar-track { background: transparent; border: 0; }
 .term-host .xterm-viewport::-webkit-scrollbar-thumb { background: transparent; }

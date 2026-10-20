@@ -10,6 +10,13 @@ import { emit, booted } from "../core/bus.js";
 import { allCommands } from "../core/commands.js";
 import { openModal, toast, contextMenu, copyText, cleanError } from "../core/ui.js";
 import { evaluate, looksLikeMath, formatNumber } from "./calc.js";
+import { convert, parseDuration } from "./convert.js";
+
+function humanDuration(ms) {
+  const s = Math.round(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h && `${h} h`, m && `${m} min`, sec && `${sec} s`].filter(Boolean).join(" ") || "0 s";
+}
 import { openViewer } from "./viewer.js";
 
 const api = window.edex;
@@ -213,6 +220,25 @@ export function openLauncher(opts = {}) {
         const text = formatNumber(value);
         out.push({ key: "calc", group: "Calculator", title: `= ${text}`, sub: `${q.replace(/^=/, "")}  ·  Enter to copy`, icon: "calc", run: () => copyText(text, `Copied ${text}`) });
       }
+    }
+
+    if (mode === "all") {
+      // Unit conversion: "10 km to mi", "72 f in c", "5 gb to mib"
+      const c = convert(q);
+      if (c) out.push({ key: "convert", group: "Calculator", title: `= ${c.text}`, sub: `${c.from} → ${c.to}  ·  Enter to copy`, icon: "calc", run: () => copyText(String(c.value), `Copied ${c.text}`) });
+
+      // Timers: "timer 5m tea", "remind 1h30m stretch", "stopwatch"
+      const t = /^(?:timer|countdown|remind(?:er)?(?: me)?(?: in)?)\s+(\S+)(?:\s+(.+))?$/i.exec(q);
+      const ms = t ? parseDuration(t[1]) : null;
+      if (ms && ms <= 7 * 86400000) {
+        const label = (t[2] || "").trim().slice(0, 60);
+        out.push({ key: "timer", group: "Timer", title: `Start a ${humanDuration(ms)} timer${label ? ` — ${label}` : ""}`, sub: "Alarm sound and Windows notification when it ends", icon: "timer", run: () => emit("timer-start", { ms, label }) });
+      }
+      if (/^stop ?watch$/i.test(q)) out.push({ key: "stopwatch", group: "Timer", title: "Start the stopwatch", sub: "Timer widget", icon: "timer", run: () => emit("stopwatch-start") });
+
+      // Shell commands: "$ ipconfig /all"
+      const shellCmd = /^\$\s*(\S.*)$/.exec(q);
+      if (shellCmd) out.push({ key: "shellcmd", group: "Terminal", title: `Run  ${shellCmd[1]}`, sub: "In the active terminal (or a new one)", icon: "terminal", run: () => emit("terminal-run", { command: shellCmd[1] }) });
     }
 
     // Paths typed directly
