@@ -21,7 +21,7 @@ class WindowManager {
     this.blurHideSuppressed = 0;
     this.blurTimer = null;
     settings.on("change", (changed) => {
-      if ("mode" in changed || "coverTaskbar" in changed) this.applyMode();
+      if ("mode" in changed || "coverTaskbar" in changed || "takeover" in changed) this.applyMode();
     });
   }
 
@@ -56,7 +56,12 @@ class WindowManager {
         height
       };
     }
-    return this.settings.get("coverTaskbar") ? display.bounds : display.workArea;
+    return this.coversScreen ? display.bounds : display.workArea;
+  }
+
+  // Desktop takeover always uses the whole display, taskbar area included.
+  get coversScreen() {
+    return this.settings.get("takeover") === true || this.settings.get("coverTaskbar");
   }
 
   create() {
@@ -86,7 +91,9 @@ class WindowManager {
     const win = this.win;
     win.loadURL(`${APP_ORIGIN}/index.html`);
     win.once("ready-to-show", () => {
-      const hidden = !DEV_WINDOWED && (this.settings.get("startHidden") || process.argv.includes("--hidden"));
+      // When eDEX has taken over the desktop it is always shown at launch.
+      const hidden = !DEV_WINDOWED && this.settings.get("takeover") !== true &&
+        (this.settings.get("startHidden") || process.argv.includes("--hidden"));
       if (!hidden) this.show();
     });
 
@@ -119,7 +126,7 @@ class WindowManager {
     if (!win || win.isDestroyed()) return;
     const overlay = this.mode === "overlay";
     win.setSkipTaskbar(overlay);
-    if (overlay) win.setAlwaysOnTop(true, this.settings.get("coverTaskbar") && !DEV_WINDOWED ? "screen-saver" : "floating");
+    if (overlay) win.setAlwaysOnTop(true, this.coversScreen && !DEV_WINDOWED ? "screen-saver" : "floating");
     else win.setAlwaysOnTop(false);
     win.setBounds(this._targetBounds());
     this.send("app:mode", { mode: this.mode });

@@ -67,6 +67,29 @@ General. `Ctrl+`` ` shows or hides eDEX from any app; the tray icon does the sam
 Closing the window (Alt+F4) hides it to the tray; quit from the power menu or
 the tray.
 
+### Desktop takeover
+
+Settings → General → **Take over the desktop** (also in the tray menu and
+the launcher, "Toggle desktop takeover") makes eDEX stand in for the Windows
+desktop:
+
+- eDEX fills the whole display, taskbar area included; in Overlay mode it
+  sits above everything.
+- In Desktop mode the **Windows taskbar is hidden** while eDEX is on screen
+  and set to auto-hide, so maximised apps use the full screen. eDEX's dock
+  lists your windows instead.
+- If **Show desktop** (Win+D) or **Minimise all** hides eDEX, it comes
+  straight back, so you land on eDEX rather than the Windows desktop.
+- With **Start with Windows** on, eDEX opens on screen at sign-in (not in the
+  tray) while takeover is on.
+
+The taskbar always comes back when you hide eDEX (`Ctrl+``), turn takeover
+off or quit, with your own auto-hide setting restored. If eDEX crashes, its
+helper restores the taskbar; if both are killed, the next start of eDEX
+does. The Windows key, Start menu and notification area keep working
+(pressing Win shows the taskbar until eDEX hides it again a moment later).
+Settings → General shows the current status.
+
 ## 4. Launcher
 
 Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.

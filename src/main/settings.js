@@ -47,6 +47,9 @@ const SCHEMA = {
   // Window behaviour
   mode: [oneOf("desktop", "overlay"), "desktop"],
   coverTaskbar: [bool(), true],
+  takeover: [bool(), false],
+  takeoverHideTaskbar: [bool(), true],
+  takeoverKeepVisible: [bool(), true],
   overlayHideOnBlur: [bool(), true],
   hideAfterLaunch: [bool(), true],
   startHidden: [bool(), false],

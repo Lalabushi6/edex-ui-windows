@@ -751,6 +751,96 @@ public static class EdexSys {
         return "null";
     }
 }
+
+// Desktop takeover: hides the Windows taskbar(s) while eDEX is the desktop
+// and switches the taskbar to auto-hide so maximised windows get the full
+// screen. Show() always puts back the auto-hide state found before hiding.
+// RestoreIfHidden() runs when the helper's input closes, so a crashed eDEX
+// still gets the taskbar back.
+public static class EdexShell {
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int left, top, right, bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct APPBARDATA { public int cbSize; public IntPtr hWnd; public uint uCallbackMessage; public uint uEdge; public RECT rc; public IntPtr lParam; }
+    [DllImport("shell32.dll")] static extern UIntPtr SHAppBarMessage(uint msg, ref APPBARDATA data);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int cmd);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+
+    const uint ABM_GETSTATE = 4, ABM_SETSTATE = 10;
+    const int ABS_AUTOHIDE = 1;
+    const int SW_HIDE = 0, SW_SHOWNA = 8;
+    static bool hidden;
+    static int prevState = -1;
+
+    static List<IntPtr> Bars() {
+        var list = new List<IntPtr>();
+        IntPtr main = FindWindow("Shell_TrayWnd", null);
+        if (main != IntPtr.Zero) list.Add(main);
+        IntPtr h = IntPtr.Zero;
+        while ((h = FindWindowEx(IntPtr.Zero, h, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero) list.Add(h);
+        return list;
+    }
+
+    static APPBARDATA Data() {
+        var d = new APPBARDATA();
+        d.cbSize = Marshal.SizeOf(typeof(APPBARDATA));
+        d.hWnd = FindWindow("Shell_TrayWnd", null);
+        return d;
+    }
+
+    static int GetState() {
+        var d = Data();
+        return (int)SHAppBarMessage(ABM_GETSTATE, ref d).ToUInt32();
+    }
+
+    static void SetState(int state) {
+        var d = Data();
+        d.lParam = new IntPtr(state);
+        SHAppBarMessage(ABM_SETSTATE, ref d);
+    }
+
+    // knownPrev: the state recorded by an earlier session (crash recovery),
+    // or -1 to read it now.
+    public static string Hide(int knownPrev) {
+        if (!hidden) {
+            prevState = knownPrev >= 0 ? knownPrev : GetState();
+            hidden = true;
+        }
+        if ((GetState() & ABS_AUTOHIDE) == 0) {
+            SetState(prevState | ABS_AUTOHIDE);
+            // Explorer re-lays out (and re-shows) the bar after a state
+            // change; hiding before it settles would be undone.
+            System.Threading.Thread.Sleep(400);
+        }
+        foreach (IntPtr b in Bars()) ShowWindow(b, SW_HIDE);
+        return State();
+    }
+
+    public static string Show(int knownPrev) {
+        int restore = knownPrev >= 0 ? knownPrev : prevState;
+        foreach (IntPtr b in Bars()) ShowWindow(b, SW_SHOWNA);
+        if (restore >= 0 && restore != GetState()) SetState(restore);
+        hidden = false;
+        prevState = -1;
+        return State();
+    }
+
+    public static string State() {
+        bool visible = false;
+        foreach (IntPtr b in Bars()) if (IsWindowVisible(b)) visible = true;
+        int s = GetState();
+        return "{\"visible\":" + (visible ? "true" : "false") +
+            ",\"autohide\":" + ((s & ABS_AUTOHIDE) != 0 ? "true" : "false") +
+            ",\"state\":" + s.ToString(CultureInfo.InvariantCulture) +
+            ",\"hiddenByUs\":" + (hidden ? "true" : "false") +
+            ",\"prev\":" + prevState.ToString(CultureInfo.InvariantCulture) + "}";
+    }
+
+    public static void RestoreIfHidden() {
+        if (hidden) Show(-1);
+    }
+}
 '@
 
 function Write-Line([string]$text) {
@@ -808,6 +898,9 @@ while ($true) {
             'clipSeq'   { $data = [EdexSys]::ClipSeq() }
             'brightness' { $data = [EdexSys]::GetBrightness() }
             'setBrightness' { $data = [EdexSys]::SetBrightness([int]$a.level) }
+            'taskbarHide'  { $data = [EdexShell]::Hide([int]$a.prev) }
+            'taskbarShow'  { $data = [EdexShell]::Show([int]$a.prev) }
+            'taskbarState' { $data = [EdexShell]::State() }
             'properties' { $data = if ([EdexNative]::Properties([string]$a.path)) { 'true' } else { 'false' } }
             'lock'      { $data = if ([EdexNative]::Lock()) { 'true' } else { 'false' } }
             'sleep'     { $data = if ([EdexNative]::Sleep()) { 'true' } else { 'false' } }
@@ -822,3 +915,6 @@ while ($true) {
         Write-Line ('{"id":' + $id + ',"ok":false,"error":' + [EdexNative]::Q($_.Exception.Message) + '}')
     }
 }
+
+# eDEX closed the pipe (quit or crash): never leave the taskbar hidden.
+try { [EdexShell]::RestoreIfHidden() } catch { }
