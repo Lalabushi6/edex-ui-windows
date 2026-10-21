@@ -553,6 +553,80 @@ button.cal-day { background: transparent; color: inherit; font: inherit; cursor:
 .idle-screen.ascii .idle-info { bottom: 5vh; }
 .idle-screen.ascii .idle-clock { font-size: clamp(2.4rem, 6vw, 5rem); }
 
+/* Notification centre */
+.nc-btn { position: relative; }
+.nc-btn.quiet { color: var(--c-50); }
+.nc-badge { position: absolute; top: 1px; right: 0; min-width: .95rem; height: .95rem; padding: 0 .2rem; border-radius: .5rem; background: var(--c); color: var(--bg); font-size: .6rem; line-height: .95rem; text-align: center; font-variant-numeric: tabular-nums; }
+.nc { display: flex; flex-direction: column; gap: .45rem; width: min(26rem, 90vw); }
+.nc-head { display: flex; align-items: center; gap: .5rem; }
+.nc-dnd { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--c-70); }
+.nc-note { font-size: .76rem; }
+.nc-list { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: .25rem; }
+.nc-day { font-size: .68rem; letter-spacing: .2em; color: var(--c-50); margin: .35rem 0 .1rem; }
+.nc-item { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr) auto auto; gap: .45rem; align-items: start; padding: .4rem .45rem; border: 1px solid var(--c-12); background: var(--c-06); border-left: 2px solid var(--c-50); }
+.nc-item.warn { border-left-color: #ffb54a; }
+.nc-item.error { border-left-color: #ff5c6c; }
+.nc-item.ok { border-left-color: var(--c); }
+.nc-item.has-action { cursor: pointer; }
+.nc-item.has-action:hover { background: var(--c-12); }
+.nc-ico .ico { width: 1.1rem; height: 1.1rem; color: var(--c-70); }
+.nc-title { font-size: .86rem; }
+.nc-body { font-size: .76rem; margin-top: .1rem; word-break: break-word; }
+.nc-time { font-size: .7rem; white-space: nowrap; }
+.nc-x { opacity: 0; }
+.nc-item:hover .nc-x { opacity: 1; }
+
+/* Games */
+.modal.games-modal { width: min(1200px, 94vw); height: min(820px, 90vh); display: flex; flex-direction: column; }
+.games { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.game-status { font-size: .74rem; letter-spacing: .15em; margin-left: .6rem; }
+.game-tools { display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem; border-bottom: 1px solid var(--c-20); }
+.game-search { width: 18rem; }
+.game-filters { margin: 0; }
+.game-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .9rem; padding: .9rem; align-content: start; }
+.game-card { position: relative; display: flex; flex-direction: column; gap: .3rem; padding: 0; border: 1px solid transparent; background: transparent; color: var(--c); text-align: left; min-width: 0; }
+.game-card:hover, .game-card:focus-visible { border-color: var(--c); box-shadow: 0 0 18px rgb(var(--rgb) / .35); }
+.game-art { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--c-06); border: 1px solid var(--c-20); }
+.game-card.wide .game-art { object-fit: contain; padding: 18%; }
+.game-art-blank { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .4rem; padding: .6rem; text-align: center; font-size: .82rem; color: var(--c-70); }
+.game-art-blank .ico { width: 2.4rem; height: 2.4rem; opacity: .6; }
+.game-name { font-size: .84rem; padding: 0 .2rem; }
+.game-src { position: absolute; top: .35rem; left: .35rem; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; padding: .05rem .35rem; background: rgb(0 0 0 / .7); border: 1px solid var(--c-30); color: var(--c-90); }
+.game-thumb { width: 1.35rem !important; height: 1.9rem !important; object-fit: cover !important; }
+.dock-game img { object-fit: cover; border-radius: 2px; }
+.game-badge { color: var(--bg); background: var(--c); font-size: .74rem; letter-spacing: .12em; }
+
+/* Workspaces */
+.ws-btn { display: inline-flex; align-items: center; gap: .3rem; margin-left: .35rem; }
+.ws-btn .ico { width: .85rem; height: .85rem; }
+.dialog.ws-dialog { width: min(34rem, 92vw); }
+.ws-check { display: flex; align-items: center; gap: .45rem; font-size: .86rem; color: var(--c-90); }
+.ws-card { border: 1px solid var(--c-20); padding: .5rem .7rem; margin-bottom: .7rem; background: var(--c-06); }
+.ws-card.current { border-color: var(--c-50); }
+.ws-card-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .2rem; }
+.ws-card-name { font-size: 1rem; letter-spacing: .05em; }
+.ws-current { font-size: .66rem; letter-spacing: .18em; padding: .05rem .4rem; background: var(--c); color: var(--bg); }
+.ws-sched { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
+.ws-day { width: 2rem; padding: .2rem 0; border: 1px solid var(--c-20); background: transparent; color: var(--c-50); font-size: .72rem; }
+.ws-day.on { border-color: var(--c-70); color: var(--c); background: var(--c-12); }
+.ws-remember { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+
+/* Calendar subscriptions */
+.cal-day.has-feed::before { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: 3px; border-radius: 50%; background: var(--feed, var(--c)); }
+.cal-day.has-feed:not(.has-events)::before { margin-left: -2px; }
+.cal-event.feed { grid-template-columns: 3.2rem minmax(0, 1fr) auto; border-left: 2px solid var(--feed, var(--c)); padding-left: .3rem; }
+.cal-event-feed { font-size: .66rem; letter-spacing: .08em; color: var(--feed, var(--c-70)); text-transform: uppercase; max-width: 6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks-event.feed { border-left-color: var(--feed, var(--c)); grid-template-columns: 3.4rem minmax(0, 1fr); }
+.cal-subs { display: flex; align-items: center; justify-content: center; gap: .35rem; width: 100%; margin-top: .45rem; padding: .3rem; border: 1px dashed var(--c-30); background: transparent; color: var(--c-70); font-size: .76rem; }
+.cal-subs:hover { color: var(--c); border-color: var(--c-70); }
+.cal-feed-name::before { content: ""; display: inline-block; width: .6rem; height: .6rem; margin-right: .4rem; border-radius: 50%; background: var(--feed, var(--c)); vertical-align: middle; }
+
+/* Live wallpaper windows */
+html.wall body, html.wall { cursor: default; }
+.wall-host { position: fixed; inset: 0; background: var(--bg); }
+.wall-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+html.wall.hud .panel-head { cursor: default; }
+
 /* Screen saver windows */
 html.saver, html.saver body { cursor: none; background: #000; }
 html.saver #app, html.saver #toasts { display: none !important; }

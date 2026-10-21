@@ -129,6 +129,11 @@ anything. Useful hooks:
 | `.tab`, `.tab.active`, `.pane`, `.xterm` | Workspace tabs and terminals |
 | `.kb-key`, `.kb-key.mod`, `.kb-key.space`, `.kb-key.down` | On-screen keyboard |
 | `.fp-item`, `.fp-name`, `.fp-bar` | File browser |
+| `.nc-btn`, `.nc-badge`, `.nc-item` | Notification bell and its list |
+| `.game-card`, `.game-art`, `.game-badge` | Game library and the GAME MODE badge |
+| `.ly-line`, `.ly-line.on` | Synced lyrics (the current line has `.on`) |
+| `.lib-tile`, `.lib-cover`, `.radio-row`, `.radio-now` | Music library and radio views |
+| `.ws-btn` | Workspace name next to the logo |
 | `#app[data-side=left]`, `#app[data-files=bottom]`, `html.eco` | Layout and performance state |
 
 The editor previews as you type; if something breaks, clear it and save.

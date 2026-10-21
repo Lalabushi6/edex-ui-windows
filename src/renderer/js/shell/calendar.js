@@ -4,7 +4,8 @@
 import { h } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import { toast } from "../core/ui.js";
-import { loadAgenda, events, eventsOn, addEvent, removeEvent, onAgenda, dayKey } from "./agenda.js";
+import { loadAgenda, events, eventsOn, addEvent, removeEvent, onAgenda, dayKey, feedEventsAll } from "./agenda.js";
+import { emit } from "../core/bus.js";
 
 const REMINDERS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 
@@ -52,6 +53,9 @@ export function buildCalendar() {
     const offset = (view.getDay() - first + 7) % 7;
     const start = new Date(view.getFullYear(), view.getMonth(), 1 - offset);
     const withEvents = new Set(events().map((e) => e.date));
+    // Subscribed calendars mark their days in the feed's colour.
+    const feedDays = new Map();
+    for (const e of feedEventsAll()) if (!feedDays.has(e.date)) feedDays.set(e.date, e.color);
     for (let week = 0; week < 6; week++) {
       const rowStart = new Date(start.getFullYear(), start.getMonth(), start.getDate() + week * 7);
       cells.push(h("span", { class: "cal-wk" }, String(isoWeek(rowStart))));
@@ -63,9 +67,10 @@ export function buildCalendar() {
         if (sameDay(d, today)) cls.push("today");
         if (d.getDay() === 0 || d.getDay() === 6) cls.push("weekend");
         if (withEvents.has(key)) cls.push("has-events");
+        if (feedDays.has(key)) cls.push("has-feed");
         if (key === selected) cls.push("selected");
         cells.push(h("button", {
-          class: cls.join(" "), type: "button",
+          class: cls.join(" "), type: "button", style: feedDays.has(key) ? { "--feed": feedDays.get(key) } : undefined,
           title: d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
           onclick: () => { selected = key; render(); }
         }, String(d.getDate())));
@@ -97,13 +102,15 @@ export function buildCalendar() {
     timeInput.addEventListener("change", () => { if (timeInput.value && remind.value === "") remind.value = "0"; });
     dayPanel.replaceChildren(
       h("div", { class: "cal-day-title" }, date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }).toUpperCase()),
-      ...(list.length ? list.map((ev) => h("div", { class: "cal-event" },
+      ...(list.length ? list.map((ev) => h("div", { class: `cal-event${ev.readOnly ? " feed" : ""}`, style: ev.readOnly ? { "--feed": ev.color } : undefined },
         h("span", { class: "cal-event-time" }, ev.time || "all day"),
-        h("span", { class: "ellipsis", title: ev.title }, ev.title),
-        ev.remind != null ? h("span", { class: "cal-event-bell", title: "Reminder set" }, icon("bell")) : null,
-        h("button", { class: "icon-btn sm", type: "button", title: "Delete", onclick: () => removeEvent(ev.id) }, icon("close")))) : [h("div", { class: "muted cal-none" }, "No events")]),
+        h("span", { class: "ellipsis", title: [ev.title, ev.location, ev.feed].filter(Boolean).join(" · ") }, ev.title),
+        ev.readOnly ? h("span", { class: "cal-event-feed", title: `From ${ev.feed}` }, ev.feed) : null,
+        !ev.readOnly && ev.remind != null ? h("span", { class: "cal-event-bell", title: "Reminder set" }, icon("bell")) : null,
+        ev.readOnly ? null : h("button", { class: "icon-btn sm", type: "button", title: "Delete", onclick: () => removeEvent(ev.id) }, icon("close")))) : [h("div", { class: "muted cal-none" }, "No events")]),
       h("div", { class: "cal-add" }, titleInput, timeInput, remind,
-        h("button", { class: "btn sm", type: "button", onclick: add }, icon("plus"))));
+        h("button", { class: "btn sm", type: "button", onclick: add }, icon("plus"))),
+      h("button", { class: "cal-subs", type: "button", onclick: () => emit("open-settings", { page: "calendar" }) }, icon("calendar"), "Calendar subscriptions…"));
   }
 
   const shift = (n) => { view = new Date(view.getFullYear(), view.getMonth() + n, 1); render(); };

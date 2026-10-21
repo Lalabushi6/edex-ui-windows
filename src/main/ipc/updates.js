@@ -40,7 +40,7 @@ function newer(a, b) {
   return false;
 }
 
-function registerUpdates({ settings, windows }) {
+function registerUpdates({ settings, windows, notices }) {
   const slug = repoSlug();
   // Development runs can point at a test server; packaged builds never can.
   const apiBase = (!app.isPackaged && process.env.EDEX_UPDATE_API) || "https://api.github.com";
@@ -105,7 +105,10 @@ function registerUpdates({ settings, windows }) {
     try {
       const r = await check();
       settings.set({ updateLastCheck: Date.now() });
-      if (r.newer && r.version !== settings.get("updateSkip")) windows.send("updates:available", view(r));
+      if (r.newer && r.version !== settings.get("updateSkip")) {
+        windows.send("updates:available", view(r));
+        notices?.add({ level: "ok", kind: "update", title: `eDEX-UI ${r.version} is available`, body: "See what's new and install it from here.", action: { type: "updates" } }, { toast: false, system: "hidden" });
+      }
     } catch (_) {}
   }
   const startTimer = setTimeout(autoCheck, 45000);

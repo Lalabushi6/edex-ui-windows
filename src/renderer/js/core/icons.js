@@ -106,7 +106,12 @@ const P = {
   update: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/><path d="M12 8.5v7M9 12.8l3 2.9 3-2.9"/>',
   viz: '<path d="M4 20v-5M8 20V8M12 20v-9M16 20V5M20 20v-7"/>',
   apptab: '<rect x="3" y="6" width="18" height="14" rx="1.5"/><path d="M3 10h18"/><path d="M5.5 6V4h7v2"/>',
-  saver: '<rect x="3" y="4" width="18" height="13" rx="1"/><path d="M8.5 21h7M12 17v4"/><path d="M14.5 8.2a3.2 3.2 0 1 0 1.3 4.6 3.6 3.6 0 0 1-1.3-4.6z"/>'
+  saver: '<rect x="3" y="4" width="18" height="13" rx="1"/><path d="M8.5 21h7M12 17v4"/><path d="M14.5 8.2a3.2 3.2 0 1 0 1.3 4.6 3.6 3.6 0 0 1-1.3-4.6z"/>',
+  gamepad: '<path d="M7 7.5h10a4.5 4.5 0 0 1 4.4 5.4l-.8 4a2.4 2.4 0 0 1-4.1 1.2L14 15.5h-4l-2.5 2.6a2.4 2.4 0 0 1-4.1-1.2l-.8-4A4.5 4.5 0 0 1 7 7.5z"/><path d="M8 10.5v3M6.5 12h3M15.5 11.2h.01M17.3 13h.01"/>',
+  lyrics: '<path d="M4 6h10M4 10h10M4 14h6"/><path d="M17 17.5V8l4-1.2"/><circle cx="15.2" cy="17.6" r="1.9"/>',
+  radio: '<rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M7 9l10-5"/><circle cx="15.5" cy="14.5" r="2.5"/><path d="M6.5 13h4M6.5 16h4"/>',
+  album: '<rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5M3 16.5l9 5 9-5"/>'
 };
 
 // The eDEX-UI logo (ring, square and "e"), drawn in the theme colour.

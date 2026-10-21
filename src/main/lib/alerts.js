@@ -1,10 +1,9 @@
 // Low battery and low disk space alerts. Runs in the main process so they
 // fire while eDEX is hidden: a toast inside eDEX plus a Windows notification
-// when the window isn't on screen. Each alert fires once per crossing (and
-// re-arms only after the level recovers past a margin), never repeatedly.
+// when the window isn't on screen (both through the notification centre).
+// Each alert fires once per crossing (and re-arms only after the level
+// recovers past a margin), never repeatedly.
 "use strict";
-
-const { Notification } = require("electron");
 
 const BATTERY_EVERY_MS = 60 * 1000;
 const DISK_EVERY_MS = 10 * 60 * 1000;
@@ -12,10 +11,10 @@ const FIRST_CHECK_MS = 45 * 1000;
 const GB = 1024 ** 3;
 
 class Alerts {
-  constructor({ telemetry, settings, windows }) {
+  constructor({ telemetry, settings, notices }) {
     this.telemetry = telemetry;
     this.settings = settings;
-    this.windows = windows;
+    this.notices = notices;
     this.batteryFired = null; // null | "low" | "critical"
     this.diskFired = new Set(); // mounts currently below the limit
     this.timers = [];
@@ -82,17 +81,9 @@ class Alerts {
     for (const m of [...this.diskFired]) if (!seen.has(m)) this.diskFired.delete(m);
   }
 
+  // A critically low battery gets through Do Not Disturb.
   notify(level, title, body) {
-    this.windows.send("app:notice", { level, message: `${title} — ${body}` });
-    const win = this.windows.win;
-    const onScreen = win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
-    if (onScreen) return;
-    try {
-      if (!Notification.isSupported()) return;
-      const n = new Notification({ title: `eDEX-UI — ${title}`, body, silent: level !== "error" });
-      n.on("click", () => this.windows.show());
-      n.show();
-    } catch (_) {}
+    this.notices.add({ level, kind: "alert", title, body }, { system: "hidden", critical: level === "error" });
   }
 }
 

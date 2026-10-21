@@ -229,12 +229,13 @@ settings.watch(["pomodoroRounds"], () => emit("timer-changed"));
 
 // Module level so timers started from the launcher work (and ring) even when
 // the Timer widget is hidden; a mounted widget re-renders on "timer-changed".
-api.alarm.onFired(({ id }) => {
+api.alarm.onFired(({ id, quiet }) => {
   if (id === POMO_ID) {
     const p = state.pomo;
     if (!p.running) return;
     const wasWork = p.phase === "work";
     pomoNext(true);
+    if (quiet) { emit("timer-changed"); return; }
     sfx.play("alarm");
     if (wasWork) {
       toast(`Focus session done (${p.done} today) — ${PHASES[p.phase].toLowerCase()}, ${pomoMinutes(p.phase)} min`, { level: "ok", timeout: 8000 });
@@ -248,8 +249,10 @@ api.alarm.onFired(({ id }) => {
   const t = state.timer;
   t.running = false;
   t.remaining = 0;
-  sfx.play("alarm");
-  toast(`${t.label || "Timer"} finished`, { level: "ok", timeout: 8000 });
+  if (!quiet) {
+    sfx.play("alarm");
+    toast(`${t.label || "Timer"} finished`, { level: "ok", timeout: 8000 });
+  }
   emit("timer-changed");
 });
 on("timer-start", ({ ms, label = "" } = {}) => {

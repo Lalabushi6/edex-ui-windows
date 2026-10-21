@@ -111,7 +111,17 @@ locked down.
   moves the real window into its area and brings it forward; switching tabs
   minimises it, the tab keeps a picture of it while eDEX is in front, and
   closing the tab or quitting eDEX puts the window back where it was. Nothing
-  is injected into the app.
+  is injected into the app. Turn on **Open apps inside eDEX** and every app
+  you open from then on, from anywhere, opens straight into a tab.
+- **Workspaces**: named setups such as *Work*, *Gaming* or *Study*, switched
+  from the top bar, the launcher, a hotkey of their own or automatically at a
+  time of day. Each has its own tabs (the others keep running in the
+  background) and can bring back a theme, a layout and where your app windows
+  were.
+- **Notification centre**: the bell in the top bar keeps every eDEX reminder,
+  alert, download, timer and update notice for two weeks, with **Do not
+  disturb** to silence pop-ups, sounds and Windows notifications (critical
+  battery warnings still show).
 - **Multi-monitor HUD**: every display except the main one shows eDEX's
   telemetry panels, the globe and a large clock. It sits behind your windows
   on that display like a desktop does, and hides and returns with eDEX.
@@ -120,6 +130,10 @@ locked down.
   starfield, globe or your ASCII wallpaper), above every app, even while it's
   hidden in the tray. Any input ends it; it can lock Windows as it ends, and
   it holds back during full-screen apps and video.
+- **Live wallpaper**: while eDEX is hidden, its matrix rain, hex grid,
+  starfield, globe, ASCII art or telemetry panels keep running as the actual
+  Windows desktop background, behind your desktop icons. It pauses where a
+  maximised window covers it, on battery and during games.
 - Tray icon, single instance, start with Windows (straight onto the screen
   when it has taken over the desktop), session restore of tabs and split
   panes, close-to-tray.
@@ -134,6 +148,16 @@ locked down.
   notification requests are refused.
 - Optionally, **web links open in eDEX**: from the launcher, quick links, the
   terminal and the explorer.
+
+### Games
+- **Game library** (`Ctrl+Shift+G`): your installed Steam, Epic Games and Xbox
+  (PC Game Pass) games with their cover art, in a full-screen grid, in the
+  launcher's *Games* filter and pinnable to the dock. Click to play; games
+  start through their own launcher.
+- **Game mode**: while a game runs (one from the library, or anything
+  full-screen on Direct3D), eDEX goes quiet: animations and panel refreshes
+  stop, the multi-monitor HUD hides, the screen saver and live wallpaper hold
+  back, and notifications wait in the notification centre.
 
 ### Terminal
 - **Tabs** for PowerShell, PowerShell 7, Command Prompt, WSL and Git Bash
@@ -198,10 +222,24 @@ locked down.
 
 ### Media
 - **Media player** (`Ctrl+Shift+M`): playlists with drag-to-reorder, shuffle
-  and repeat, MP3 tags and cover art, video playback, a spectrum visualizer,
-  resume where you left off, Windows media keys, and a "Now playing" widget.
+  and repeat, tags and cover art (MP3, FLAC, Ogg, M4A), video playback, a
+  spectrum visualizer, resume where you left off, Windows media keys, and a
+  "Now playing" widget.
   Playback continues when the tab is closed. Plays MP3, AAC/M4A, FLAC, WAV,
   Ogg/Opus, MP4 (H.264), WebM and most MKV files.
+- **Music library**: your music folders by album, artist and song, with cover
+  art (a `cover.jpg` / `folder.jpg` in the folder, or the art inside the
+  files). Play an album, an artist or a song, or add them to the playlist.
+- **Synced lyrics** (`L`): lyrics that scroll along with the song, for your
+  files, Spotify and any app in *Now playing*, over the visualizer and as a
+  widget. They come from the free [LRCLIB](https://lrclib.net) service, or from
+  a `.lrc` file next to the song.
+- **Internet radio**: thousands of stations from the community
+  [Radio Browser](https://www.radio-browser.info) directory, by name or
+  genre, plus favourites and stations added by URL (.pls and .m3u links
+  work). A station is an entry in the playlist, so the visualizer, the
+  equalizer and media keys work with it, and the station's *now playing* title
+  shows as the track.
 - **10-band equalizer** (32 Hz to 16 kHz, ±12 dB) with presets (Bass boost,
   Treble boost, Vocal, Rock, Electronic, Acoustic, Loudness, Late night) and
   your own curves; boosts are balanced so loud tracks don't distort.
@@ -227,6 +265,11 @@ locked down.
 - **Calendar events** with optional reminders (at the time, 5 / 15 / 30 /
   60 minutes or a day before), marked on the calendar and listed in the Tasks
   widget on the day.
+- **Calendar subscriptions**: paste a Google, Outlook or iCloud calendar's
+  secret iCal (.ics) link and its events show on the calendar and in the
+  Tasks widget, in their own colour, with optional reminders. Repeating
+  events, time zones and all-day events are handled; feeds refresh every
+  half hour and are kept for offline use.
 - **Timer, stopwatch (with laps) and a pomodoro focus timer** (25 / 5 / 15
   minutes, configurable; breaks start on their own). A finished countdown
   plays the alarm and shows a Windows notification, even while eDEX is
@@ -337,13 +380,16 @@ locked down.
 | `Alt`+arrows | Move between split panes |
 | `Ctrl+Shift+F` | Find in terminal (or find files outside a terminal) |
 | `Ctrl+Shift+K` | On-screen keyboard |
-| `Ctrl+Shift+M` | Media player (in it: `E` equalizer, `V` visualizer) |
+| `Ctrl+Shift+M` | Media player (in it: `E` equalizer, `V` visualizer, `L` lyrics) |
+| `Ctrl+Shift+G` | Game library |
 | `Ctrl+Shift+J` | Ask Claude (AI assistant) |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |
 | `F1` | Shortcut sheet |
 
-The two global hotkeys can be changed in Settings → General. The full list,
+The two global hotkeys can be changed in Settings → General, and each
+workspace can have a global hotkey of its own (Settings → Workspaces). The
+full list,
 including the explorer, media player and keyboard keys, is in
 [USER_MANUAL.md](USER_MANUAL.md).
 
@@ -398,7 +444,32 @@ in eDEX**, or turn on **Show every open window as a tab** (Settings → Web &
 apps). The tab moves the app's real window into the workspace and brings it
 forward; switching tabs minimises it, and closing the tab or quitting eDEX
 puts it back where it was. eDEX doesn't inject anything into the app, so a
-misbehaving app can't freeze eDEX.
+misbehaving app can't freeze eDEX. **Open apps inside eDEX** (same page) goes
+further: every app you open from then on, from eDEX, the Start menu or
+anywhere else, opens straight into a tab (games are left alone).
+
+#### Can eDEX be my desktop wallpaper?
+Yes: Settings → Appearance → **Live wallpaper**. Whenever eDEX is hidden, the
+effect you pick (matrix rain, hex grid, starfield, globe, your ASCII art or
+the telemetry panels) runs as the Windows desktop background, behind your
+icons, which stay clickable. It goes away while eDEX is on screen, and pauses
+where a maximised window covers it, on battery and during games. Turn it off
+and your normal wallpaper is back.
+
+#### Can eDEX keep out of the way while I game?
+That's game mode. When a game from the library (Steam, Epic or Xbox), or
+anything else running full screen on Direct3D, is in front, eDEX stops its
+animations and refreshes, hides the HUD on other displays, holds the screen
+saver and live wallpaper back and keeps notifications in the bell instead of
+popping them up. Settings → Games can also turn it on by hand or off
+altogether.
+
+#### Can I see my Google or Outlook calendar?
+Yes, read-only. Copy the calendar's secret iCal address (Google Calendar:
+calendar settings → *Integrate calendar* → *Secret address in iCal format*;
+Outlook: Settings → Calendar → *Shared calendars* → *Publish a calendar* →
+ICS link), then paste it in Settings → Calendar. Treat that link like a
+password: anyone with it can read the calendar.
 
 #### Does it work with Spotify?
 Two ways. Without any setup, the media player's *Spotify* view (and the Now
@@ -425,13 +496,18 @@ install** fetches it from GitHub, checks its SHA-256, and runs the installer
 #### Does it send anything over the internet?
 Only if you let it. With **Outbound lookups** on (the default), the world-view
 globe looks up your approximate location from your public IP and checks
-latency to a few public sites, the weather widget fetches a forecast, and
-eDEX checks GitHub for a new release once a day. Turn it off under Settings →
-Privacy and eDEX makes no outbound requests of its own. Pages you open in
-browser tabs, Spotify (once you connect it) and the AI assistant (off until
-you add your own API key) only go online when you use them. Whole-PC search,
-the disk map, Bluetooth, Now playing, the mixer and app tabs work locally
-through Windows. See [Security model](#security-model).
+latency to a few public sites, the weather widget fetches a forecast, eDEX
+checks GitHub for a new release once a day, lyrics are looked up on LRCLIB
+(the song's title, artist, album and length), game cover art missing from your
+launchers' caches is fetched from Steam's and Epic's image servers, the radio
+view lists popular stations from Radio Browser, and calendar subscriptions
+refresh every half hour. Turn it off under Settings → Privacy and eDEX makes
+no outbound requests of its own. Pages you open in browser tabs, radio
+stations you play or search for, calendar *Refresh*, Spotify (once you connect
+it) and the AI assistant (off until you add your own API key) only go online
+when you use them. Whole-PC search, the disk map, Bluetooth, Now playing, the
+mixer, the music library and app tabs work locally through Windows. See
+[Security model](#security-model).
 
 #### What does the AI assistant cost, and is my key safe?
 It uses your own Anthropic API key (console.anthropic.com), billed to your
@@ -601,21 +677,23 @@ src/main/            Electron main process
   ipc/               terminal, system, files, desktop (apps/windows/media keys/power), media player,
                      audio mixer, now playing, Bluetooth, disk usage, window arrangements,
                      tools (command widgets, git, battery health, tasks, settings backup), AI,
-                     browser tabs, app tabs, Spotify, updates, extras
+                     browser tabs, app tabs, Spotify, updates, games, lyrics, radio, music
+                     library, calendar feeds, extras
   lib/               protocols, path policy, cache, JSON store, telemetry, icon service,
-                     takeover, screen time, alerts, screen saver, portable mode
+                     takeover, screen time, alerts, notification centre, screen saver,
+                     live wallpaper, game mode, portable mode, audio tags, iCalendar parser
   native/bridge.ps1  long-lived PowerShell helper for Win32 / Core Audio / WinRT / Windows Search;
                      a second instance handles slow calls (media sessions, Bluetooth, search, disk scans)
 src/renderer/        UI (ES modules served from app://edex)
   js/core/           DOM builder, settings, theme, commands/hotkeys, scheduler,
                      shared telemetry feeds, UI kit, web links
   js/widgets/        side-column widgets (incl. tasks, git, command widgets)
-  js/workspace/      tabs: terminal (split panes), explorer, process manager, media player (+ Spotify
-                     view), disk usage, browser, app windows, ASCII wallpaper
+  js/workspace/      tabs: terminal (split panes), explorer, process manager, media player (+ Spotify,
+                     music library and radio views), disk usage, browser, app windows, ASCII wallpaper
   js/shell/          top bar, dock, launcher, settings, viewer, keyboard, boot, mixer, Bluetooth,
                      battery, now playing, window arrangements, agenda, AI panel, idle screen, effects,
-                     wallpaper, updates
-  js/media/          media player engine, visualizer
+                     wallpaper, updates, notification centre, games, workspaces
+  js/media/          media player engine, visualizer, synced lyrics
   lib/encom-globe.js the ENCOM globe (from eDEX-UI)
 themes/              built-in themes (JSON, eDEX-UI format)
 keyboards/           on-screen keyboard layouts (JSON, eDEX-UI format)
@@ -630,7 +708,7 @@ docs/                PUBLISHING.md (GitHub and releases)
 
 | File | What's in it |
 |---|---|
-| [USER_MANUAL.md](USER_MANUAL.md) | Everything eDEX does: layout, modes, launcher, dock, terminal, browser tabs, app tabs, explorer, media and Spotify, keyboard, wallpaper, tools, screen saver, settings, privacy, updates and portable use, troubleshooting |
+| [USER_MANUAL.md](USER_MANUAL.md) | Everything eDEX does: layout, modes, workspaces, launcher, dock, games, terminal, browser tabs, app tabs, explorer, media (Spotify, library, lyrics, radio), keyboard, wallpaper and live wallpaper, tools, notifications, calendar, screen saver, settings, privacy, updates and portable use, troubleshooting |
 | [THEME_GUIDE.md](THEME_GUIDE.md) | Making and editing themes, custom CSS hooks |
 | [docs/PUBLISHING.md](docs/PUBLISHING.md) | Putting the project on GitHub, automatic builds, releases |
 | [SECURITY.md](SECURITY.md) | Reporting security problems, how eDEX is built to be safe |
@@ -670,7 +748,21 @@ docs/                PUBLISHING.md (GitHub and releases)
   still picture whenever an eDEX menu or dialog is open.
 - **App tabs** only move, minimise and restore another app's window (and
   picture it); nothing is injected or re-parented, and windows go back where
-  they were when the tab closes or eDEX quits.
+  they were when the tab closes or eDEX quits. *Open apps inside eDEX* only
+  watches the window list for new top-level windows.
+- **The live wallpaper** re-parents only eDEX's own wallpaper windows into
+  Explorer's desktop layer (the documented-in-practice `Progman` / `WorkerW`
+  arrangement every live-wallpaper app uses); they don't take focus or input,
+  and are removed whenever eDEX shows, quits or the setting is turned off.
+- **Internet radio** streams reach the interface only through the
+  `edexradio:` protocol: the main process fetches the station (http/https
+  only), resolves .pls / .m3u links and strips the stream's title metadata,
+  so the interface's CSP stays closed to the internet. Station logos and game
+  covers arrive as data / local files, never as remote images.
+- **Calendar links** are kept in settings like your other preferences and
+  only ever fetched; the downloaded copies live in `calendars/` in eDEX's data
+  folder. Anyone with a secret iCal link can read that calendar, so treat
+  settings backups that contain one accordingly.
 - **Secrets** — the AI key and the Spotify refresh token — are encrypted with
   your Windows account (DPAPI) and unreadable through eDEX's own file
   previews. Spotify uses PKCE sign-in through a loopback address, so there's
@@ -684,9 +776,14 @@ docs/                PUBLISHING.md (GitHub and releases)
 falling back to ipinfo.io) and checks latency to google.com and twelve public
 sites; the weather widget fetches a forecast for that approximate location
 from open-meteo.com; once a day eDEX asks api.github.com for the latest
-release. Turn all of this off under Settings → Privacy. Browser tabs,
-Spotify (accounts.spotify.com, api.spotify.com and its cover-art servers) and
-the AI assistant only go online when you use them. Clipboard history is never
+release; lyrics are looked up on lrclib.net (title, artist, album and
+length of what's playing); missing game covers come from Steam's
+(steamstatic.com) and Epic's image servers; the radio view's popular list
+comes from radio-browser.info; and calendar subscriptions refresh from the
+links you added. Turn all of this off under Settings → Privacy. Browser
+tabs, radio stations and station search, Spotify (accounts.spotify.com,
+api.spotify.com and its cover-art servers) and the AI assistant only go
+online when you use them. Clipboard history is never
 written to disk. Screen time stores only program names and durations, on
 this PC, for two weeks. The AI assistant is off until you add your own key
 and sends only what you ask. Report problems as described in

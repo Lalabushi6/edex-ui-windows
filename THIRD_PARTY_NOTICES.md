@@ -52,6 +52,22 @@ systeminformation (MIT), the Anthropic TypeScript SDK `@anthropic-ai/sdk`
 Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), used
 only when outbound lookups are enabled.
 
+Synced lyrics come from [LRCLIB](https://lrclib.net), a free, community-run
+lyrics database with an open API, used only when outbound lookups are
+enabled. Lyrics remain the property of their respective copyright owners;
+eDEX shows them for personal use and caches them only on your PC.
+
+Internet radio stations are listed by the community
+[Radio Browser](https://www.radio-browser.info) directory, a free,
+community-run station database. The streams themselves, station names and
+logos belong to their stations.
+
+Game names and cover art come from the Steam, Epic Games and Xbox
+launchers installed on your PC (and, for art missing from their caches,
+from Steam's and Epic's image servers). They are trademarks and artwork of
+their respective owners; eDEX-UI isn't affiliated with Valve, Epic Games or
+Microsoft.
+
 The optional Spotify view uses the [Spotify Web API](https://developer.spotify.com/documentation/web-api)
 with the user's own developer app, under the Spotify Developer Terms; cover
 art and metadata are Spotify's and its licensors'. Spotify is a trademark of

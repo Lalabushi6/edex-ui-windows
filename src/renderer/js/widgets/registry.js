@@ -29,9 +29,23 @@ function createPanel(def) {
   };
 }
 
+// Widgets with defaultHidden start hidden until switched on (shownWidgets).
+export function widgetHidden(id) {
+  const def = defs.get(id);
+  if ((settings.get("hiddenWidgets") || []).includes(id)) return true;
+  return !!def?.defaultHidden && !(settings.get("shownWidgets") || []).includes(id);
+}
+
+export function setWidgetShown(id, on) {
+  const hidden = new Set(settings.get("hiddenWidgets") || []);
+  const shown = new Set(settings.get("shownWidgets") || []);
+  if (on) { hidden.delete(id); shown.add(id); } else { hidden.add(id); shown.delete(id); }
+  settings.set({ hiddenWidgets: [...hidden], shownWidgets: [...shown] });
+}
+
 function layout() {
   const order = settings.get("widgetOrder") || { left: [], right: [] };
-  const hidden = new Set(settings.get("hiddenWidgets") || []);
+  const hidden = new Set([...defs.keys()].filter((id) => widgetHidden(id)));
   const placed = { left: [], right: [] };
   const seen = new Set();
   for (const side of ["left", "right"]) {
@@ -196,5 +210,5 @@ export function mountWidgets(left, right) {
   wireColumn(left);
   wireColumn(right);
   render();
-  settings.watch(["hiddenWidgets", "widgetOrder"], () => render());
+  settings.watch(["hiddenWidgets", "shownWidgets", "widgetOrder"], () => render());
 }

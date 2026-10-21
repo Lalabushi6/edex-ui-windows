@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const { app, clipboard, dialog, shell, Notification } = require("electron");
+const { app, clipboard, dialog, shell } = require("electron");
 const { cached } = require("../lib/cache");
 const { JsonStore } = require("../lib/store");
 const { handle, asString } = require("./util");
@@ -127,21 +127,18 @@ function registerNetwork({ settings }) {
 // window's timers are throttled (up to a minute late), the main process's
 // are not. When one fires, a Windows notification is shown and the
 // interface is told so it can play the alarm.
-function registerAlarms({ windows }) {
+function registerAlarms({ windows, notices }) {
   const alarms = new Map(); // id -> timeout
-  // kind "reminder" (tasks, calendar events) shows the label as is.
+  // kind "reminder" (tasks, calendar events) shows the label as is. The
+  // notification centre records it and shows the Windows notification; with
+  // Do Not Disturb on, the interface stays silent too.
   const fire = (id, label, kind) => {
     alarms.delete(id);
-    windows.send("alarm:fired", { id, label });
-    try {
-      if (Notification.isSupported()) {
-        const n = kind === "reminder"
-          ? new Notification({ title: "eDEX-UI reminder", body: label || "Reminder", silent: false })
-          : new Notification({ title: "eDEX-UI timer", body: label ? `${label} — time is up` : "Time is up", silent: false });
-        n.on("click", () => windows.show());
-        n.show();
-      }
-    } catch (_) {}
+    windows.send("alarm:fired", { id, label, quiet: notices.quiet });
+    notices.add(kind === "reminder"
+      ? { level: "ok", kind: "reminder", title: "Reminder", body: label || "Reminder" }
+      : { level: "ok", kind: "timer", title: "Timer", body: label ? `${label} — time is up` : "Time is up" },
+    { toast: false, system: "always" });
   };
   handle("alarm:set", (_e, opts = {}) => {
     const id = asString(opts.id, "alarm id", 64);

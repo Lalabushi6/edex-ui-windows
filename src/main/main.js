@@ -36,8 +36,16 @@ const { registerUpdates } = require("./ipc/updates");
 const { registerBrowser } = require("./ipc/browser");
 const { registerAppTabs } = require("./ipc/apptabs");
 const { registerSpotify } = require("./ipc/spotify");
+const { registerGames } = require("./ipc/games");
+const { registerLyrics } = require("./ipc/lyrics");
+const { registerRadio } = require("./ipc/radio");
+const { registerLibrary } = require("./ipc/library");
+const { registerCalendarFeeds } = require("./ipc/calfeeds");
 const { Hud } = require("./hud");
 const { Screensaver } = require("./lib/screensaver");
+const { Notices } = require("./lib/notices");
+const { GameMode } = require("./lib/gamemode");
+const { LiveWallpaper } = require("./lib/livewall");
 const { Telemetry } = require("./lib/telemetry");
 const { IconService } = require("./lib/icon-service");
 
@@ -74,6 +82,15 @@ function start() {
   let appTabs;
   let spotify;
   let saver;
+  let notices;
+  let games;
+  let gameMode;
+  let lyrics;
+  let library;
+  let calfeeds;
+  let livewall;
+  let profileTimer;
+  let lastHotkeyFailures = "";
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -157,6 +174,19 @@ function start() {
     handle("settings:set", (_e, patch) => settings.set(patch));
     settings.on("change", (changed) => windows.send("settings:changed", changed));
 
+    // Notification centre: every eDEX notification goes through it.
+    notices = new Notices({ settings, windows, userData: app.getPath("userData") });
+    handle("notices:list", () => notices.list());
+    handle("notices:seen", () => { notices.markSeen(); return true; });
+    handle("notices:remove", (_e, id) => { notices.remove(String(id || "")); return true; });
+    handle("notices:clear", () => { notices.clear(); return true; });
+    // From the interface (downloads, missed reminders …), which shows its own toast.
+    handle("notices:add", (_e, entry = {}) => {
+      notices.add(entry, { toast: false, system: entry?.system === "never" ? "never" : "hidden" });
+      return true;
+    });
+    settings.on("change", (changed) => { if ("dnd" in changed) notices.broadcast(); });
+
     telemetry = new Telemetry({ bridge });
     icons = new IconService({ bridge, cacheFile: path.join(app.getPath("userData"), "icon-cache.json") });
 
@@ -167,17 +197,17 @@ function start() {
     registerNetwork({ settings });
     clip = registerClipboard({ settings, windows, bridge });
     notes = registerNotes();
-    alarms = registerAlarms({ windows });
+    alarms = registerAlarms({ windows, notices });
     registerThemes({ windows });
     registerMedia({ windows });
     keyboards = registerKeyboards({ windows });
     registerWifi();
     const ownPids = () => [process.pid, ...app.getAppMetrics().map((m) => m.pid)];
-    const alerts = new Alerts({ telemetry, settings, windows });
+    const alerts = new Alerts({ telemetry, settings, notices });
     alerts.start();
     screenTime = new ScreenTime({
       bridge, settings, userData: app.getPath("userData"), ownPids,
-      notify: (title, body) => alerts.notify("warn", title, body)
+      notify: (title, body) => notices.add({ level: "warn", kind: "screentime", title, body })
     });
     screenTime.apply();
     handle("screentime:get", (_e, offset) => screenTime.get(offset));
@@ -191,11 +221,32 @@ function start() {
     tools = registerTools({ settings, windows });
     ai = registerAi({ settings });
     hud = new Hud({ settings, windows, bridge });
-    updates = registerUpdates({ settings, windows });
-    browser = registerBrowser({ windows });
-    appTabs = registerAppTabs({ windows, bridge, aux, ownPids });
+
+    // Game library, and game mode while one runs.
+    games = registerGames({ settings, windows, bridge, aux });
+    gameMode = new GameMode({ settings, bridge, games, ownPids });
+    const applyGame = () => {
+      const st = { active: gameMode.active, name: gameMode.name };
+      windows.send("app:game", st);
+      hud.setSuspended(st.active);
+      notices.setQuiet("game", st.active && settings.get("gameModeQuiet") !== false);
+    };
+    gameMode.on("change", applyGame);
+    settings.on("change", (c) => { if ("gameModeQuiet" in c) applyGame(); });
+    handle("game:state", () => ({ active: gameMode.active, name: gameMode.name }));
+
+    updates = registerUpdates({ settings, windows, notices });
+    browser = registerBrowser({ windows, notices });
+    appTabs = registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame: (exe) => !!games.match(exe), gameMode });
     spotify = registerSpotify({ settings, windows });
-    saver = new Screensaver({ settings, windows, bridge, ownPids, windowed: DEV_WINDOWED });
+    saver = new Screensaver({ settings, windows, bridge, ownPids, windowed: DEV_WINDOWED, gameMode });
+    lyrics = registerLyrics({ settings });
+    registerRadio({ windows });
+    library = registerLibrary({ settings, windows });
+    calfeeds = registerCalendarFeeds({ settings, windows });
+    livewall = new LiveWallpaper({ settings, windows, bridge, gameMode });
+    // Development runs can poke these from the main-process inspector.
+    if (!app.isPackaged) globalThis.__edex = { livewall, gameMode, notices, games };
     handle("saver:start", () => saver.start({ preview: true }));
     handle("saver:dismiss", () => { saver.stop(true); return true; });
 
@@ -215,13 +266,28 @@ function start() {
     recovering.finally(() => takeover.attach(win));
     hud.attach(win);
     browser.attach(win);
+    livewall.attachTo(win);
     createTray({ windows, settings, quit, startSaver: () => saver.start({ preview: true }) });
     registerHotkeys();
     applyLoginItem();
     settings.on("change", (changed) => {
-      if ("hotkeyToggle" in changed || "hotkeyLauncher" in changed) registerHotkeys();
+      if ("hotkeyToggle" in changed || "hotkeyLauncher" in changed || "profiles" in changed) registerHotkeys();
       if ("openAtLogin" in changed || "takeover" in changed) applyLoginItem();
     });
+
+    // Workspaces that switch at a time of day (checked twice a minute; each
+    // fires once per day at its minute).
+    const fired = new Map();
+    profileTimer = setInterval(() => {
+      const now = new Date();
+      const hm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const stamp = `${now.toDateString()} ${hm}`;
+      for (const p of settings.get("profiles") || []) {
+        if (!p.schedule || p.schedule.time !== hm || !p.schedule.days.includes(now.getDay()) || fired.get(p.id) === stamp) continue;
+        fired.set(p.id, stamp);
+        windows.send("app:command", { name: "profile", id: p.id, scheduled: true });
+      }
+    }, 20000);
 
     // Rebuilding the installed-app index runs Get-StartApps (about a second
     // of helper time); the launcher answers from the disk cache until then,
@@ -242,12 +308,23 @@ function start() {
     };
     bind(settings.get("hotkeyToggle"), () => windows.toggle());
     bind(settings.get("hotkeyLauncher"), () => windows.toggle("launcher"));
-    if (failures.length) {
+    // A workspace's hotkey brings eDEX up in that workspace.
+    for (const p of settings.get("profiles") || []) {
+      if (!p.hotkey) continue;
+      bind(p.hotkey, () => {
+        windows.show();
+        windows.send("app:command", { name: "profile", id: p.id });
+      });
+    }
+    // Said once per set of failures, not on every re-registration.
+    const said = failures.join(", ");
+    if (said && said !== lastHotkeyFailures) {
       setTimeout(() => windows.send("app:notice", {
         level: "warn",
-        message: `Hotkey unavailable (in use by another app): ${failures.join(", ")}`
+        message: `Hotkey unavailable (in use by another app): ${said}`
       }), 4000);
     }
+    lastHotkeyFailures = said;
   }
 
   // At sign-in eDEX normally starts in the tray; when it has taken over the
@@ -306,6 +383,16 @@ function start() {
     updates?.stop();
     spotify?.stop();
     saver?.dispose();
+    livewall?.dispose();
+    gameMode?.dispose();
+    games?.stop();
+    games?.flush();
+    lyrics?.flush();
+    library?.flush();
+    calfeeds?.stop();
+    appTabs?.stop();
+    notices?.flush();
+    clearInterval(profileTimer);
     browser?.closeAll();
     hud?.closeAll();
     icons?.flush();

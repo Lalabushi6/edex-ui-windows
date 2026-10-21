@@ -10,7 +10,17 @@ import { emit } from "../core/bus.js";
 import { toast, contextMenu, confirm, cleanError, popover } from "../core/ui.js";
 import { player, formatTime, isMediaPath, EQ_BANDS, EQ_PRESETS } from "../media/player.js";
 import { createViz, vizOptions, VIZ_STYLES, VIZ_COLORS, VIZ_KEYS } from "../media/visualizer.js";
+import { createLyricsView } from "../media/lyrics.js";
+import { on as onBus } from "../core/bus.js";
 import { SpotifyView } from "./spotify.js";
+import { LibraryView } from "./library.js";
+import { RadioView } from "./radio.js";
+
+// Lyrics stay on or off across player tabs and restarts.
+const lyricsPref = {
+  get: () => { try { return localStorage.getItem("edex.lyricsOn") === "1"; } catch (_) { return false; } },
+  set: (on) => { try { localStorage.setItem("edex.lyricsOn", on ? "1" : "0"); } catch (_) {} }
+};
 
 const api = window.edex;
 
@@ -58,10 +68,12 @@ export class MediaTab {
         h("button", { class: "btn", type: "button", onclick: () => this.pickFiles() }, icon("plus"), "Add files"),
         h("button", { class: "btn", type: "button", onclick: () => this.pickFolder() }, icon("folder"), "Add folder")));
     this.videoBox = h("div", { class: "mp-video" });
+    this.lyrics = createLyricsView({ className: "ly-stage" });
     this.stage = h("div", { class: "mp-stage" }, this.viz, this.videoBox,
       h("div", { class: "mp-now" }, this.art, h("div", { class: "mp-now-text" }, this.titleEl, this.artistEl)),
+      this.lyrics.el,
       this.empty);
-    this.stage.addEventListener("dblclick", () => this.fullscreen());
+    this.stage.addEventListener("dblclick", (e) => { if (!e.target.closest(".lyrics")) this.fullscreen(); });
 
     this.playBtn = btn("play", "Play / pause (Space)", () => p.toggle(), "big");
     this.cur = h("span", { class: "mp-time" }, "00:00");
@@ -75,6 +87,7 @@ export class MediaTab {
     });
     this.eqBtn = btn("eq", "Equalizer (E)", () => this.openEq());
     this.vizBtn = btn("viz", "Visualizer style (V)", () => this.openViz());
+    this.lyricsBtn = btn("lyrics", "Lyrics (L)", () => this.toggleLyrics());
     this.volIcon = btn("volume", "Mute (M)", () => p.toggleMute());
     this.volFill = h("div", { class: "mp-vol-fill" }, h("i"));
     this.vol = h("div", { class: "mp-vol", title: "Volume (↑ ↓)" }, h("i", { class: "mp-vol-bg" }), this.volFill);
@@ -84,9 +97,13 @@ export class MediaTab {
       btn("next", "Next (Shift+→)", () => p.next()),
       btn("stop", "Stop", () => p.stop()),
       this.cur, this.progress, this.dur,
-      this.shuffleBtn, this.repeatBtn, this.eqBtn, this.vizBtn,
+      this.shuffleBtn, this.repeatBtn, this.eqBtn, this.vizBtn, this.lyricsBtn,
       this.volIcon, this.vol,
       btn("maximize", "Fullscreen (F)", () => this.fullscreen()));
+    // What the main area shows: the visualizer / video, the library, radio.
+    this.views = h("div", { class: "mp-views", role: "tablist" });
+    this.library = new LibraryView();
+    this.radio = new RadioView();
 
     this.count = h("span", { class: "muted" });
     this.list = h("div", { class: "mp-list", tabindex: 0 });
@@ -98,8 +115,8 @@ export class MediaTab {
         btn("folder", "Add folder", () => this.pickFolder()),
         btn("trash", "Clear playlist", () => this.clear())),
       this.list);
-    this.root = h("div", { class: "mp", tabindex: 0 }, h("div", { class: "mp-main" }, this.stage, controls), side);
-    this.spotify = new SpotifyView({ makeSwitch: () => this.sourceSwitch() });
+    this.root = h("div", { class: "mp", tabindex: 0 }, h("div", { class: "mp-main" }, this.views, this.stage, this.library.root, this.radio.root, controls), side);
+    this.spotify = new SpotifyView({ makeSwitch: () => this.sourceSwitch(), toggleLyrics: () => this.toggleLyrics() });
     this.el.append(this.root, this.spotify.root);
 
     this.wireSeek();
@@ -107,17 +124,22 @@ export class MediaTab {
     this.wireDrop();
     this.wireKeys();
     const on = (type, fn) => { p.addEventListener(type, fn); this.off.push(() => p.removeEventListener(type, fn)); };
-    on("change", () => { this.renderNow(); this.renderList(); });
+    on("change", () => { this.renderNow(); this.renderList(); this.renderTime(); this.syncLyrics(); });
     on("list", () => this.renderList());
     on("state", () => { this.renderState(); this.kickViz(); });
-    on("time", () => this.renderTime());
+    on("time", () => { this.renderTime(); if (this.lyricsOn) this.lyrics.tick(p.el.currentTime); });
     on("volume", () => this.renderVolume());
     this.off.push(settings.watch(["mediaShuffle", "mediaRepeat"], () => { this.renderModes(); p.rebuildOrder(); }));
     this.off.push(settings.watch(["mediaEqOn"], () => this.renderModes()));
     // Restyled while paused: draw one frame so the change shows.
     this.off.push(settings.watch(VIZ_KEYS, () => this.kickViz()));
     this.off.push(settings.watch("mediaSource", () => this.applySource()));
+    this.off.push(settings.watch("mediaView", () => this.applyView()));
+    this.off.push(onBus("lyrics-toggle", () => this.toggleLyrics()));
+    this.lyricsOn = lyricsPref.get();
     this.applySource();
+    this.applyView();
+    this.applyLyrics();
 
     this.renderNow();
     this.renderList();
@@ -125,6 +147,50 @@ export class MediaTab {
     this.renderTime();
     this.renderVolume();
     this.renderModes();
+  }
+
+  // ── View: now playing, library, radio ────────────────────────────────────
+  get view() {
+    const v = settings.get("mediaView");
+    return v === "library" || v === "radio" ? v : "player";
+  }
+
+  applyView() {
+    const v = this.view;
+    this.views.replaceChildren(...[["player", "Now playing", "viz"], ["library", "Library", "album"], ["radio", "Radio", "radio"]].map(([id, label, ic]) => h("button", {
+      class: `mp-view${v === id ? " on" : ""}`, type: "button", role: "tab",
+      onclick: () => settings.set({ mediaView: id })
+    }, icon(ic), label)));
+    this.stage.hidden = v !== "player";
+    this.library.root.hidden = v !== "library";
+    this.radio.root.hidden = v !== "radio";
+    const shown = this.el.classList.contains("active") && this.source === "local";
+    if (v === "library" && shown) this.library.activate();
+    if (v === "radio" && shown) this.radio.activate();
+    if (v === "player") this.kickViz();
+  }
+
+  // ── Lyrics over the stage ────────────────────────────────────────────────
+  toggleLyrics() {
+    this.lyricsOn = !this.lyricsOn;
+    lyricsPref.set(this.lyricsOn);
+    this.applyLyrics();
+    this.spotify?.setLyrics(this.lyricsOn);
+  }
+
+  applyLyrics() {
+    this.lyrics.el.hidden = !this.lyricsOn;
+    this.stage.classList.toggle("with-lyrics", this.lyricsOn);
+    this.lyricsBtn.classList.toggle("on", this.lyricsOn);
+    this.syncLyrics();
+  }
+
+  syncLyrics() {
+    if (!this.lyricsOn) return;
+    const it = this.p.current;
+    const d = this.p.el.duration;
+    this.lyrics.setTrack(it ? { title: it.title, artist: it.stream ? "" : it.artist || "", album: it.stream ? "" : it.album || "", duration: Number.isFinite(d) ? d : 0, path: it.path } : null);
+    this.lyrics.tick(this.p.el.currentTime);
   }
 
   // ── Source: your files, or Spotify ───────────────────────────────────────
@@ -187,6 +253,7 @@ export class MediaTab {
 
   renderTime() {
     const el = this.p.el;
+    this.progress.classList.toggle("live", !!this.p.current?.stream);
     setText(this.cur, formatTime(el.currentTime));
     setText(this.dur, formatTime(el.duration));
     this.progressFill.style.width = `${el.duration ? (el.currentTime / el.duration) * 100 : 0}%`;
@@ -415,6 +482,7 @@ export class MediaTab {
       else if (e.key.toLowerCase() === "f" && !e.ctrlKey) { done(); this.fullscreen(); }
       else if (e.key.toLowerCase() === "e" && !e.ctrlKey) { done(); this.openEq(); }
       else if (e.key.toLowerCase() === "v" && !e.ctrlKey) { done(); this.openViz(); }
+      else if (e.key.toLowerCase() === "l" && !e.ctrlKey) { done(); this.toggleLyrics(); }
       else if (e.key === "Delete" && this.selected >= 0) { done(); p.remove(this.selected); this.selected = Math.min(this.selected, p.items.length - 1); this.paintSelection(); }
       else if (e.key === "Enter" && this.selected >= 0) { done(); p.load(this.selected); }
     });
@@ -487,7 +555,7 @@ export class MediaTab {
     }
     this.p.attach(this.videoBox);
     this.updateVideo();
-    this.kickViz();
+    this.applyView();
     requestAnimationFrame(() => this.root.focus({ preventScroll: true }));
   }
 

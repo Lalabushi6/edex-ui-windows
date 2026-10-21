@@ -40,10 +40,10 @@ defineWidget({
     function render() {
       const evs = eventsOn(dayKey());
       today.hidden = !evs.length;
-      today.replaceChildren(...evs.map((ev) => h("div", { class: "tasks-event", title: ev.title },
+      today.replaceChildren(...evs.map((ev) => h("div", { class: `tasks-event${ev.readOnly ? " feed" : ""}`, title: [ev.title, ev.location, ev.feed].filter(Boolean).join(" · "), style: ev.readOnly ? { "--feed": ev.color } : undefined },
         h("span", { class: "tasks-event-time" }, ev.time || "all day"),
         h("span", { class: "ellipsis" }, ev.title),
-        h("button", { class: "icon-btn sm task-del", type: "button", title: "Delete event", onclick: () => removeEvent(ev.id) }, icon("close")))));
+        ev.readOnly ? null : h("button", { class: "icon-btn sm task-del", type: "button", title: "Delete event", onclick: () => removeEvent(ev.id) }, icon("close")))));
       const all = tasks();
       const open = all.filter((t) => !t.done).sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || b.created - a.created);
       const done = all.filter((t) => t.done);

@@ -4,6 +4,7 @@ import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import { openModal, toast, cleanError } from "../core/ui.js";
 import * as fmt from "../core/format.js";
+import { isQuiet } from "./notices.js";
 
 const api = window.edex;
 
@@ -107,6 +108,7 @@ export async function openUpdates({ result = null } = {}) {
 // The once-a-day background check reports newer versions here.
 export function initUpdates() {
   api.updates.onAvailable((r) => {
+    if (isQuiet()) return; // the notification centre keeps it
     toast(`eDEX-UI ${r.version} is available`, { level: "ok", timeout: 12000, action: { label: "Details", run: () => openUpdates({ result: r }) } });
   });
 }

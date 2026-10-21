@@ -6,6 +6,7 @@
 import * as sfx from "../core/audio.js";
 import { toast } from "../core/ui.js";
 import { parseDuration } from "./convert.js";
+import { notify as notice } from "./notices.js";
 
 const api = window.edex;
 const WEEK = 7 * 86400000;
@@ -23,7 +24,9 @@ export function loadAgenda() {
       data = { tasks: d.tasks || [], events: d.events || [] };
       catchUp();
       schedule();
+      loadFeedEvents();
       setInterval(schedule, 3600000);
+      setInterval(() => loadFeedEvents(), 30 * 60 * 1000);
       notify();
     }).catch(() => {});
   }
@@ -32,7 +35,52 @@ export function loadAgenda() {
 
 export const tasks = () => data.tasks;
 export const events = () => data.events;
-export const eventsOn = (key) => data.events.filter((e) => e.date === key).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+
+// â”€â”€ Subscribed calendars (read-only, from .ics links) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Occurrences for about a month back and half a year ahead, refreshed when
+// the main process downloads a feed and every half hour.
+let feedEvents = []; // { id, date, time, title, feed, color, location, readOnly, start, remind }
+const remindedFeed = new Set();
+const timeOf = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+export async function loadFeedEvents() {
+  const now = Date.now();
+  let list = [];
+  try { list = await api.calendars.events({ from: now - 35 * 86400000, to: now + 185 * 86400000 }); } catch (_) { return; }
+  const out = [];
+  for (const o of list) {
+    const base = { feed: o.feed, feedId: o.feedId, color: o.color, location: o.location, readOnly: true, title: o.title, start: o.start, remind: o.remind };
+    if (o.allDay && o.wall) {
+      // All-day events cover each of their days.
+      for (let i = 0; i < Math.min(o.days || 1, 31); i++) {
+        const d = new Date(o.wall.y, o.wall.m - 1, o.wall.d + i);
+        out.push({ ...base, id: `${o.id}-${i}`, date: dayKey(d), time: null });
+      }
+    } else {
+      out.push({ ...base, id: o.id, date: dayKey(new Date(o.start)), time: timeOf(o.start) });
+    }
+  }
+  feedEvents = out;
+  scheduleFeedReminders();
+  notify();
+}
+api.calendars.onChange(() => { if (loaded) loadFeedEvents(); });
+
+export const feedEventsAll = () => feedEvents;
+export const eventsOn = (key) => [...data.events.filter((e) => e.date === key), ...feedEvents.filter((e) => e.date === key)]
+  .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+
+function scheduleFeedReminders() {
+  const now = Date.now();
+  for (const e of feedEvents) {
+    if (e.remind == null || e.time === null || remindedFeed.has(e.id)) continue;
+    const at = e.start - e.remind * 60000;
+    if (at > now && at - now <= WEEK) {
+      api.alarm.set({ id: `feed-${e.id}`.slice(0, 64), inMs: at - now, label: `${e.title} at ${e.time}${e.feed ? ` (${e.feed})` : ""}`, kind: "reminder" }).catch(() => {});
+      remindedFeed.add(e.id);
+    }
+  }
+}
 
 export function onAgenda(fn) {
   listeners.add(fn);
@@ -48,7 +96,7 @@ function changed() {
   saveTimer = setTimeout(() => api.tools.saveTasks(data).catch((e) => console.error("tasks save failed", e)), 400);
 }
 
-// ── Tasks ───────────────────────────────────────────────────────────────────
+// â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function addTask(input) {
   const { text, due } = parseWhen(input);
   if (!text) return null;
@@ -71,7 +119,7 @@ export function clearDone() {
   changed();
 }
 
-// ── Events ──────────────────────────────────────────────────────────────────
+// â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function addEvent({ date, time = null, title, remind = null }) {
   if (!title || !date) return null;
   const ev = { id: uid(), date, time, title: title.slice(0, 200), remind, reminded: false };
@@ -92,7 +140,7 @@ export function eventTime(ev) {
 }
 const remindAt = (ev) => (ev.remind == null ? null : eventTime(ev) - ev.remind * 60000);
 
-// ── Reminders ───────────────────────────────────────────────────────────────
+// â”€â”€ Reminders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function schedule() {
   const now = Date.now();
   for (const t of data.tasks) {
@@ -116,7 +164,7 @@ function catchUp() {
     if (!t.done && !t.reminded && t.due && t.due <= now && now - t.due < 86400000) {
       t.reminded = true;
       dirty = true;
-      toast(`Missed reminder: ${t.text}`, { level: "warn", timeout: 10000 });
+      notice({ level: "warn", kind: "reminder", title: "Missed reminder", body: t.text, timeout: 10000 });
     }
   }
   for (const ev of data.events) {
@@ -124,32 +172,41 @@ function catchUp() {
     if (at != null && !ev.reminded && at <= now && now - at < 86400000) {
       ev.reminded = true;
       dirty = true;
-      toast(`Missed reminder: ${ev.title}`, { level: "warn", timeout: 10000 });
+      notice({ level: "warn", kind: "reminder", title: "Missed reminder", body: ev.title, timeout: 10000 });
     }
   }
   if (dirty) changed();
 }
 
-api.alarm.onFired(({ id }) => {
+// With Do Not Disturb (or a game running) reminders ring silently: the
+// notification centre keeps them.
+api.alarm.onFired(({ id, label, quiet }) => {
   if (typeof id !== "string") return;
   if (id.startsWith("task-")) {
     const t = data.tasks.find((x) => `task-${x.id}` === id);
     if (!t) return;
     t.reminded = true;
-    sfx.play("alarm");
-    toast(`Reminder: ${t.text}`, { level: "ok", timeout: 15000, action: { label: "Done", run: () => toggleTask(t.id) } });
+    if (!quiet) {
+      sfx.play("alarm");
+      toast(`Reminder: ${t.text}`, { level: "ok", timeout: 15000, action: { label: "Done", run: () => toggleTask(t.id) } });
+    }
     changed();
   } else if (id.startsWith("event-")) {
     const ev = data.events.find((x) => `event-${x.id}` === id);
     if (!ev) return;
     ev.reminded = true;
-    sfx.play("alarm");
-    toast(`${ev.title}${ev.time ? ` at ${ev.time}` : ""}`, { level: "ok", timeout: 15000 });
+    if (!quiet) {
+      sfx.play("alarm");
+      toast(`${ev.title}${ev.time ? ` at ${ev.time}` : ""}`, { level: "ok", timeout: 15000 });
+    }
     changed();
+  } else if (id.startsWith("feed-") && !quiet) {
+    sfx.play("alarm");
+    toast(label || "Calendar event", { level: "ok", timeout: 15000 });
   }
 });
 
-// ── "call mum at 6pm", "report in 2h", "dentist tomorrow 9:30" ─────────────
+// â”€â”€ "call mum at 6pm", "report in 2h", "dentist tomorrow 9:30" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 function parseClock(s) {
@@ -180,7 +237,7 @@ export function parseWhen(input) {
     const ms = parseDuration(m[1].replace(/\s+/g, ""));
     if (ms) { due = Date.now() + ms; text = text.slice(0, m.index).trim(); }
   }
-  // (today|tomorrow|monday…) (at) 5pm
+  // (today|tomorrow|mondayâ€¦) (at) 5pm
   if (!due) {
     m = /\s*\b(today|tonight|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?\s*$/i.exec(text);
     if (m) {

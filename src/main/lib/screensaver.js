@@ -15,7 +15,8 @@ const { APP_ORIGIN } = require("./protocol");
 const CHECK_MS = 10000;
 
 class Screensaver {
-  constructor({ settings, windows, bridge, ownPids, windowed = false }) {
+  constructor({ settings, windows, bridge, ownPids, windowed = false, gameMode = null }) {
+    this.gameMode = gameMode;
     this.settings = settings;
     this.windows = windows;
     this.bridge = bridge;
@@ -35,7 +36,7 @@ class Screensaver {
   }
 
   async tick() {
-    if (!this.settings.get("screensaver") || this.running || this.locked || this.checking) return;
+    if (!this.settings.get("screensaver") || this.running || this.locked || this.checking || this.gameMode?.active) return;
     if (powerMonitor.getSystemIdleTime() < (this.settings.get("screensaverMinutes") || 15) * 60) return;
     this.checking = true;
     try {

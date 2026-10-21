@@ -25,17 +25,32 @@ export const EQ_PRESETS = {
   night: { label: "Late night", gains: [-4, -3, -1, 1, 2, 2, 1.5, 0, -2, -4] }
 };
 
+// Internet radio stations are playlist entries too: the station's URL, with
+// its name in the fragment ("#edex-name=…", never sent to the station).
+export const isStream = (p) => /^https?:\/\//i.test(String(p || ""));
+export const streamEntry = (url, name) => `${String(url).split("#")[0]}#edex-name=${encodeURIComponent(String(name || "").slice(0, 80))}`;
+export const streamBase = (p) => String(p).split("#")[0];
+const streamName = (p) => {
+  const m = /#edex-name=([^#]*)$/.exec(String(p));
+  try { return m ? decodeURIComponent(m[1]) : ""; } catch (_) { return ""; }
+};
+
 export function isMediaPath(p) {
   const ext = fmt.extname(fmt.basename(p));
   return AUDIO_EXTS.has(ext) || VIDEO_EXTS.has(ext);
 }
 
 export function isVideoPath(p) {
-  return VIDEO_EXTS.has(fmt.extname(fmt.basename(p)));
+  return !isStream(p) && VIDEO_EXTS.has(fmt.extname(fmt.basename(p)));
 }
 
 function titleFromPath(p) {
+  if (isStream(p)) return streamName(p) || streamBase(p).replace(/^https?:\/\//i, "").split("/")[0];
   return fmt.basename(p).replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim();
+}
+
+function itemFor(p) {
+  return isStream(p) ? { path: p, title: titleFromPath(p), artist: "Internet radio", station: titleFromPath(p), stream: true } : { path: p, title: titleFromPath(p) };
 }
 
 class Player extends EventTarget {
@@ -60,6 +75,15 @@ class Player extends EventTarget {
     this.persist = debounce(() => this.save(), 600);
     this.wire();
     settings.watch(["mediaEqOn", "mediaEq"], () => this.applyEq());
+    // "Now playing" titles stations send with the stream.
+    api.radio.onMeta(({ url, title, station }) => {
+      const item = this.current;
+      if (!item?.stream || streamBase(item.path) !== url) return;
+      if (station && !streamName(item.path)) item.station = station;
+      if (title) { item.title = title; item.artist = item.station; }
+      this.dispatchEvent(new Event("change"));
+      this.updateSession();
+    });
   }
 
   wire() {
@@ -91,7 +115,7 @@ class Player extends EventTarget {
     el.addEventListener("error", () => {
       const item = this.current;
       if (!item || !el.getAttribute("src")) return;
-      toast(`Cannot play ${fmt.basename(item.path)} — unsupported format or missing file`, { level: "warn" });
+      toast(item.stream ? `${item.station || "The station"} isn't answering right now` : `Cannot play ${fmt.basename(item.path)} — unsupported format or missing file`, { level: "warn" });
       this.failures++;
       if (this.failures < 4 && this.items.length > 1) this.next(true);
       else emit("state");
@@ -126,12 +150,14 @@ class Player extends EventTarget {
     if (this.restored) return;
     this.restored = true;
     const list = settings.get("mediaPlaylist") || [];
-    this.items = list.map((p) => ({ path: p, title: titleFromPath(p) }));
+    this.items = list.map(itemFor);
     this.volume = (settings.get("mediaVolume") ?? 80) / 100;
     this.applyVolume();
     this.rebuildOrder();
     const idx = Math.min(settings.get("mediaIndex") || 0, this.items.length - 1);
-    if (idx >= 0) this.load(idx, { autoplay: false, at: settings.get("mediaPosition") || 0 });
+    // A station isn't connected until it's played.
+    if (idx >= 0 && !this.items[idx].stream) this.load(idx, { autoplay: false, at: settings.get("mediaPosition") || 0 });
+    else if (idx >= 0) { this.index = idx; this.dispatchEvent(new Event("change")); }
     this.dispatchEvent(new Event("list"));
   }
 
@@ -219,13 +245,13 @@ class Player extends EventTarget {
     const item = this.items[index];
     if (!item) return;
     this.index = index;
-    this.el.src = fmt.fileUrl(item.path);
-    if (at > 0) this.el.addEventListener("loadedmetadata", () => { if (at < this.el.duration - 2) this.el.currentTime = at; }, { once: true });
+    this.el.src = item.stream ? `edexradio://stream/${encodeURIComponent(streamBase(item.path))}` : fmt.fileUrl(item.path);
+    if (at > 0 && !item.stream) this.el.addEventListener("loadedmetadata", () => { if (at < this.el.duration - 2) this.el.currentTime = at; }, { once: true });
     if (autoplay) this.play();
     this.dispatchEvent(new Event("change"));
     this.updateSession();
     this.persist();
-    if (!item.tagsLoaded) {
+    if (!item.tagsLoaded && !item.stream) {
       item.tagsLoaded = true;
       api.player.tags(item.path).then((tags) => {
         if (!tags) return;
@@ -243,6 +269,8 @@ class Player extends EventTarget {
     if (!this.current) {
       if (this.items.length) this.load(this.order[0] ?? 0, { autoplay: false });
       else return;
+    } else if (!this.el.getAttribute("src")) {
+      this.load(this.index, { autoplay: false });
     }
     this.ensureAnalyser();
     if (this.ctx?.state === "suspended") await this.ctx.resume().catch(() => {});
@@ -302,17 +330,25 @@ class Player extends EventTarget {
   }
 
   // Adds files; `play` starts the first added item.
-  add(paths, { play = false, replace = false } = {}) {
-    const fresh = paths.filter(isMediaPath);
+  add(paths, { play = false, replace = false, quiet = false } = {}) {
+    const fresh = paths.filter((p) => isMediaPath(p) || isStream(p));
     if (!fresh.length) { toast("No playable audio or video files", { level: "warn" }); return; }
     if (replace) { this.items = []; this.index = -1; }
     const start = this.items.length;
-    for (const p of fresh) this.items.push({ path: p, title: titleFromPath(p) });
+    for (const p of fresh) this.items.push(itemFor(p));
     this.rebuildOrder();
     this.dispatchEvent(new Event("list"));
     if (play || this.index < 0) this.load(start, { autoplay: play });
     this.persist();
-    if (!play) toast(`Added ${fresh.length} item${fresh.length === 1 ? "" : "s"} to the playlist`, { level: "ok", timeout: 1600 });
+    if (!play && !quiet) toast(`Added ${fresh.length} item${fresh.length === 1 ? "" : "s"} to the playlist`, { level: "ok", timeout: 1600 });
+  }
+
+  // Plays a station now: reuses its playlist entry, or adds one.
+  playStream(url, name) {
+    const base = streamBase(url);
+    const i = this.items.findIndex((it) => it.stream && streamBase(it.path) === base);
+    if (i >= 0) { this.load(i, { autoplay: true }); return; }
+    this.add([streamEntry(base, name)], { play: true, quiet: true });
   }
 
   remove(index) {
@@ -363,7 +399,7 @@ class Player extends EventTarget {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: item.title,
         artist: item.artist || "",
-        album: item.album || "eDEX-UI",
+        album: item.stream ? "Internet radio" : item.album || "eDEX-UI",
         artwork: item.art ? [{ src: item.art, sizes: "512x512" }] : []
       });
     } catch (_) {}

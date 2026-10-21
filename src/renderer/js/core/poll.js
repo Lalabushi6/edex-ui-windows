@@ -24,7 +24,17 @@ let throttleUnfocused = true;
 let timer = null;
 let nextAt = Infinity;
 
-const isActive = () => windowVisible && !document.hidden;
+// Game mode: while a game is in front (and eDEX isn't focused) nothing
+// refreshes or animates.
+let gameMode = false;
+const isActive = () => windowVisible && !document.hidden && !(gameMode && !windowFocused);
+
+export function setGameMode(on) {
+  const was = isActive();
+  gameMode = !!on;
+  if (!was && isActive()) for (const p of pollers) p.due = 0;
+  if (was !== isActive()) changed();
+}
 
 export function profile() {
   const name = profileSetting === "auto" ? (onBattery ? "eco" : "balanced") : profileSetting;

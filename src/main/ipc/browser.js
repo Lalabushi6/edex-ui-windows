@@ -18,7 +18,7 @@ const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write"])
 const ACTIONS = new Set(["back", "forward", "reload", "stop", "zoomIn", "zoomOut", "zoomReset", "external", "inspect"]);
 const isWeb = (u) => /^https?:\/\//i.test(String(u || ""));
 
-function registerBrowser({ windows }) {
+function registerBrowser({ windows, notices }) {
   const ses = session.fromPartition(PARTITION);
   const views = new Map(); // id -> { view, wc, bounds, visible, full }
   const idOf = (wc) => { for (const [id, v] of views) if (v.wc === wc) return id; return null; };
@@ -32,7 +32,12 @@ function registerBrowser({ windows }) {
     item.setSaveDialogOptions({ title: "Save download", defaultPath: path.join(app.getPath("downloads"), item.getFilename()) });
     const id = idOf(wc);
     windows.send("browser:download", { id, state: "started", name: item.getFilename() });
-    item.once("done", (_e, state) => windows.send("browser:download", { id, state, name: item.getFilename(), file: state === "completed" ? item.getSavePath() : null }));
+    item.once("done", (_e, state) => {
+      const file = state === "completed" ? item.getSavePath() : null;
+      windows.send("browser:download", { id, state, name: item.getFilename(), file });
+      if (state === "completed") notices?.add({ level: "ok", kind: "download", title: "Download finished", body: item.getFilename(), action: { type: "reveal", value: file } }, { toast: false, system: "hidden" });
+      else if (state === "interrupted") notices?.add({ level: "warn", kind: "download", title: "Download failed", body: item.getFilename() }, { toast: false, system: "never" });
+    });
   });
 
   const send = (id, extra = {}) => {

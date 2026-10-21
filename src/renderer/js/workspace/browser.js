@@ -8,6 +8,7 @@ import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { toast, cleanError, onCoverChange, isCovered, contextMenu, confirm } from "../core/ui.js";
 import { toUrl, openUrl } from "../core/links.js";
+import { isQuiet } from "../shell/notices.js";
 
 const api = window.edex;
 const tabs = new Map(); // id -> BrowserTab
@@ -23,6 +24,7 @@ function wireEvents(ws) {
   api.browser.onOpen(({ url, background }) => { ws.openBrowser(url, { activate: !background }); });
   api.browser.onKey((k) => { tabs.get(k.id)?.onKey(k); });
   api.browser.onDownload(({ state, name, file }) => {
+    if (isQuiet()) return; // the notification centre has it
     if (state === "started") toast(`Downloading ${name}…`, { timeout: 2000 });
     else if (state === "completed") toast(`Downloaded ${name}`, { level: "ok", timeout: 5000, action: file ? { label: "Show", run: () => api.fs.reveal(file) } : undefined });
     else if (state === "interrupted") toast(`Download of ${name} failed`, { level: "warn" });

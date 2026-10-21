@@ -3,7 +3,7 @@
 import { $ } from "./core/dom.js";
 import * as settings from "./core/settings.js";
 import { applyTheme } from "./core/theme.js";
-import { setWindowVisible, configure, profile, onSchedulingChange } from "./core/poll.js";
+import { setWindowVisible, configure, profile, onSchedulingChange, setGameMode } from "./core/poll.js";
 import { onBattery } from "./core/live.js";
 import { emit, on, markBooted } from "./core/bus.js";
 import { command, initHotkeys } from "./core/commands.js";
@@ -20,6 +20,7 @@ import "./widgets/media.js";
 import "./widgets/utility.js";
 import { initCommandWidgets, editCommandWidget } from "./widgets/extra.js";
 import "./widgets/tasks.js";
+import "./widgets/lyrics.js";
 import { player } from "./media/player.js";
 import { Workspace } from "./workspace/workspace.js";
 import { initTopbar } from "./shell/topbar.js";
@@ -33,8 +34,12 @@ import { initFilePanel } from "./shell/filepanel.js";
 import { openThemeEditor, openCssEditor, initCustomCss } from "./shell/theme-studio.js";
 import { openArrangements, quickLayout, saveArrangement } from "./shell/arrange.js";
 import { openUpdates, initUpdates } from "./shell/updates.js";
-import { editWallpaperArt } from "./shell/wallpaper.js";
+import { editWallpaperArt, mountWallpaper } from "./shell/wallpaper.js";
 import { clearBrowsingData } from "./workspace/browser.js";
+import { initNotices } from "./shell/notices.js";
+import { openGameLibrary, loadGames } from "./shell/games.js";
+import { initProfiles, switchProfile, newProfileDialog, captureProfile, activeProfile } from "./shell/profiles.js";
+import { startEffect } from "./shell/fx.js";
 
 const api = window.edex;
 let workspace;
@@ -134,6 +139,31 @@ async function registerCommands() {
   cmd("wallpaper.open", "ASCII wallpaper tab", () => workspace.openWallpaper(), { icon: "wallpaper", keywords: "ascii art wallpaper idle pane background" });
   cmd("wallpaper.edit", "Edit ASCII wallpaper art…", () => editWallpaperArt(), { icon: "edit", keywords: "ascii art wallpaper nfo block letters" });
   cmd("updates.check", "Check for updates", () => openUpdates(), { icon: "update", keywords: "update upgrade new version release github download" });
+  cmd("games.open", "Games", () => openGameLibrary(), { keys: "Ctrl+Shift+G", icon: "gamepad", keywords: "games library steam epic xbox game pass play" });
+  cmd("games.rescan", "Rescan game library", () => loadGames(true).then((l) => toast(`${l.length} games found`, { level: "ok" })), { icon: "refresh", keywords: "games steam epic xbox refresh" });
+  cmd("settings.games", "Game mode settings", () => openSettings("games"), { icon: "gamepad", keywords: "game mode quiet focus gaming" });
+  cmd("gamemode.toggle", "Game mode: on / auto", () => {
+    const next = settings.get("gameMode") === "on" ? "auto" : "on";
+    settings.set({ gameMode: next });
+    toast(next === "on" ? "Game mode on — eDEX is resting" : "Game mode: automatic (when a game runs)", { timeout: 2000 });
+  }, { icon: "gamepad", keywords: "game mode quiet pause gaming" });
+  cmd("dnd.toggle", "Do not disturb", () => {
+    const on = !settings.get("dnd");
+    settings.set({ dnd: on });
+    toast(on ? "Do not disturb on — notifications wait in the bell" : "Do not disturb off", { timeout: 2000 });
+  }, { icon: "moon", keywords: "quiet notifications silence focus" });
+  cmd("profiles.new", "New workspace…", () => newProfileDialog(), { icon: "layers", keywords: "workspace profile setup work gaming study" });
+  cmd("profiles.save", "Save the current setup to this workspace", () => captureProfile(activeProfile().id), { icon: "layers", keywords: "workspace profile remember layout theme windows" });
+  cmd("settings.workspaces", "Workspace settings", () => openSettings("workspaces"), { icon: "layers", keywords: "workspace profile hotkey schedule" });
+  cmd("settings.calendars", "Calendar subscriptions", () => openSettings("calendar"), { icon: "calendar", keywords: "google outlook icloud ics webcal subscribe events" });
+  cmd("library.open", "Music library", () => { settings.set({ mediaSource: "local", mediaView: "library" }); workspace.openMedia(); }, { icon: "album", keywords: "music library albums artists songs" });
+  cmd("radio.open", "Internet radio", () => { settings.set({ mediaSource: "local", mediaView: "radio" }); workspace.openMedia(); }, { icon: "radio", keywords: "radio stations stream internet fm" });
+  cmd("lyrics.toggle", "Media player: lyrics", () => emit("lyrics-toggle"), { icon: "lyrics", keywords: "lyrics words karaoke song" });
+  cmd("apps.inside", "Toggle: open apps inside eDEX", () => {
+    const on = !settings.get("openAppsInside");
+    settings.set({ openAppsInside: on });
+    toast(on ? "New app windows will open as tabs inside eDEX" : "Apps open in their own windows again", { timeout: 2200 });
+  }, { icon: "apptab", keywords: "apps inside tabs embed windows open" });
   cmd("hud.toggle", "Toggle multi-monitor HUD", () => {
     const on = !settings.get("hudDisplays");
     settings.set({ hudDisplays: on });
@@ -234,10 +264,36 @@ async function mainSaver() {
   showIdleScreen({ effect: settings.get("screensaverEffect") || "matrix", info: primary, onDismiss: () => api.saver.dismiss() });
 }
 
+// Live wallpaper window (behind the desktop icons, one per display): an
+// effect or the ASCII wallpaper; it never takes input.
+async function mainWallpaper(effect) {
+  document.documentElement.classList.add("saver", "wall");
+  await settings.loadSettings();
+  initCustomCss();
+  await applyTheme(settings.get("theme")).catch(() => applyTheme("tron"));
+  settings.watch("theme", (id) => applyTheme(id).catch(() => {}));
+  document.getElementById("boot")?.remove();
+  api.app.onVisibility(({ visible }) => setWindowVisible(visible, false));
+  const host = document.createElement("div");
+  host.className = "wall-host";
+  document.body.append(host);
+  if (effect === "ascii") mountWallpaper(host);
+  else {
+    const canvas = document.createElement("canvas");
+    canvas.className = "wall-canvas";
+    host.append(canvas);
+    startEffect(canvas, effect, { maxFps: 20, scale: 0.75 });
+  }
+}
+
 async function main() {
   const params = new URLSearchParams(location.search);
-  if (params.has("hud")) return mainHud();
+  if (params.has("hud")) {
+    if (params.has("wall")) document.documentElement.classList.add("wall");
+    return mainHud();
+  }
   if (params.has("saver")) return mainSaver();
+  if (params.has("wall")) return mainWallpaper(params.get("wall"));
   await settings.loadSettings();
   initLayout();
   initCustomCss();
@@ -257,10 +313,15 @@ async function main() {
   });
   api.app.onNotice(({ level, message }) => toast(message, { level, timeout: 6000 }));
   on("open-settings", ({ page } = {}) => openSettings(page));
-  api.app.onCommand(({ name, toggle }) => {
+  api.app.onCommand(({ name, toggle, id, scheduled }) => {
     if (name === "launcher") toggle ? toggleLauncher() : openLauncher();
     else if (name === "settings") openSettings();
+    else if (name === "profile") switchProfile(id, { scheduled });
   });
+  initNotices();
+  // Game mode: nothing refreshes or animates while a game is in front.
+  api.games.onGameMode(({ active }) => setGameMode(active));
+  api.games.state().then(({ active }) => setGameMode(active)).catch(() => {});
 
   initHotkeys();
   initBackgroundFx();
@@ -272,6 +333,7 @@ async function main() {
   initCommandWidgets();
   mountWidgets($("#col-left-body"), $("#col-right-body"));
   workspace = new Workspace($("#workspace"));
+  initProfiles(workspace);
   await registerCommands();
   keyboard = initKeyboard($("#keyboard"), () => workspace.activeTerminal());
   initFilePanel($("#filepanel"), () => workspace.activeTerminal());
