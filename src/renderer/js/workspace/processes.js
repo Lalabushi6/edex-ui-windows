@@ -3,8 +3,10 @@ import { h, setText, debounce } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import { poll } from "../core/poll.js";
 import * as fmt from "../core/format.js";
+import * as settings from "../core/settings.js";
 import { emit } from "../core/bus.js";
 import { toast, contextMenu, copyText, cleanError } from "../core/ui.js";
+import { openUrl } from "../core/links.js";
 
 const api = window.edex;
 const COLUMNS = [
@@ -65,7 +67,7 @@ export class ProcessesTab {
         p.path && { label: "Open file location", icon: "folder", run: () => emit("open-path", { path: fmt.dirname(p.path), select: p.path, newTab: true }) },
         { label: "Copy name", icon: "copy", run: () => copyText(p.name) },
         p.path && { label: "Copy path", icon: "link", run: () => copyText(p.path) },
-        { label: "Search the web", icon: "globe", run: () => api.shell.openExternal(`https://www.google.com/search?q=${encodeURIComponent(`${p.name} process`)}`) }
+        { label: "Search the web", icon: "globe", run: () => openUrl((settings.get("webSearchUrl") || "https://www.google.com/search?q=%s").replace("%s", encodeURIComponent(`${p.name} process`))) }
       ]);
     });
     this.poller = poll(() => this.refresh(), 3000, { immediate: true });

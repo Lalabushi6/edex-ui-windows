@@ -2,7 +2,11 @@
 "use strict";
 
 const path = require("path");
-const { app, globalShortcut, Menu, powerMonitor, session } = require("electron");
+const { app, dialog, globalShortcut, Menu, powerMonitor, session, shell } = require("electron");
+// The portable build keeps its data beside the .exe; this has to happen
+// before anything (the single-instance lock included) touches userData.
+const portable = require("./lib/portable");
+portable.apply();
 const paths = require("./lib/paths");
 const { registerSchemes, registerHandlers, APP_ORIGIN } = require("./lib/protocol");
 const { NativeBridge } = require("./lib/native-bridge");
@@ -28,7 +32,12 @@ const { registerDisk } = require("./ipc/disk");
 const { registerArrange } = require("./ipc/arrange");
 const { registerTools } = require("./ipc/tools");
 const { registerAi } = require("./ipc/ai");
+const { registerUpdates } = require("./ipc/updates");
+const { registerBrowser } = require("./ipc/browser");
+const { registerAppTabs } = require("./ipc/apptabs");
+const { registerSpotify } = require("./ipc/spotify");
 const { Hud } = require("./hud");
+const { Screensaver } = require("./lib/screensaver");
 const { Telemetry } = require("./lib/telemetry");
 const { IconService } = require("./lib/icon-service");
 
@@ -60,6 +69,11 @@ function start() {
   let tools;
   let ai;
   let hud;
+  let updates;
+  let browser;
+  let appTabs;
+  let spotify;
+  let saver;
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -71,7 +85,9 @@ function start() {
 
   // The preload bridge is bound to the window, so it must never navigate away
   // from the bundled UI or spawn child windows that would inherit it.
+  // Browser tabs are web pages with their own rules (see ipc/browser.js).
   app.on("web-contents-created", (_event, contents) => {
+    if (browser?.isBrowserSession(contents.session)) return;
     contents.on("will-navigate", (event, url) => {
       if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault();
     });
@@ -79,8 +95,20 @@ function start() {
     contents.on("will-attach-webview", (event) => event.preventDefault());
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     registerHandlers();
+    // First run of the portable build on a PC that has the installed version:
+    // offer to bring its settings along to the drive.
+    const pstate = portable.state();
+    if (pstate.portable && pstate.fresh && portable.hasPcProfile()) {
+      const { response } = await dialog.showMessageBox({
+        type: "question", buttons: ["Copy them to the drive", "Start fresh"], defaultId: 0, cancelId: 1, noLink: true,
+        title: "eDEX-UI portable",
+        message: "Copy your eDEX settings from this PC?",
+        detail: `This portable copy keeps everything in "${portable.DATA_DIR}" next to the .exe. eDEX is also installed on this PC: copy its settings, notes, tasks, themes and keyboard layouts to the drive?`
+      }).catch(() => ({ response: 1 }));
+      if (response === 0) portable.copyFromPc();
+    }
     // The interface never needs camera, microphone, location, notifications
     // from web content, USB/HID/serial devices or downloads; only fullscreen
     // (media player video) is granted.
@@ -90,8 +118,10 @@ function start() {
     ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
     ses.setDevicePermissionHandler(() => false);
     ses.on("will-download", (event) => event.preventDefault());
-    // The encrypted AI key never becomes readable through file previews.
+    // The encrypted AI key and Spotify sign-in never become readable through
+    // file previews.
     paths.addSensitive(path.join(app.getPath("userData"), "ai-key.bin"));
+    paths.addSensitive(path.join(app.getPath("userData"), "spotify-token.bin"));
     settings = new Settings(app.getPath("userData"));
     bridge = new NativeBridge({ workDir: path.join(app.getPath("userData"), "native") });
     // A second helper for slow or long-running calls (media sessions,
@@ -109,8 +139,16 @@ function start() {
       dev: !app.isPackaged,
       windowed: DEV_WINDOWED,
       mode: windows.mode,
-      platform: process.platform
+      platform: process.platform,
+      portable: portable.state().portable,
+      portableNote: portable.state().reason,
+      dataDir: app.getPath("userData")
     }));
+    handle("app:openData", async () => {
+      const err = await shell.openPath(app.getPath("userData"));
+      if (err) throw new Error(err);
+      return true;
+    });
     handle("app:quit", () => quit());
     handle("app:hide", () => windows.hide());
     handle("app:devtools", (event) => event.sender.toggleDevTools());
@@ -153,6 +191,13 @@ function start() {
     tools = registerTools({ settings, windows });
     ai = registerAi({ settings });
     hud = new Hud({ settings, windows, bridge });
+    updates = registerUpdates({ settings, windows });
+    browser = registerBrowser({ windows });
+    appTabs = registerAppTabs({ windows, bridge, aux, ownPids });
+    spotify = registerSpotify({ settings, windows });
+    saver = new Screensaver({ settings, windows, bridge, ownPids, windowed: DEV_WINDOWED });
+    handle("saver:start", () => saver.start({ preview: true }));
+    handle("saver:dismiss", () => { saver.stop(true); return true; });
 
     // The bridge starts right away (the panels' first readings come from
     // it) and primes CPU/process/network deltas so first values are real.
@@ -169,7 +214,8 @@ function start() {
     const win = windows.create();
     recovering.finally(() => takeover.attach(win));
     hud.attach(win);
-    createTray({ windows, settings, quit });
+    browser.attach(win);
+    createTray({ windows, settings, quit, startSaver: () => saver.start({ preview: true }) });
     registerHotkeys();
     applyLoginItem();
     settings.on("change", (changed) => {
@@ -213,6 +259,10 @@ function start() {
     if (!app.isPackaged) {
       opts.path = process.execPath;
       opts.args = [path.resolve(app.getAppPath()), ...extra];
+    } else if (portable.state().exe) {
+      // The portable build runs from a temporary copy; sign-in must start
+      // the .exe on the drive.
+      opts.path = portable.state().exe;
     }
     try { app.setLoginItemSettings(opts); } catch (_) {}
   }
@@ -229,13 +279,14 @@ function start() {
     });
   }
 
-  // Quitting waits (briefly) for the taskbar to be put back.
+  // Quitting waits (briefly) for the taskbar to be put back and for windows
+  // shown as app tabs to return to where they were.
   let restoredForQuit = false;
   app.on("before-quit", (event) => {
     if (windows) windows.quitting = true;
-    if (restoredForQuit || !takeover?.hidden) return;
+    if (restoredForQuit || (!takeover?.hidden && !appTabs?.count)) return;
     event.preventDefault();
-    takeover.restore().finally(() => {
+    Promise.allSettled([takeover?.restore(), appTabs?.releaseAll()]).finally(() => {
       restoredForQuit = true;
       app.quit();
     });
@@ -252,6 +303,10 @@ function start() {
     arrange?.flush();
     tools?.flush();
     ai?.stop();
+    updates?.stop();
+    spotify?.stop();
+    saver?.dispose();
+    browser?.closeAll();
     hud?.closeAll();
     icons?.flush();
     settings?.flush();

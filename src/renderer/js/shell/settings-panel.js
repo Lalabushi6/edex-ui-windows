@@ -14,6 +14,11 @@ import { describeLogo, openBootLogoEditor, previewBootTitle } from "./boot-art.j
 import { openThemeEditor, openCssEditor, importThemes, exportTheme, deleteTheme, openThemesFolder } from "./theme-studio.js";
 import { PRESETS, computeGrid, applyPreset } from "../core/layout.js";
 import { editCommandWidget } from "../widgets/extra.js";
+import { VIZ_STYLES, VIZ_COLORS } from "../media/visualizer.js";
+import { editWallpaperArt, WALLPAPER_EFFECTS, WALLPAPER_BACKDROPS } from "./wallpaper.js";
+import { openUpdates } from "./updates.js";
+import { clearBrowsingData } from "../workspace/browser.js";
+import { emit } from "../core/bus.js";
 
 const api = window.edex;
 
@@ -129,7 +134,9 @@ function screenTimeLimitsRows() {
 async function aiRows() {
   const status = await api.ai.status().catch(() => ({}));
   const keyInput = h("input", { class: "input", type: "password", placeholder: status.configured ? "Key saved — paste a new one to replace it" : "sk-ant-…", spellcheck: false, autocomplete: "off" });
-  const state = h("span", { class: "muted" }, status.configured ? "Key saved (encrypted with your Windows account)" : "No key");
+  const state = h("span", { class: status.unreadable ? "warn-text" : "muted" },
+    status.configured ? "Key saved (encrypted with your Windows account)"
+      : status.unreadable ? "The saved key was encrypted on another PC or Windows account — paste it again" : "No key");
   const save = async () => {
     const k = keyInput.value.trim();
     if (!k) return;
@@ -142,6 +149,60 @@ async function aiRows() {
       h("button", { class: "btn", type: "button", onclick: save }, "Save"),
       h("button", { class: "btn", type: "button", onclick: async () => { await api.ai.setKey("").catch(() => {}); state.textContent = "No key"; keyInput.placeholder = "sk-ant-…"; toast("API key removed", { level: "ok" }); } }, "Remove"))),
     row("Model", "Opus 5.5 gives the best answers; Sonnet 5.5 and Haiku 5.5 are faster and cheaper.", select("aiModel", [["claude-opus-5-5", "Claude Opus 5.5"], ["claude-sonnet-5-5", "Claude Sonnet 5.5"], ["claude-haiku-5-5", "Claude Haiku 5.5"]]))
+  ];
+}
+
+// Spotify: the Client ID of the user's own Spotify developer app, and the
+// account connection (PKCE sign-in in the default browser).
+async function spotifyRows() {
+  const s = await api.spotify.status().catch(() => ({}));
+  const state = h("span", { class: "muted" }, s.connected ? `Connected${s.user ? ` as ${s.user.name}` : ""}` : s.clientId ? "Not connected" : "No Client ID yet");
+  if (s.connected && !s.user) api.spotify.me().then((u) => setText(state, `Connected as ${u.name}${u.product ? ` (${u.product})` : ""}`)).catch(() => {});
+  const id = h("input", { class: "input", placeholder: "32-character Client ID", spellcheck: false, autocomplete: "off", style: { width: "18rem" } });
+  id.value = s.clientId || "";
+  id.addEventListener("change", () => {
+    const v = id.value.trim().toLowerCase();
+    if (v && !/^[0-9a-f]{32}$/.test(v)) { toast("A Client ID is 32 letters and digits (0–9, a–f)", { level: "warn" }); return; }
+    settings.set({ spotifyClientId: v });
+  });
+  const connect = h("button", { class: "btn primary", type: "button" }, icon("spotify"), s.connected ? "Reconnect" : "Connect");
+  connect.addEventListener("click", async () => {
+    const v = id.value.trim().toLowerCase();
+    if (!/^[0-9a-f]{32}$/.test(v)) { toast("Paste your Spotify Client ID first", { level: "warn" }); return; }
+    await settings.set({ spotifyClientId: v });
+    connect.disabled = true;
+    setText(state, "Waiting for you to sign in to Spotify in your browser…");
+    try {
+      const me = await api.spotify.connect();
+      setText(state, `Connected as ${me.name}${me.product ? ` (${me.product})` : ""}`);
+      toast("Spotify connected", { level: "ok" });
+    } catch (e) {
+      setText(state, cleanError(e));
+    } finally { connect.disabled = false; }
+  });
+  const redirect = s.redirectUri || "http://127.0.0.1:43821/callback";
+  return [
+    row("Spotify account", h("span", null, state), h("span", { style: { display: "flex", gap: ".4rem" } }, connect,
+      h("button", { class: "btn", type: "button", onclick: async () => { await api.spotify.disconnect().catch(() => {}); setText(state, "Not connected"); toast("Spotify disconnected", { level: "ok" }); } }, "Disconnect"))),
+    row("Client ID", h("span", null, "From your own app at ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); api.shell.openExternal("https://developer.spotify.com/dashboard"); } }, "developer.spotify.com/dashboard"), " (Create app, tick Web API)."), id),
+    row("Redirect URI", "Add exactly this to the app's Redirect URIs.", h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } },
+      h("code", { class: "mono", style: { fontSize: ".8rem" } }, redirect),
+      h("button", { class: "btn sm", type: "button", onclick: () => api.clip.copy(redirect).then(() => toast("Copied", { level: "ok", timeout: 1200 })) }, icon("copy"), "Copy"))),
+    h("div", { class: "setting-desc", style: { marginTop: ".3rem" } },
+      "Spotify plays the music (its desktop app, your phone or a speaker); eDEX shows what's playing, your playlists, liked songs, recent tracks and search, and controls playback. Spotify's rules: the developer app's owner needs Premium, and controlling playback needs Premium. Without an account the media player still shows and controls the Spotify app on this PC through Windows. The sign-in is encrypted with your Windows account.")
+  ];
+}
+
+// ASCII wallpaper: art, animation, what's behind it, clock.
+function wallpaperRows() {
+  return [
+    row("ASCII art", "Your own art (paste it, load .txt / .nfo / .ans, or make block letters). Empty uses your boot logo art.",
+      h("span", { style: { display: "flex", gap: ".4rem" } },
+        h("button", { class: "btn", type: "button", onclick: () => editWallpaperArt() }, icon("edit"), "Edit…"),
+        h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); emit("open-wallpaper"); } }, icon("wallpaper"), "Open as a tab"))),
+    row("Animation", null, select("wallpaperEffect", WALLPAPER_EFFECTS)),
+    row("Behind the art", null, select("wallpaperBackdrop", WALLPAPER_BACKDROPS)),
+    row("Clock", "The time and date under the art.", toggle("wallpaperClock"))
   ];
 }
 
@@ -192,6 +253,8 @@ const PAGES = [
   { id: "terminal", label: "Terminal", icon: "terminal" },
   { id: "keyboard", label: "Keyboard", icon: "keyboard" },
   { id: "layout", label: "Layout", icon: "layout" },
+  { id: "media", label: "Media", icon: "audio" },
+  { id: "web", label: "Web & apps", icon: "globe" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "performance", label: "Performance", icon: "gauge" },
   { id: "privacy", label: "Privacy", icon: "lock" },
@@ -267,11 +330,21 @@ async function buildPage(id) {
       h("h3", null, "Other displays"),
       row("Multi-monitor HUD", "Every display except the main one shows eDEX's telemetry panels, the globe and a large clock, behind your windows. Hidden with eDEX.", toggle("hudDisplays")),
       h("h3", null, "Idle screen"),
-      row("Show the idle screen", "When nothing has been typed or clicked for a while and eDEX is the window in front, it switches to an animated clock screen. Any input brings eDEX back.", toggle("idleScreen")),
+      row("Show the idle screen", "When nothing has been typed or clicked for a while and eDEX is the window in front, it switches to an animated clock screen — or, with the wallpaper style, just the workspace shows your ASCII wallpaper instead of the terminal. Any input brings eDEX back.", toggle("idleScreen")),
       row("After (minutes)", null, number("idleMinutes", 1, 120)),
-      row("Effect", null, h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } },
-        select("idleEffect", [["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"], ["globe", "Globe"]]),
+      row("Style", "Full screen: the animated screen covers eDEX. Wallpaper pane: the panels keep running and the ASCII wallpaper takes the terminal's place.", select("idleStyle", [["screen", "Full screen"], ["wallpaper", "Wallpaper pane"]])),
+      row("Effect", "For the full-screen style.", h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } },
+        select("idleEffect", [["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"], ["globe", "Globe"], ["ascii", "ASCII wallpaper"]]),
         h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("idle.show"), 250); } }, "Preview"))),
+      h("h3", null, "Screen saver"),
+      row("Screen saver mode", "After the minutes below without any keyboard or mouse input anywhere, eDEX covers every display with its effect — over every app, even while eDEX is hidden in the tray. Any input ends it.", toggle("screensaver")),
+      row("After (minutes)", null, number("screensaverMinutes", 1, 240)),
+      row("Effect", null, h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } },
+        select("screensaverEffect", [["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"], ["globe", "Globe"], ["ascii", "ASCII wallpaper"]]),
+        h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("saver.start"), 300); } }, "Preview"))),
+      row("Lock Windows when it ends", "Like Windows' “On resume, display logon screen”: the next input locks the PC.", toggle("screensaverLock")),
+      row("Not during videos or full-screen apps", "Holds back while a full-screen app is in front or a program keeps the display on (video, presentations, calls).", toggle("screensaverRespectApps")),
+      row("All displays", "Off: only the main display.", toggle("screensaverAllDisplays")),
       h("h3", null, "Alerts"),
       row("Low battery", "Warns once when the charge drops below the level (again at half of it), with a Windows notification if eDEX is hidden.", toggle("alertBattery")),
       row("Battery level", null, range("alertBatteryLevel", 5, 50, "%")),
@@ -313,6 +386,9 @@ async function buildPage(id) {
       row("Animated background", "Drawn faintly behind the panels in the theme colour, at a low frame rate (paused while eDEX is hidden).", select("backgroundFx", [["none", "None"], ["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"]])),
       row("24-hour clock", null, toggle("clock24h")),
       row("Temperature unit", null, select("temperatureUnit", [["C", "Celsius"], ["F", "Fahrenheit"]])),
+      h("h3", null, "ASCII wallpaper"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "A workspace pane with your ASCII art (tab menu → ASCII wallpaper), the idle pane, and an idle-screen / screen-saver effect."),
+      ...wallpaperRows(),
       h("h3", null, "Boot screen"),
       row("Boot animation", null, toggle("bootAnimation")),
       bootLogoRow(),
@@ -403,6 +479,32 @@ async function buildPage(id) {
           h("button", { class: "btn sm", type: "button", onclick: () => { settings.set({ commandWidgets: (settings.get("commandWidgets") || []).filter((x) => x.id !== c.id) }); rerender(); } }, "Remove")))),
       row("New command widget", null, h("button", { class: "btn", type: "button", onclick: () => runCommand("widgets.command") }, icon("plus"), "Add…")));
   }
+  if (id === "media") {
+    const custom = h("input", { type: "color", class: "viz-color", value: settings.get("vizCustomColor") || "#ff9a3d" });
+    custom.addEventListener("input", () => settings.set({ vizCustomColor: custom.value }));
+    page.push(h("h3", null, "Visualizer"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "How the media player draws music (also the V key or the visualizer button in the player)."),
+      row("Style", null, select("vizStyle", VIZ_STYLES)),
+      row("Bars", "How many bands the spectrum is split into.", range("vizBars", 16, 128)),
+      row("Colour", null, select("vizColor", VIZ_COLORS)),
+      row("Custom colour", "Used when Colour is “Custom colour”.", custom),
+      row("Peak caps", "Little markers that hold the peaks for a moment.", toggle("vizPeaks")),
+      row("Reflection", null, toggle("vizReflection")),
+      row("Smoothing", "Higher is calmer, lower reacts faster.", range("vizSmoothing", 0, 95, "%")),
+      row("Sensitivity", null, range("vizSensitivity", 50, 200, "%")),
+      h("h3", null, "Spotify"),
+      ...(await spotifyRows()));
+  }
+  if (id === "web") {
+    page.push(h("h3", null, "Browser tabs"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Web pages as workspace tabs (Ctrl+Shift+B, or the tab menu). They run in their own sandboxed session: separate sign-ins from your usual browser, no access to your files, and camera, microphone, location and notification requests are refused."),
+      row("Open web links in eDEX", "Links from the launcher, quick links, the terminal (Ctrl+click) and the explorer open as eDEX browser tabs instead of your default browser.", toggle("browserLinks")),
+      row("Browsing data", "Sign-ins, cookies, site storage and the cache of eDEX's browser tabs.", h("button", { class: "btn", type: "button", onclick: () => clearBrowsingData() }, icon("trash"), "Clear…")),
+      h("h3", null, "App tabs"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Show an app's window as a workspace tab: the window moves into the tab's area and comes forward; switching tabs minimises it; closing the tab puts it back where it was. Right-click a window in the dock or launcher → Show as a tab, or tab menu → App window…. Works best in Desktop mode."),
+      row("Show every open window as a tab", "Each open window gets a tab automatically; turning this off closes those tabs and puts the windows back.", select("appTabs", [["off", "Off — only windows I choose"], ["all", "On — every open window"]])),
+      row("Add a window now", null, h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("apptab.pick"), 200); } }, icon("apptab"), "Choose a window…")));
+  }
   if (id === "files") {
     page.push(h("h3", null, "Explorer"),
       row("Show hidden items", null, toggle("showHidden")),
@@ -434,7 +536,7 @@ async function buildPage(id) {
   }
   if (id === "privacy") {
     page.push(h("h3", null, "Network"),
-      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, and the weather forecast for your approximate location (open-meteo.com). Turn off to make eDEX fully offline.", toggle("allowNetworkGeolocation")),
+      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, the weather forecast for your approximate location (open-meteo.com) and the daily update check (api.github.com). Turn off to make eDEX fully offline; pages you open in browser tabs and Spotify (once connected) still go online when you use them.", toggle("allowNetworkGeolocation")),
       h("h3", null, "Screen time"),
       row("Track app usage", "Counts how long each program is the focused window (idle and locked time excluded). Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
       row("Clear screen time history", null, h("button", { class: "btn", type: "button", onclick: () => api.screenTime.clear().then(() => toast("Screen time history cleared", { level: "ok" })) }, "Clear")),
@@ -457,6 +559,18 @@ async function buildPage(id) {
       row("Version", null, h("span", { class: "mono" }, info.version || "?")),
       row("Mode", null, h("span", { class: "mono" }, info.windowed ? "development (windowed)" : info.mode)),
       row("System", null, h("span", { class: "mono" }, `${sys.os?.distro || "Windows"} ${sys.os?.release || ""}`)),
+      row("Data folder", info.portable
+        ? "Portable: settings, notes, tasks, themes and sign-ins are kept here, beside the .exe, so they travel with the drive."
+        : info.portableNote || "Settings, notes, tasks, themes and keyboard layouts.",
+      h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } },
+        h("span", { class: "mono ellipsis", style: { fontSize: ".78rem", maxWidth: "20rem" }, title: info.dataDir || "" }, info.dataDir || "?"),
+        h("button", { class: "btn sm", type: "button", onclick: () => api.app.openData().catch((e) => toast(cleanError(e), { level: "warn" })) }, icon("folder"), "Open"))),
+      h("h3", null, "Updates"),
+      row("Check for updates", "Looks at this project's GitHub releases page and offers new versions (downloads are checked against GitHub's SHA-256 before anything runs).",
+        h("button", { class: "btn primary", type: "button", onclick: () => openUpdates() }, icon("update"), "Check now")),
+      row("Check automatically", "Once a day, only while Outbound lookups (Privacy) is on.", toggle("updateCheck")),
+      settings.get("updateSkip") && row("Skipped version", `${settings.get("updateSkip")} isn't offered automatically.`, h("button", { class: "btn sm", type: "button", onclick: () => { settings.set({ updateSkip: "" }); openPanel?.show("about"); } }, "Offer it again")),
+      h("h3", null, "Backup and tools"),
       row("Back up settings", "Every setting, your own themes and keyboard layouts in one file, to keep or move to another PC.", h("span", { style: { display: "flex", gap: ".4rem" } },
         h("button", { class: "btn", type: "button", onclick: async () => {
           try { const r = await api.tools.exportSettings(); if (r) toast(`Exported (${r.themes} themes, ${r.keyboards} layouts)`, { level: "ok", action: { label: "Show", run: () => api.fs.reveal(r.file) } }); } catch (e) { toast(cleanError(e), { level: "warn" }); }
@@ -488,7 +602,7 @@ export function openSettings(pageId = "general") {
     nav.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.page === id));
     runPageCleanups();
     const items = await buildPage(id);
-    if (current === id) content.replaceChildren(...items);
+    if (current === id) content.replaceChildren(...items.filter(Boolean));
     content.scrollTop = 0;
   };
   nav.append(...PAGES.map((p) => h("button", { type: "button", dataset: { page: p.id }, onclick: () => show(p.id) }, icon(p.icon), p.label)));

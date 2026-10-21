@@ -1,15 +1,16 @@
 // Media player tab: video / visualizer stage, eDEX-style control bar and a
-// playlist. Playback itself lives in ../media/player.js and keeps going when
-// this tab is closed.
+// playlist, plus a Spotify view (./spotify.js). Playback itself lives in
+// ../media/player.js and keeps going when this tab is closed.
 import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
-import { accent } from "../core/theme.js";
 import { appActive, animationFps } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { emit } from "../core/bus.js";
 import { toast, contextMenu, confirm, cleanError, popover } from "../core/ui.js";
 import { player, formatTime, isMediaPath, EQ_BANDS, EQ_PRESETS } from "../media/player.js";
+import { createViz, vizOptions, VIZ_STYLES, VIZ_COLORS, VIZ_KEYS } from "../media/visualizer.js";
+import { SpotifyView } from "./spotify.js";
 
 const api = window.edex;
 
@@ -73,6 +74,7 @@ export class MediaTab {
       settings.set({ mediaRepeat: order[(order.indexOf(settings.get("mediaRepeat")) + 1) % 3] });
     });
     this.eqBtn = btn("eq", "Equalizer (E)", () => this.openEq());
+    this.vizBtn = btn("viz", "Visualizer style (V)", () => this.openViz());
     this.volIcon = btn("volume", "Mute (M)", () => p.toggleMute());
     this.volFill = h("div", { class: "mp-vol-fill" }, h("i"));
     this.vol = h("div", { class: "mp-vol", title: "Volume (↑ ↓)" }, h("i", { class: "mp-vol-bg" }), this.volFill);
@@ -82,13 +84,14 @@ export class MediaTab {
       btn("next", "Next (Shift+→)", () => p.next()),
       btn("stop", "Stop", () => p.stop()),
       this.cur, this.progress, this.dur,
-      this.shuffleBtn, this.repeatBtn, this.eqBtn,
+      this.shuffleBtn, this.repeatBtn, this.eqBtn, this.vizBtn,
       this.volIcon, this.vol,
       btn("maximize", "Fullscreen (F)", () => this.fullscreen()));
 
     this.count = h("span", { class: "muted" });
     this.list = h("div", { class: "mp-list", tabindex: 0 });
     const side = h("aside", { class: "mp-side" },
+      this.sourceSwitch(),
       h("div", { class: "mp-side-head" }, h("span", { class: "panel-title" }, "Playlist"), this.count,
         h("span", { class: "grow" }),
         btn("plus", "Add files", () => this.pickFiles()),
@@ -96,7 +99,8 @@ export class MediaTab {
         btn("trash", "Clear playlist", () => this.clear())),
       this.list);
     this.root = h("div", { class: "mp", tabindex: 0 }, h("div", { class: "mp-main" }, this.stage, controls), side);
-    this.el.append(this.root);
+    this.spotify = new SpotifyView({ makeSwitch: () => this.sourceSwitch() });
+    this.el.append(this.root, this.spotify.root);
 
     this.wireSeek();
     this.wireVolume();
@@ -110,6 +114,10 @@ export class MediaTab {
     on("volume", () => this.renderVolume());
     this.off.push(settings.watch(["mediaShuffle", "mediaRepeat"], () => { this.renderModes(); p.rebuildOrder(); }));
     this.off.push(settings.watch(["mediaEqOn"], () => this.renderModes()));
+    // Restyled while paused: draw one frame so the change shows.
+    this.off.push(settings.watch(VIZ_KEYS, () => this.kickViz()));
+    this.off.push(settings.watch("mediaSource", () => this.applySource()));
+    this.applySource();
 
     this.renderNow();
     this.renderList();
@@ -117,6 +125,37 @@ export class MediaTab {
     this.renderTime();
     this.renderVolume();
     this.renderModes();
+  }
+
+  // ── Source: your files, or Spotify ───────────────────────────────────────
+  sourceSwitch() {
+    const current = settings.get("mediaSource") === "spotify" ? "spotify" : "local";
+    const mk = (id, label, ic) => h("button", {
+      class: `mp-src${current === id ? " on" : ""}`, type: "button", role: "tab", dataset: { src: id },
+      onclick: () => settings.set({ mediaSource: id })
+    }, icon(ic), label);
+    return h("div", { class: "mp-srcs", role: "tablist" }, mk("local", "Files", "audio"), mk("spotify", "Spotify", "spotify"));
+  }
+
+  get source() {
+    return settings.get("mediaSource") === "spotify" ? "spotify" : "local";
+  }
+
+  applySource() {
+    const sp = this.source === "spotify";
+    this.el.querySelectorAll(".mp-src").forEach((b) => b.classList.toggle("on", b.dataset.src === this.source));
+    this.root.hidden = sp;
+    this.spotify.root.hidden = !sp;
+    this.label = sp ? "Spotify" : (this.p.current?.title || "Media");
+    this.ws.updateTab(this);
+    const shown = this.el.classList.contains("active");
+    if (sp) {
+      this.p.detach();
+      if (shown) this.spotify.activate();
+    } else {
+      this.spotify.deactivate();
+      if (shown) { this.p.attach(this.videoBox); this.updateVideo(); this.kickViz(); }
+    }
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────
@@ -127,15 +166,17 @@ export class MediaTab {
     setText(this.artistEl, item ? [item.artist, item.album].filter(Boolean).join(" — ") || fmt.basename(fmt.dirname(item.path)) : "");
     this.art.hidden = !item?.art;
     if (item?.art) this.art.src = item.art;
-    this.label = item ? item.title : "Media";
-    this.ws.updateTab(this);
+    if (this.source === "local") {
+      this.label = item ? item.title : "Media";
+      this.ws.updateTab(this);
+    }
     this.updateVideo();
   }
 
   updateVideo() {
     const video = this.p.isVideo;
     this.stage.classList.toggle("is-video", video);
-    if (this.el.classList.contains("active")) this.p.attach(this.videoBox);
+    if (this.el.classList.contains("active") && this.source === "local") this.p.attach(this.videoBox);
   }
 
   renderState() {
@@ -164,6 +205,53 @@ export class MediaTab {
     this.repeatBtn.dataset.mode = repeat === "one" ? "1" : "";
     this.repeatBtn.title = `Repeat: ${repeat}`;
     this.eqBtn.classList.toggle("on", !!settings.get("mediaEqOn"));
+  }
+
+  // Visualizer popover: style, bar count, colours, peaks, reflection,
+  // smoothing and sensitivity; every change shows straight away.
+  openViz() {
+    popover(this.vizBtn, () => {
+      const o = vizOptions();
+      const styles = h("div", { class: "viz-styles" }, ...VIZ_STYLES.map(([id, label]) => h("button", {
+        class: `viz-style${o.style === id ? " on" : ""}`, type: "button",
+        onclick: (e) => {
+          settings.set({ vizStyle: id });
+          e.currentTarget.parentElement.querySelectorAll(".viz-style").forEach((b) => b.classList.toggle("on", b === e.currentTarget));
+        }
+      }, label)));
+      const slider = (key, min, max, step, suffix = "") => {
+        const val = h("span", { class: "viz-val" }, `${settings.get(key)}${suffix}`);
+        const input = h("input", { type: "range", min, max, step, class: "viz-range" });
+        input.value = String(settings.get(key));
+        input.addEventListener("input", () => { setText(val, `${input.value}${suffix}`); settings.set({ [key]: Number(input.value) }); });
+        return h("span", { class: "viz-slider" }, input, val);
+      };
+      const check = (key, label) => {
+        const el = h("input", { type: "checkbox", checked: !!settings.get(key) });
+        el.addEventListener("change", () => settings.set({ [key]: el.checked }));
+        return h("label", { class: "viz-check" }, el, label);
+      };
+      const colour = h("select", { class: "input viz-select" }, ...VIZ_COLORS.map(([id, label]) => h("option", { value: id }, label)));
+      colour.value = o.color;
+      const custom = h("input", { type: "color", class: "viz-color", value: o.custom, title: "Custom colour" });
+      custom.hidden = o.color !== "custom";
+      colour.addEventListener("change", () => { settings.set({ vizColor: colour.value }); custom.hidden = colour.value !== "custom"; });
+      custom.addEventListener("input", () => settings.set({ vizCustomColor: custom.value }));
+      const line = (label, ...control) => h("div", { class: "viz-row" }, h("span", { class: "viz-label" }, label), ...control);
+      return h("div", { class: "viz" },
+        h("div", { class: "eq-head" }, h("span", { class: "panel-title" }, "Visualizer"), h("span", { class: "grow" }),
+          h("button", { class: "btn", type: "button", title: "Back to the default look", onclick: () => {
+            settings.set({ vizStyle: "bars", vizBars: 64, vizColor: "theme", vizPeaks: false, vizReflection: true, vizSmoothing: 78, vizSensitivity: 100 });
+            this.openViz();
+          } }, "Reset")),
+        styles,
+        line("Bars", slider("vizBars", 16, 128, 8)),
+        line("Colour", colour, custom),
+        line("Smoothing", slider("vizSmoothing", 0, 95, 1, "%")),
+        line("Sensitivity", slider("vizSensitivity", 50, 200, 5, "%")),
+        h("div", { class: "viz-checks" }, check("vizPeaks", "Peak caps"), check("vizReflection", "Reflection")),
+        h("div", { class: "eq-foot muted" }, "Also in Settings → Media"));
+    }, { className: "viz-pop" });
   }
 
   // Equalizer popover: on/off, presets and ten draggable band sliders.
@@ -326,6 +414,7 @@ export class MediaTab {
       else if (e.key.toLowerCase() === "m" && !e.ctrlKey) { done(); p.toggleMute(); }
       else if (e.key.toLowerCase() === "f" && !e.ctrlKey) { done(); this.fullscreen(); }
       else if (e.key.toLowerCase() === "e" && !e.ctrlKey) { done(); this.openEq(); }
+      else if (e.key.toLowerCase() === "v" && !e.ctrlKey) { done(); this.openViz(); }
       else if (e.key === "Delete" && this.selected >= 0) { done(); p.remove(this.selected); this.selected = Math.min(this.selected, p.items.length - 1); this.paintSelection(); }
       else if (e.key === "Enter" && this.selected >= 0) { done(); p.load(this.selected); }
     });
@@ -355,48 +444,34 @@ export class MediaTab {
 
   // ── Visualizer ───────────────────────────────────────────────────────────
   kickViz() {
-    if (this.vizTimer || !this.el.classList.contains("active")) return;
+    if (this.vizTimer || !this.el.classList.contains("active") || this.source !== "local") return;
     const ctx = this.viz.getContext("2d");
-    let bins = null;
+    this.drawViz ||= createViz();
+    let freq = null;
+    let wave = null;
     const frame = () => {
       this.vizTimer = null;
-      if (!this.el.classList.contains("active") || !appActive()) return;
+      if (!this.el.classList.contains("active") || !appActive() || this.source !== "local") return;
       const dpr = window.devicePixelRatio || 1;
       const r = this.viz.getBoundingClientRect();
-      if (this.viz.width !== Math.round(r.width * dpr)) { this.viz.width = Math.round(r.width * dpr); this.viz.height = Math.round(r.height * dpr); }
-      const W = this.viz.width, H = this.viz.height;
-      ctx.clearRect(0, 0, W, H);
+      if (this.viz.width !== Math.round(r.width * dpr) || this.viz.height !== Math.round(r.height * dpr)) {
+        this.viz.width = Math.round(r.width * dpr);
+        this.viz.height = Math.round(r.height * dpr);
+      }
+      const o = vizOptions();
       const analyser = this.p.analyser;
       const playing = this.p.playing && !this.p.isVideo;
       if (analyser && playing) {
-        bins ||= new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(bins);
-      }
-      const count = 64;
-      const gap = 3 * dpr;
-      const bw = (W - gap * (count - 1)) / count;
-      const base = H * 0.72;
-      // Bars are spaced logarithmically (~40 Hz to ~16 kHz) so the spectrum
-      // reads like a graphic equaliser instead of piling up in the bass.
-      const lo = 2, hi = bins ? Math.min(bins.length - 1, Math.round(bins.length * 0.72)) : 1;
-      for (let i = 0; i < count; i++) {
-        let v = 0.02;
-        if (playing && bins) {
-          const a = Math.floor(lo * Math.pow(hi / lo, i / count));
-          const b = Math.max(a + 1, Math.floor(lo * Math.pow(hi / lo, (i + 1) / count)));
-          let peak = 0;
-          for (let k = a; k < b; k++) peak = Math.max(peak, bins[k]);
-          v = peak / 255;
+        analyser.smoothingTimeConstant = o.smoothing / 100;
+        if (o.style === "wave") {
+          wave ||= new Uint8Array(analyser.fftSize);
+          analyser.getByteTimeDomainData(wave);
+        } else {
+          freq ||= new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(freq);
         }
-        const bh = Math.max(2 * dpr, v * base * 0.9);
-        const x = i * (bw + gap);
-        ctx.fillStyle = accent(0.25 + v * 0.75);
-        ctx.fillRect(x, base - bh, bw, bh);
-        ctx.fillStyle = accent(0.12 * v + 0.03);
-        ctx.fillRect(x, base + 2 * dpr, bw, bh * 0.35);
       }
-      ctx.fillStyle = accent(0.35);
-      ctx.fillRect(0, base, W, dpr);
+      this.drawViz(ctx, this.viz.width, this.viz.height, dpr, { freq: o.style === "wave" ? null : freq, wave: o.style === "wave" ? wave : null, playing }, o);
       if (playing) this.vizTimer = setTimeout(() => requestAnimationFrame(frame), 1000 / animationFps(30));
     };
     frame();
@@ -406,6 +481,10 @@ export class MediaTab {
   // The workspace may activate a tab before mount() has built it.
   activate() {
     if (!this.root) { requestAnimationFrame(() => this.root && this.activate()); return; }
+    if (this.source === "spotify") {
+      this.spotify.activate();
+      return;
+    }
     this.p.attach(this.videoBox);
     this.updateVideo();
     this.kickViz();
@@ -414,16 +493,19 @@ export class MediaTab {
 
   deactivate() {
     this.p.detach();
+    this.spotify?.deactivate();
     clearTimeout(this.vizTimer);
     this.vizTimer = null;
   }
 
   focus() {
-    this.root?.focus();
+    if (this.source === "spotify") this.spotify?.focus();
+    else this.root?.focus();
   }
 
   dispose() {
     this.deactivate();
+    this.spotify?.dispose();
     this.off.forEach((fn) => fn());
   }
 }

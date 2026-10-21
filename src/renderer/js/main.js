@@ -32,6 +32,9 @@ import { initLayout, applyPreset, PRESETS } from "./core/layout.js";
 import { initFilePanel } from "./shell/filepanel.js";
 import { openThemeEditor, openCssEditor, initCustomCss } from "./shell/theme-studio.js";
 import { openArrangements, quickLayout, saveArrangement } from "./shell/arrange.js";
+import { openUpdates, initUpdates } from "./shell/updates.js";
+import { editWallpaperArt } from "./shell/wallpaper.js";
+import { clearBrowsingData } from "./workspace/browser.js";
 
 const api = window.edex;
 let workspace;
@@ -119,6 +122,18 @@ async function registerCommands() {
   cmd("disk.open", "Disk usage map", () => workspace.openDisk(), { icon: "disk", keywords: "storage space analyzer treemap sunburst large files folders windirstat" });
   cmd("widgets.command", "New command widget…", () => editCommandWidget(), { icon: "terminal", keywords: "custom widget script output panel powershell" });
   cmd("idle.show", "Show idle screen", () => showIdleScreen(), { icon: "moon", keywords: "screensaver idle clock matrix" });
+  cmd("saver.start", "Start screen saver", () => api.saver.start().catch((e) => toast(cleanError(e), { level: "warn" })), { icon: "saver", keywords: "screensaver idle lock away blank screen all monitors" });
+  cmd("browser.new", "New browser tab", () => workspace.openBrowser(""), { keys: "Ctrl+Shift+B", icon: "globe", keywords: "web internet chrome edge website page url" });
+  cmd("browser.clear", "Clear browsing data…", () => clearBrowsingData(), { icon: "trash", keywords: "browser cookies cache history sign out" });
+  cmd("apptab.pick", "Show a window as a tab…", () => workspace.pickApp(document.querySelector("#workspace .tab-actions .icon-btn:last-child") || document.body), { icon: "apptab", keywords: "app window tab dock embed integrate" });
+  cmd("apptab.all", "Toggle: every open window as a tab", () => {
+    const on = settings.get("appTabs") !== "all";
+    settings.set({ appTabs: on ? "all" : "off" });
+    toast(on ? "Every open window now has a tab" : "Window tabs closed — windows put back", { timeout: 2200 });
+  }, { icon: "apptab", keywords: "app windows tabs taskbar integrate" });
+  cmd("wallpaper.open", "ASCII wallpaper tab", () => workspace.openWallpaper(), { icon: "wallpaper", keywords: "ascii art wallpaper idle pane background" });
+  cmd("wallpaper.edit", "Edit ASCII wallpaper art…", () => editWallpaperArt(), { icon: "edit", keywords: "ascii art wallpaper nfo block letters" });
+  cmd("updates.check", "Check for updates", () => openUpdates(), { icon: "update", keywords: "update upgrade new version release github download" });
   cmd("hud.toggle", "Toggle multi-monitor HUD", () => {
     const on = !settings.get("hudDisplays");
     settings.set({ hudDisplays: on });
@@ -207,8 +222,22 @@ async function mainHud() {
   markBooted();
 }
 
+// Screen saver window (one per display): the chosen effect, plus the clock
+// and weather on the main display. Input closes every one of them.
+async function mainSaver() {
+  document.documentElement.classList.add("saver");
+  await settings.loadSettings();
+  initCustomCss();
+  await applyTheme(settings.get("theme")).catch(() => applyTheme("tron"));
+  document.getElementById("boot")?.remove();
+  const primary = new URLSearchParams(location.search).has("primary");
+  showIdleScreen({ effect: settings.get("screensaverEffect") || "matrix", info: primary, onDismiss: () => api.saver.dismiss() });
+}
+
 async function main() {
-  if (new URLSearchParams(location.search).has("hud")) return mainHud();
+  const params = new URLSearchParams(location.search);
+  if (params.has("hud")) return mainHud();
+  if (params.has("saver")) return mainSaver();
   await settings.loadSettings();
   initLayout();
   initCustomCss();
@@ -236,6 +265,7 @@ async function main() {
   initHotkeys();
   initBackgroundFx();
   initIdleScreen();
+  initUpdates();
   initAi();
   initTopbar($("#topbar"));
   dock = initDock($("#dock"));

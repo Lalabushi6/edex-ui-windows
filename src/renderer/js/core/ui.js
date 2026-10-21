@@ -226,6 +226,35 @@ export function popover(anchor, build, { className = "", onClose } = {}) {
   return close;
 }
 
+// ── Cover tracking ──────────────────────────────────────────────────────────
+// Browser tabs and app tabs are drawn above the interface (a web page view,
+// another app's window), so they step aside while a menu, dialog, popover or
+// full-screen overlay is open. All of those are appended straight to <body>.
+const COVER = ".modal-backdrop, .ctx-menu, .popover, .idle-screen, #boot-preview, #boot";
+const coverSubs = new Set();
+let coverObserver = null;
+let covered = false;
+
+export function isCovered() {
+  return !!document.querySelector(`body > :is(${COVER})`);
+}
+
+// cb(covered) runs whenever that changes; returns an unsubscribe function.
+export function onCoverChange(cb) {
+  coverSubs.add(cb);
+  if (!coverObserver) {
+    covered = isCovered();
+    coverObserver = new MutationObserver(() => {
+      const now = isCovered();
+      if (now === covered) return;
+      covered = now;
+      for (const fn of coverSubs) { try { fn(now); } catch (_) {} }
+    });
+    coverObserver.observe(document.body, { childList: true });
+  }
+  return () => coverSubs.delete(cb);
+}
+
 export async function copyText(text, message = "Copied") {
   try {
     await window.edex.clip.copy(String(text));

@@ -9,6 +9,7 @@ import * as sfx from "../core/audio.js";
 import { emit, booted } from "../core/bus.js";
 import { allCommands } from "../core/commands.js";
 import { openModal, toast, contextMenu, copyText, cleanError } from "../core/ui.js";
+import { openUrl } from "../core/links.js";
 import { evaluate, looksLikeMath, formatNumber } from "./calc.js";
 import { convert, parseDuration } from "./convert.js";
 
@@ -273,7 +274,13 @@ export function openLauncher(opts = {}) {
     // URLs
     if (mode === "all" && /^(https?:\/\/\S+|[\w-]+(\.[\w-]+)+(\/\S*)?)$/i.test(q) && !/\s/.test(q) && !/^[\d.]+$/.test(q)) {
       const url = /^https?:/i.test(q) ? q : `https://${q}`;
-      out.push({ key: `url:${url}`, group: "Web", title: url, sub: "Open in browser", icon: "globe", run: () => api.shell.openExternal(url) });
+      out.push({
+        key: `url:${url}`, group: "Web", title: url, sub: settings.get("browserLinks") ? "Open in an eDEX browser tab" : "Open in browser", icon: "globe", run: () => openUrl(url),
+        menu: (e) => contextMenu(e, [
+          { label: "Open in an eDEX browser tab", icon: "globe", run: () => { close(); emit("open-browser", { url }); } },
+          { label: "Open in your browser", icon: "external", run: () => { close(); openUrl(url, { external: true }); } }
+        ])
+      });
     }
 
     if (want("apps")) {
@@ -302,6 +309,7 @@ export function openLauncher(opts = {}) {
         alt: () => api.win.close(w.hwnd),
         menu: (e) => contextMenu(e, [
           { label: "Switch to", icon: "window", run: () => { close(); api.win.focus(w.hwnd); } },
+          { label: "Show as a tab in eDEX", icon: "apptab", run: () => { close(); emit("open-app-tab", w); } },
           { label: "Minimize", icon: "minimize", run: () => api.win.minimize(w.hwnd).then(() => refreshWindows()) },
           { label: "Close window", icon: "close", danger: true, run: () => api.win.close(w.hwnd).then(() => setTimeout(refreshWindows, 400)) }
         ])
@@ -384,7 +392,13 @@ export function openLauncher(opts = {}) {
 
     if (q && mode === "all") {
       const url = (settings.get("webSearchUrl") || "https://www.google.com/search?q=%s").replace("%s", encodeURIComponent(q));
-      out.push({ key: "web", group: "Web", title: `Search the web for “${q}”`, sub: url.replace(/^https?:\/\//, "").split("/")[0], icon: "search", run: () => api.shell.openExternal(url) });
+      out.push({
+        key: "web", group: "Web", title: `Search the web for “${q}”`, sub: url.replace(/^https?:\/\//, "").split("/")[0], icon: "search", run: () => openUrl(url),
+        menu: (e) => contextMenu(e, [
+          { label: "Search in an eDEX browser tab", icon: "globe", run: () => { close(); emit("open-browser", { url }); } },
+          { label: "Search in your browser", icon: "external", run: () => { close(); openUrl(url, { external: true }); } }
+        ])
+      });
     }
     return { items: out, q: ql };
   }

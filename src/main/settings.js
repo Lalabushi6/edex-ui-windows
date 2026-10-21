@@ -34,17 +34,20 @@ const widgetOrder = () => (v, d) => {
 const workspace = () => (v, d) => {
   if (v === null) return null;
   if (!v || !Array.isArray(v.tabs)) return d;
-  const tabs = v.tabs.slice(0, 16).map((t) => ({
-    type: ["terminal", "files", "processes", "media", "disk"].includes(t?.type) ? t.type : "terminal",
+  const tabs = v.tabs.slice(0, 40).map((t) => ({
+    type: ["terminal", "files", "processes", "media", "disk", "browser", "ascii", "app"].includes(t?.type) ? t.type : "terminal",
     shell: typeof t?.shell === "string" ? t.shell.slice(0, 32) : undefined,
     cwd: typeof t?.cwd === "string" ? t.cwd.slice(0, 1024) : undefined,
     label: typeof t?.label === "string" ? t.label.slice(0, 32) : undefined,
+    url: t?.type === "browser" && typeof t.url === "string" && /^https?:\/\//i.test(t.url) ? t.url.slice(0, 4096) : undefined,
+    exe: t?.type === "app" && typeof t.exe === "string" ? t.exe.slice(0, 1024) : undefined,
+    title: t?.type === "app" && typeof t.title === "string" ? t.title.slice(0, 200) : undefined,
     splits: t?.type === "terminal" && Array.isArray(t.splits)
       ? t.splits.slice(0, 3).map((s) => ({ shell: typeof s?.shell === "string" ? s.shell.slice(0, 32) : undefined }))
       : undefined,
     splitDir: t?.splitDir === "down" ? "down" : t?.splitDir === "right" ? "right" : undefined
   }));
-  return { tabs, active: int(0, 15)(v.active, 0) };
+  return { tabs, active: int(0, 39)(v.active, 0) };
 };
 
 // Custom command widgets: a title, the command, its shell and refresh rate.
@@ -160,6 +163,21 @@ const SCHEMA = {
   mediaEqOn: [bool(), false],
   mediaEqPreset: [str(32), "flat"],
   mediaEq: [(v, d) => (Array.isArray(v) && v.length === 10 ? v.map((x) => Math.max(-12, Math.min(12, Math.round(Number(x) * 2) / 2 || 0))) : d), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+  mediaSource: [oneOf("local", "spotify"), "local"],
+
+  // Visualizer (media player)
+  vizStyle: [oneOf("bars", "mirror", "line", "wave", "radial", "dots", "blocks"), "bars"],
+  vizBars: [int(16, 128), 64],
+  vizColor: [oneOf("theme", "gradient", "rainbow", "custom"), "theme"],
+  vizCustomColor: [(v, d) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : d), "#ff9a3d"],
+  vizPeaks: [bool(), false],
+  vizReflection: [bool(), true],
+  vizSmoothing: [int(0, 95), 78],
+  vizSensitivity: [int(50, 200), 100],
+
+  // Spotify (Web API with the user's own Client ID; tokens live encrypted
+  // outside settings)
+  spotifyClientId: [(v, d) => (typeof v === "string" && (v === "" || /^[0-9a-f]{32}$/i.test(v.trim())) ? v.trim().toLowerCase() : d), ""],
 
   // Timer
   pomodoroWork: [int(1, 120), 25],
@@ -177,8 +195,33 @@ const SCHEMA = {
   hudDisplays: [bool(), false],
   idleScreen: [bool(), false],
   idleMinutes: [int(1, 120), 10],
-  idleEffect: [oneOf("matrix", "hex", "stars", "globe"), "matrix"],
+  idleStyle: [oneOf("screen", "wallpaper"), "screen"],
+  idleEffect: [oneOf("matrix", "hex", "stars", "globe", "ascii"), "matrix"],
   backgroundFx: [oneOf("none", "matrix", "hex", "stars"), "none"],
+
+  // ASCII wallpaper (a workspace pane, the idle pane and an idle/saver effect)
+  wallpaperArt: [str(12000), ""],
+  wallpaperEffect: [oneOf("none", "scan", "glitch", "type", "pulse"), "scan"],
+  wallpaperClock: [bool(), true],
+  wallpaperBackdrop: [oneOf("none", "matrix", "hex", "stars"), "none"],
+
+  // Screen saver: system-wide, over every app, while eDEX runs
+  screensaver: [bool(), false],
+  screensaverMinutes: [int(1, 240), 15],
+  screensaverEffect: [oneOf("matrix", "hex", "stars", "globe", "ascii"), "matrix"],
+  screensaverLock: [bool(), false],
+  screensaverRespectApps: [bool(), true],
+  screensaverAllDisplays: [bool(), true],
+
+  // Browser tabs and app tabs
+  browserLinks: [bool(), false],
+  browserHome: [(v, d) => (typeof v === "string" && (v === "" || /^https?:\/\/\S+$/i.test(v)) ? v.slice(0, 2048) : d), ""],
+  appTabs: [oneOf("off", "all"), "off"],
+
+  // Updates from the GitHub releases page
+  updateCheck: [bool(), true],
+  updateSkip: [str(32), ""],
+  updateLastCheck: [int(0, 8.64e15), 0],
   indexSearch: [bool(), true],
   commandWidgets: [commandWidgets(), []],
   screenTimeLimits: [limits(), {}],

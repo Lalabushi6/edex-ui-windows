@@ -5,6 +5,7 @@ import { icon } from "../core/icons.js";
 import { poll } from "../core/poll.js";
 import * as settings from "../core/settings.js";
 import { runCommand } from "../core/commands.js";
+import { emit } from "../core/bus.js";
 import { toast, contextMenu, cleanError } from "../core/ui.js";
 import { openLauncher, loadAppsCached, appIcons, exeIcons, launchApp, togglePinnedApp } from "./launcher.js";
 import { openSnapPicker, snapWindow } from "./arrange.js";
@@ -89,6 +90,7 @@ export function initDock(root) {
       onauxclick: (e) => { if (e.button === 1) api.win.close(w.hwnd).then(() => setTimeout(() => winPoll.kick(), 500)); },
       oncontextmenu: (e) => { const btn = e.currentTarget; contextMenu(e, [
         { label: "Switch to", icon: "window", run: () => api.win.focus(w.hwnd) },
+        { label: "Show as a tab in eDEX", icon: "apptab", run: () => emit("open-app-tab", w) },
         { label: w.minimized ? "Restore" : "Minimize", icon: "minimize", run: () => (w.minimized ? api.win.focus(w.hwnd) : api.win.minimize(w.hwnd)).then(() => winPoll.kick()) },
         { label: w.maximized ? "Restore size" : "Maximize", icon: "maximize", run: () => api.win.maximize(w.hwnd).then(() => winPoll.kick()) },
         { label: "Snap left half", icon: "layout", run: () => snapWindow(w.hwnd, "left").then(() => winPoll.kick()) },

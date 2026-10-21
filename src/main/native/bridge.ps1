@@ -1200,6 +1200,14 @@ public static class EdexWin {
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
     [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder sb, int max);
+    [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+    [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int state);
+    [DllImport("user32.dll")] static extern IntPtr GetWindowDpiAwarenessContext(IntPtr h);
+    [DllImport("user32.dll")] static extern int GetAwarenessFromDpiAwarenessContext(IntPtr ctx);
+    [DllImport("powrprof.dll")] static extern uint CallNtPowerInformation(int level, IntPtr inBuf, uint inLen, out uint outBuf, uint outLen);
 
     const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 
@@ -1269,6 +1277,94 @@ public static class EdexWin {
         IntPtr hWnd = new IntPtr(handle);
         if (!IsWindow(hWnd)) return "false";
         return SetWindowPos(hWnd, new IntPtr(1), 0, 0, 0, 0, 0x0001 | 0x0002 | SWP_NOACTIVATE) ? "true" : "false";
+    }
+
+    // Minimises without activating whatever window is next (app tabs).
+    public static string MinimizeQuiet(long handle) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd)) return "false";
+        ShowWindow(hWnd, 7); // SW_SHOWMINNOACTIVE
+        return "true";
+    }
+
+    // Screen saver guard: is a full-screen app running (games, full-screen
+    // video, presentations), and has any program asked Windows to keep the
+    // display on (playback, calls)? "Full screen" is Windows' own judgement,
+    // the one Focus Assist uses: QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN,
+    // QUNS_PRESENTATION_MODE. A window that merely fills the screen (a
+    // borderless browser with an auto-hiding taskbar) doesn't count.
+    public static string SaverBlocked(long[] excludePids) {
+        bool display = false;
+        uint st;
+        if (CallNtPowerInformation(16, IntPtr.Zero, 0, out st, 4) == 0) display = (st & 0x2) != 0; // SystemExecutionState, ES_DISPLAY_REQUIRED
+        int quns = 0;
+        try { SHQueryUserNotificationState(out quns); } catch { quns = 0; }
+        bool full = quns == 2 || quns == 3 || quns == 4;
+        if (full) {
+            // eDEX's own full-screen window isn't "an app in front".
+            IntPtr fg = GetForegroundWindow();
+            uint pid;
+            GetWindowThreadProcessId(fg, out pid);
+            if (excludePids != null) foreach (var p in excludePids) if ((uint)p == pid) full = false;
+        }
+        return "{\"display\":" + (display ? "true" : "false") + ",\"fullscreen\":" + (full ? "true" : "false") + ",\"state\":" + quns + "}";
+    }
+
+    // A picture of a window (even while covered), as a JPEG data URL no wider
+    // than maxWidth. PW_RENDERFULLCONTENT also captures GPU-drawn windows.
+    // The thread takes the window's own DPI mode: Windows draws a DPI-unaware
+    // (or system-aware) window at its unscaled size, so measuring it in
+    // physical pixels would leave it small in a corner of the picture.
+    public static string Snapshot(long handle, int maxWidth) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd) || IsIconic(hWnd)) return "null";
+        int awareness = 2;
+        try { awareness = GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(hWnd)); } catch { awareness = 2; }
+        bool perMonitor = awareness == 2;
+        IntPtr old = IntPtr.Zero;
+        try { old = SetThreadDpiAwarenessContext(new IntPtr(awareness == 0 ? -1 : awareness == 1 ? -2 : -4)); } catch { old = IntPtr.Zero; }
+        try {
+            RECT r;
+            GetWindowRect(hWnd, out r);
+            int w = r.right - r.left, h = r.bottom - r.top;
+            if (w < 20 || h < 20 || w > 16384 || h > 16384) return "null";
+            using (var bmp = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb)) {
+                using (var g = System.Drawing.Graphics.FromImage(bmp)) {
+                    IntPtr hdc = g.GetHdc();
+                    bool ok;
+                    try { ok = PrintWindow(hWnd, hdc, 2); } finally { g.ReleaseHdc(hdc); }
+                    if (!ok) return "null";
+                }
+                // The visible frame (without the invisible resize borders) is
+                // reported in physical pixels, so it only lines up with
+                // per-monitor-aware windows; others keep the whole picture.
+                int cx = 0, cy = 0, cw = w, ch = h;
+                if (perMonitor) {
+                    RECT fr = Frame(hWnd);
+                    cx = Math.Max(0, fr.left - r.left);
+                    cy = Math.Max(0, fr.top - r.top);
+                    cw = Math.Min(w - cx, fr.right - fr.left);
+                    ch = Math.Min(h - cy, fr.bottom - fr.top);
+                }
+                if (cw < 20 || ch < 20) return "null";
+                double scale = Math.Min(1.0, (double)Math.Max(160, maxWidth) / cw);
+                int ow = Math.Max(1, (int)(cw * scale)), oh = Math.Max(1, (int)(ch * scale));
+                using (var outBmp = new System.Drawing.Bitmap(ow, oh)) {
+                    using (var g2 = System.Drawing.Graphics.FromImage(outBmp)) {
+                        g2.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                        g2.DrawImage(bmp, new System.Drawing.Rectangle(0, 0, ow, oh), new System.Drawing.Rectangle(cx, cy, cw, ch), System.Drawing.GraphicsUnit.Pixel);
+                    }
+                    System.Drawing.Imaging.ImageCodecInfo codec = null;
+                    foreach (var c in System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders()) if (c.MimeType == "image/jpeg") codec = c;
+                    var ep = new System.Drawing.Imaging.EncoderParameters(1);
+                    ep.Param[0] = new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 78L);
+                    using (var ms = new MemoryStream()) {
+                        outBmp.Save(ms, codec, ep);
+                        return "\"data:image/jpeg;base64," + Convert.ToBase64String(ms.ToArray()) + "\"";
+                    }
+                }
+            }
+        } catch { return "null"; } finally { Restore(old); }
     }
 
     // A share of the work area of the monitor the window is on (fractions).
@@ -1513,6 +1609,12 @@ function Select-MediaSession($a) {
     $skip = [string]$a.skip
     $sessions = @($mgr.GetSessions() | Where-Object { -not $skip -or $_.SourceAppUserModelId -notmatch $skip })
     if (-not $sessions.Count) { return $null }
+    # A particular kind of player (e.g. Spotify), or nothing at all.
+    if ($a.match) {
+        $m = $sessions | Where-Object { $_.SourceAppUserModelId -match [string]$a.match } | Select-Object -First 1
+        if ($m) { return $m }
+        if ($a.only) { return $null }
+    }
     if ($a.app) {
         $match = $sessions | Where-Object { $_.SourceAppUserModelId -eq [string]$a.app } | Select-Object -First 1
         if ($match) { return $match }
@@ -1732,6 +1834,9 @@ while ($true) {
             'placeWindow'  { $data = [EdexWin]::Place([long]$a.hwnd, [int]$a.x, [int]$a.y, [int]$a.w, [int]$a.h, [string]$a.state) }
             'sendToBack'   { $data = [EdexWin]::SendToBack([long]$a.hwnd) }
             'tileWindow'   { $data = [EdexWin]::Tile([long]$a.hwnd, [double]$a.x, [double]$a.y, [double]$a.w, [double]$a.h) }
+            'minimizeQuiet' { $data = [EdexWin]::MinimizeQuiet([long]$a.hwnd) }
+            'saverBlocked' { $data = [EdexWin]::SaverBlocked([long[]]@($a.exclude | Where-Object { $_ -ne $null })) }
+            'windowSnapshot' { $data = [EdexWin]::Snapshot([long]$a.hwnd, [int]$a.max) }
             'diskScan'     { $data = [EdexDisk]::Start([string]$a.path) }
             'diskProgress' { $data = [EdexDisk]::Progress() }
             'diskNode'     { $data = [EdexDisk]::Children([string]$a.path, [int]$a.depth) }

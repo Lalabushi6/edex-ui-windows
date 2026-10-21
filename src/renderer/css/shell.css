@@ -548,6 +548,23 @@ button.cal-day { background: transparent; color: inherit; font: inherit; cursor:
 .idle-date { font-size: clamp(.9rem, 1.6vw, 1.4rem); letter-spacing: .3em; color: var(--c-70); margin-top: .6rem; }
 .idle-extra { font-size: 1rem; color: var(--c-70); margin-top: .4rem; letter-spacing: .1em; }
 .idle-hint { font-size: .7rem; letter-spacing: .3em; color: var(--c-35); margin-top: 2.2rem; }
+.idle-screen .idle-info { z-index: 1; }
+.idle-screen.ascii .wp-stage { padding-bottom: 24vh; }
+.idle-screen.ascii .idle-info { bottom: 5vh; }
+.idle-screen.ascii .idle-clock { font-size: clamp(2.4rem, 6vw, 5rem); }
+
+/* Screen saver windows */
+html.saver, html.saver body { cursor: none; background: #000; }
+html.saver #app, html.saver #toasts { display: none !important; }
+
+/* Window / device pickers */
+.app-picker, .sp-devices { display: flex; flex-direction: column; gap: .45rem; min-width: 22rem; max-width: 34rem; }
+.app-picker-list { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; }
+.app-picker-item { display: flex; align-items: center; gap: .5rem; padding: .4rem .5rem; border: 1px solid transparent; background: transparent; color: var(--c); text-align: left; min-width: 0; }
+.app-picker-item:hover:not(:disabled) { background: var(--c-12); border-color: var(--c-30); }
+.app-picker-item.on { border-color: var(--c-50); }
+.app-picker-item:disabled { opacity: .4; }
+.app-picker-item .muted { font-size: .76rem; flex: none; }
 
 /* Animated background */
 #bgfx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; opacity: .32; pointer-events: none; }
