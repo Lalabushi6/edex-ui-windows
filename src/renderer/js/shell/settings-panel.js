@@ -19,6 +19,9 @@ import { editWallpaperArt, WALLPAPER_EFFECTS, WALLPAPER_BACKDROPS } from "./wall
 import { openUpdates } from "./updates.js";
 import { clearBrowsingData } from "../workspace/browser.js";
 import { emit } from "../core/bus.js";
+import { widgetHidden, setWidgetShown } from "../widgets/registry.js";
+import { loadGames, openGameLibrary } from "./games.js";
+import { profiles, updateProfile, switchProfile, newProfileDialog, renameProfile, deleteProfile, setRemember, captureProfile } from "./profiles.js";
 
 const api = window.edex;
 
@@ -218,8 +221,13 @@ function bootLogoRow() {
 
 // Click, then press the new key combination. Esc cancels, Backspace clears.
 function hotkey(key) {
+  return hotkeyInput(() => settings.get(key), (v) => settings.set({ [key]: v }));
+}
+
+// read() gives the current accelerator, write(value) saves a new one.
+function hotkeyInput(read, write) {
   const el = h("input", { class: "input hotkey-input", readOnly: true });
-  const show = () => { el.value = settings.get(key) || "(none)"; };
+  const show = () => { el.value = (read() || "(none)").replace("CommandOrControl", "Ctrl"); };
   show();
   el.addEventListener("focus", () => { el.classList.add("recording"); el.value = "Press keys…"; });
   el.addEventListener("blur", () => { el.classList.remove("recording"); show(); });
@@ -227,7 +235,7 @@ function hotkey(key) {
     e.preventDefault();
     e.stopPropagation();
     if (e.key === "Escape") { el.blur(); return; }
-    if (e.key === "Backspace" || e.key === "Delete") { settings.set({ [key]: "" }); el.blur(); return; }
+    if (e.key === "Backspace" || e.key === "Delete") { write(""); el.blur(); return; }
     if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
     const parts = [];
     if (e.ctrlKey) parts.push("CommandOrControl");
@@ -241,10 +249,111 @@ function hotkey(key) {
     else if (e.code === "Backquote") k = "`";
     if (!parts.length && !/^F\d+$/.test(k)) { toast("Use at least one modifier (Ctrl, Alt or Shift)", { level: "warn" }); return; }
     parts.push(k.length === 1 ? k.toUpperCase() : k);
-    settings.set({ [key]: parts.join("+") });
+    write(parts.join("+"));
     el.blur();
   });
   return el;
+}
+
+// Music library folders (your Music folder unless you add others).
+function musicFolderRows() {
+  const box = h("div");
+  const render = async () => {
+    const d = await api.library.list().catch(() => ({ folders: [], tracks: [] }));
+    box.replaceChildren(
+      ...d.folders.map((f) => row(h("span", { class: "mono", style: { fontSize: ".8rem" } }, f), null,
+        h("button", { class: "btn sm", type: "button", onclick: async () => { await api.library.removeFolder(f).catch(() => {}); render(); } }, "Remove"))),
+      row("Folders", `${(d.tracks || []).length.toLocaleString()} songs found. Songs are read once and again only when they change.`,
+        h("span", { style: { display: "flex", gap: ".4rem" } },
+          h("button", { class: "btn", type: "button", onclick: async () => { await api.library.addFolder().catch(() => {}); render(); } }, icon("plus"), "Add folder…"),
+          h("button", { class: "btn", type: "button", onclick: async () => { await api.library.scan().catch(() => {}); render(); } }, icon("refresh"), "Read again"))));
+  };
+  render();
+  return [box];
+}
+
+// Workspaces: each one's hotkey, schedule and what it remembers.
+function workspaceRows() {
+  const current = settings.get("activeProfile") || "main";
+  const rerender = () => setTimeout(() => openPanel?.show("workspaces"), 60);
+  const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  return profiles().map((p) => {
+    const sched = p.schedule;
+    const time = h("input", { class: "input", type: "time", value: sched?.time || "", title: "Switch to this workspace at this time" });
+    const days = new Set(sched?.days || [0, 1, 2, 3, 4, 5, 6]);
+    const saveSched = () => updateProfile(p.id, { schedule: time.value ? { time: time.value, days: [...days] } : null });
+    time.addEventListener("change", saveSched);
+    const dayBtns = DAYS.map((d, i) => {
+      const b = h("button", { class: `ws-day${days.has(i) ? " on" : ""}`, type: "button", title: "Days it switches on" }, d);
+      b.addEventListener("click", () => { if (days.has(i)) days.delete(i); else days.add(i); b.classList.toggle("on", days.has(i)); if (time.value) saveSched(); });
+      return b;
+    });
+    const remember = (what, label, on) => {
+      const el = h("input", { type: "checkbox", checked: on });
+      el.addEventListener("change", () => { setRemember(p.id, what, el.checked); });
+      return h("label", { class: "ws-check" }, el, label);
+    };
+    return h("div", { class: `ws-card${p.id === current ? " current" : ""}` },
+      h("div", { class: "ws-card-head" }, icon("layers"), h("span", { class: "ws-card-name" }, p.name),
+        p.id === current ? h("span", { class: "ws-current" }, "CURRENT") : h("button", { class: "btn sm", type: "button", onclick: () => { switchProfile(p.id); rerender(); } }, "Switch"),
+        h("span", { class: "grow" }),
+        h("button", { class: "btn sm", type: "button", onclick: async () => { await renameProfile(p.id); rerender(); } }, "Rename"),
+        p.id !== "main" ? h("button", { class: "btn sm danger", type: "button", onclick: async () => { await deleteProfile(p.id); rerender(); } }, "Delete") : null),
+      row("Hotkey", "Brings eDEX up in this workspace, from any app.", hotkeyInput(() => p.hotkey, (v) => updateProfile(p.id, { hotkey: v }))),
+      row("Switch automatically", "At this time on the chosen days (leave the time empty for never).", h("span", { class: "ws-sched" }, time, ...dayBtns)),
+      row("Remembers", "Brought back when you switch here.", h("span", { class: "ws-remember" },
+        remember("theme", "Theme", p.theme !== null),
+        remember("layout", "Layout", p.layout !== null),
+        remember("windows", "App windows", !!p.windows),
+        h("button", { class: "btn sm", type: "button", title: "Save the current theme, layout and window positions to this workspace", onclick: () => captureProfile(p.id) }, "Save current"))));
+  });
+}
+
+// Calendar subscriptions: add, colour, reminder, remove; with each feed's status.
+async function calendarRows() {
+  const feeds = settings.get("calendarFeeds") || [];
+  const status = new Map((await api.calendars.status().catch(() => [])).map((s) => [s.id, s]));
+  const rerender = () => setTimeout(() => openPanel?.show("calendar"), 60);
+  const save = (list) => settings.set({ calendarFeeds: list });
+  const REM = [["", "No reminders"], ["0", "At the time"], ["5", "5 min before"], ["10", "10 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"]];
+  const rows = feeds.map((f) => {
+    const s = status.get(f.id);
+    const color = h("input", { type: "color", class: "viz-color", value: f.color });
+    color.addEventListener("change", () => save(feeds.map((x) => (x.id === f.id ? { ...x, color: color.value } : x))));
+    const rem = h("select", { class: "input" }, ...REM.map(([v, l]) => h("option", { value: v }, l)));
+    rem.value = f.remind == null ? "" : String(f.remind);
+    rem.addEventListener("change", () => save(feeds.map((x) => (x.id === f.id ? { ...x, remind: rem.value === "" ? null : Number(rem.value) } : x))));
+    const on = h("input", { class: "switch", type: "checkbox", checked: f.enabled !== false });
+    on.addEventListener("change", () => save(feeds.map((x) => (x.id === f.id ? { ...x, enabled: on.checked } : x))));
+    let host = "";
+    try { host = new URL(f.url).host; } catch (_) {}
+    const info = s ? (s.ok ? `${s.count} events · ${s.fetchedAt ? `updated ${new Date(s.fetchedAt).toLocaleString()}` : "not downloaded yet"}` : s.error) : "not downloaded yet";
+    return row(h("span", { class: "cal-feed-name", style: { "--feed": f.color } }, f.name), h("span", { class: s && !s.ok ? "warn-text" : "" }, `${host} · ${info}`),
+      h("span", { style: { display: "flex", gap: ".4rem", alignItems: "center" } }, color, rem, on,
+        h("button", { class: "btn sm", type: "button", onclick: () => { save(feeds.filter((x) => x.id !== f.id)); rerender(); } }, "Remove")));
+  });
+  const name = h("input", { class: "input", placeholder: "Name (Work, Family…)", spellcheck: false, style: { width: "10rem" } });
+  const url = h("input", { class: "input", placeholder: "https://… .ics or webcal://…", spellcheck: false, style: { width: "20rem" } });
+  const add = () => {
+    const u = url.value.trim();
+    if (!/^(https?|webcal):\/\/\S+$/i.test(u)) { toast("Paste the calendar's iCal (.ics) or webcal link", { level: "warn" }); return; }
+    if (feeds.length >= 10) { toast("At most 10 calendars", { level: "warn" }); return; }
+    const palette = ["#7fc8ff", "#ff9a3d", "#8cf0a5", "#e58cff", "#ffd36b", "#ff7a8a"];
+    save([...feeds, { id: `cal${Date.now().toString(36)}`, name: name.value.trim() || "Calendar", url: u, color: palette[feeds.length % palette.length], remind: null, enabled: true }]);
+    toast("Calendar added — downloading it now", { level: "ok" });
+    setTimeout(rerender, 2500);
+  };
+  return [
+    ...rows,
+    row("Add a calendar", "Google Calendar: Settings → your calendar → “Secret address in iCal format”. Outlook: Settings → Calendar → Shared calendars → Publish → ICS link. iCloud: share the calendar publicly and copy the webcal link.",
+      h("span", { style: { display: "flex", gap: ".4rem" } }, name, url, h("button", { class: "btn primary", type: "button", onclick: add }, icon("plus"), "Add"))),
+    row("Refresh now", "Calendars update about every 30 minutes while Outbound lookups are on.", h("button", { class: "btn", type: "button", onclick: async () => {
+      const r = await api.calendars.refresh().catch(() => []);
+      const bad = r.filter((x) => !x.ok);
+      toast(bad.length ? `${bad.length} calendar${bad.length === 1 ? "" : "s"} couldn't be downloaded` : "Calendars updated", { level: bad.length ? "warn" : "ok" });
+      rerender();
+    } }, icon("refresh"), "Refresh"))
+  ];
 }
 
 const PAGES = [
@@ -253,7 +362,10 @@ const PAGES = [
   { id: "terminal", label: "Terminal", icon: "terminal" },
   { id: "keyboard", label: "Keyboard", icon: "keyboard" },
   { id: "layout", label: "Layout", icon: "layout" },
+  { id: "workspaces", label: "Workspaces", icon: "layers" },
   { id: "media", label: "Media", icon: "audio" },
+  { id: "games", label: "Games", icon: "gamepad" },
+  { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "web", label: "Web & apps", icon: "globe" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "performance", label: "Performance", icon: "gauge" },
@@ -345,6 +457,9 @@ async function buildPage(id) {
       row("Lock Windows when it ends", "Like Windows' “On resume, display logon screen”: the next input locks the PC.", toggle("screensaverLock")),
       row("Not during videos or full-screen apps", "Holds back while a full-screen app is in front or a program keeps the display on (video, presentations, calls).", toggle("screensaverRespectApps")),
       row("All displays", "Off: only the main display.", toggle("screensaverAllDisplays")),
+      h("h3", null, "Notifications"),
+      row("Do not disturb", "No pop-ups, sounds or Windows notifications from eDEX; everything still collects in the notification centre (the bell in the top bar). A critically low battery still shows.", toggle("dnd")),
+      row("Hold notifications during games", "The same quiet, only while a game runs (Settings → Games).", toggle("gameModeQuiet")),
       h("h3", null, "Alerts"),
       row("Low battery", "Warns once when the charge drops below the level (again at half of it), with a Windows notification if eDEX is hidden.", toggle("alertBattery")),
       row("Battery level", null, range("alertBatteryLevel", 5, 50, "%")),
@@ -386,6 +501,11 @@ async function buildPage(id) {
       row("Animated background", "Drawn faintly behind the panels in the theme colour, at a low frame rate (paused while eDEX is hidden).", select("backgroundFx", [["none", "None"], ["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"]])),
       row("24-hour clock", null, toggle("clock24h")),
       row("Temperature unit", null, select("temperatureUnit", [["C", "Celsius"], ["F", "Fahrenheit"]])),
+      h("h3", null, "Live wallpaper"),
+      row("Live wallpaper", "While eDEX is hidden, this keeps running as your Windows desktop background, behind the desktop icons (which stay clickable). It pauses behind maximised windows, on battery and during games.",
+        select("liveWallpaper", [["off", "Off"], ["matrix", "Matrix rain"], ["hex", "Hex grid"], ["stars", "Starfield"], ["globe", "Globe"], ["ascii", "ASCII wallpaper"], ["panels", "Telemetry panels (HUD)"]])),
+      row("Displays", null, select("liveWallpaperDisplays", [["all", "All displays"], ["primary", "Main display only"]])),
+      row("Pause when it can't be seen", "Behind maximised or full-screen windows, and on battery (unless the profile is Performance).", toggle("liveWallpaperPause")),
       h("h3", null, "ASCII wallpaper"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "A workspace pane with your ASCII art (tab menu → ASCII wallpaper), the idle pane, and an idle-screen / screen-saver effect."),
       ...wallpaperRows(),
@@ -431,15 +551,10 @@ async function buildPage(id) {
       row("Password mode", "Hides key presses on the on-screen keyboard while you type a secret (the lock button on the keyboard, or the command palette).", h("button", { class: "btn", type: "button", onclick: () => runCommand("keyboard.password") }, icon("lock"), "Toggle")));
   }
   if (id === "layout") {
-    const hidden = new Set(settings.get("hiddenWidgets") || []);
     const widgets = widgetDefs().map((w) => {
-      const el = h("input", { class: "switch", type: "checkbox", checked: !hidden.has(w.id) });
-      el.addEventListener("change", () => {
-        const next = new Set(settings.get("hiddenWidgets") || []);
-        if (el.checked) next.delete(w.id); else next.add(w.id);
-        settings.set({ hiddenWidgets: [...next] });
-      });
-      return row(w.title, w.column === "left" ? "Left column" : "Right column", el);
+      const el = h("input", { class: "switch", type: "checkbox", checked: !widgetHidden(w.id) });
+      el.addEventListener("change", () => setWidgetShown(w.id, el.checked));
+      return row(w.title, `${w.column === "left" ? "Left column" : "Right column"}${w.defaultHidden ? " · off until you switch it on" : ""}`, el);
     });
     const current = settings.get("layoutPreset");
     const cards = h("div", { class: "preset-grid" }, ...Object.entries(PRESETS).map(([name, p]) => h("button", {
@@ -470,7 +585,7 @@ async function buildPage(id) {
       h("h3", null, "Widgets"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Drag a widget by its title bar to reorder it or move it to the other column."),
       ...widgets,
-      row("Reset widget layout", null, h("button", { class: "btn", type: "button", onclick: () => settings.set({ widgetOrder: { left: [], right: [] }, hiddenWidgets: [] }) }, "Reset")),
+      row("Reset widget layout", null, h("button", { class: "btn", type: "button", onclick: () => settings.set({ widgetOrder: { left: [], right: [] }, hiddenWidgets: [], shownWidgets: [] }) }, "Reset")),
       h("h3", null, "Command widgets"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Panels that show a command's output, refreshed on a schedule (disk space, a status API, git log …). Right-click one to edit it."),
       ...(settings.get("commandWidgets") || []).map((c) => row(c.title, `${c.shell === "cmd" ? "cmd" : "PowerShell"} · every ${c.interval} s · ${c.command.slice(0, 80)}`,
@@ -478,6 +593,30 @@ async function buildPage(id) {
           h("button", { class: "btn sm", type: "button", onclick: () => editCommandWidget(c) }, "Edit"),
           h("button", { class: "btn sm", type: "button", onclick: () => { settings.set({ commandWidgets: (settings.get("commandWidgets") || []).filter((x) => x.id !== c.id) }); rerender(); } }, "Remove")))),
       row("New command widget", null, h("button", { class: "btn", type: "button", onclick: () => runCommand("widgets.command") }, icon("plus"), "Add…")));
+  }
+  if (id === "workspaces") {
+    page.push(h("h3", null, "Workspaces"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".5rem" } }, "Named setups such as Work, Gaming or Study. Each has its own tabs, which keep running while you're in another workspace, and can bring back a theme, a layout and your app windows. Switch from the name next to the logo, the launcher (“Workspace: …”), a hotkey, or automatically at a time of day."),
+      ...workspaceRows(),
+      row("New workspace", null, h("button", { class: "btn primary", type: "button", onclick: async () => { await newProfileDialog(); setTimeout(() => openPanel?.show("workspaces"), 60); } }, icon("plus"), "New workspace…")));
+  }
+  if (id === "games") {
+    const games = await loadGames().catch(() => []);
+    const by = (s) => games.filter((g) => g.source === s).length;
+    page.push(h("h3", null, "Game mode"),
+      row("Game mode", "Automatic: while a game from your library (or anything running full-screen Direct3D) is in front, eDEX rests — panels and animations pause, the HUD on other displays hides, the screen saver and live wallpaper hold back. On: always rest. Off: never.", select("gameMode", [["auto", "Automatic"], ["on", "On"], ["off", "Off"]])),
+      row("Hold notifications during games", "Reminders, alerts and timers wait silently in the notification centre until the game ends (a critically low battery still shows).", toggle("gameModeQuiet")),
+      h("h3", null, "Game library"),
+      row("Installed games", `${games.length} found — Steam ${by("steam")}, Epic Games ${by("epic")}, Xbox ${by("xbox")}. Shown in the launcher (Games filter), the dock's game button and Ctrl+Shift+G; right-click a game to pin it to the dock.`,
+        h("span", { style: { display: "flex", gap: ".4rem" } },
+          h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => openGameLibrary(), 200); } }, icon("gamepad"), "Open library"),
+          h("button", { class: "btn", type: "button", onclick: async () => { await loadGames(true); openPanel?.show("games"); } }, icon("refresh"), "Rescan"))),
+      h("div", { class: "setting-desc" }, "Games are found from the launchers' own files (Steam's library folders, Epic's install manifests, installed Xbox / Microsoft Store packages). Cover art comes from the launchers' caches; missing art is downloaded once from the store's image server while Outbound lookups are on."));
+  }
+  if (id === "calendar") {
+    page.push(h("h3", null, "Calendar subscriptions"),
+      h("div", { class: "setting-desc", style: { marginBottom: ".5rem" } }, "Read-only calendars from Google, Outlook, iCloud or anything with an iCal (.ics) link, shown in the top-bar calendar and the Tasks widget beside your own events. Treat these links like passwords: anyone with one can read that calendar."),
+      ...(await calendarRows()));
   }
   if (id === "media") {
     const custom = h("input", { type: "color", class: "viz-color", value: settings.get("vizCustomColor") || "#ff9a3d" });
@@ -492,6 +631,10 @@ async function buildPage(id) {
       row("Reflection", null, toggle("vizReflection")),
       row("Smoothing", "Higher is calmer, lower reacts faster.", range("vizSmoothing", 0, 95, "%")),
       row("Sensitivity", null, range("vizSensitivity", 50, 200, "%")),
+      h("h3", null, "Lyrics"),
+      row("Synced lyrics", "The lyrics button (L) in the player and the Lyrics widget show the words in time with the music. A .lrc file next to a song is used first; otherwise LRCLIB (lrclib.net, a free community database) is asked by title, artist, album and length — only while Outbound lookups are on.", toggle("lyrics")),
+      h("h3", null, "Music library"),
+      ...musicFolderRows(),
       h("h3", null, "Spotify"),
       ...(await spotifyRows()));
   }
@@ -502,6 +645,7 @@ async function buildPage(id) {
       row("Browsing data", "Sign-ins, cookies, site storage and the cache of eDEX's browser tabs.", h("button", { class: "btn", type: "button", onclick: () => clearBrowsingData() }, icon("trash"), "Clear…")),
       h("h3", null, "App tabs"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Show an app's window as a workspace tab: the window moves into the tab's area and comes forward; switching tabs minimises it; closing the tab puts it back where it was. Right-click a window in the dock or launcher → Show as a tab, or tab menu → App window…. Works best in Desktop mode."),
+      row("Open apps inside eDEX", "Every app window that opens from now on (from the launcher, the dock, or anywhere else) becomes a tab and is shown inside the workspace while eDEX is on screen. Games are left alone.", toggle("openAppsInside")),
       row("Show every open window as a tab", "Each open window gets a tab automatically; turning this off closes those tabs and puts the windows back.", select("appTabs", [["off", "Off — only windows I choose"], ["all", "On — every open window"]])),
       row("Add a window now", null, h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("apptab.pick"), 200); } }, icon("apptab"), "Choose a window…")));
   }
@@ -536,7 +680,7 @@ async function buildPage(id) {
   }
   if (id === "privacy") {
     page.push(h("h3", null, "Network"),
-      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, the weather forecast for your approximate location (open-meteo.com) and the daily update check (api.github.com). Turn off to make eDEX fully offline; pages you open in browser tabs and Spotify (once connected) still go online when you use them.", toggle("allowNetworkGeolocation")),
+      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, the weather forecast for your approximate location (open-meteo.com), the daily update check (api.github.com), synced lyrics (lrclib.net), missing game cover art (Steam / Epic image servers) and refreshing calendar subscriptions. Turn off to make eDEX fully offline; pages you open in browser tabs, radio stations, the radio directory search, Spotify (once connected) and pressing Refresh on calendars still go online when you use them.", toggle("allowNetworkGeolocation")),
       h("h3", null, "Screen time"),
       row("Track app usage", "Counts how long each program is the focused window (idle and locked time excluded). Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
       row("Clear screen time history", null, h("button", { class: "btn", type: "button", onclick: () => api.screenTime.clear().then(() => toast("Screen time history cleared", { level: "ok" })) }, "Clear")),

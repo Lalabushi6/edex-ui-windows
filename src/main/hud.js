@@ -85,7 +85,7 @@ class Hud {
       }
     });
     win.loadURL(`${APP_ORIGIN}/index.html?hud=1`);
-    win.once("ready-to-show", () => { if (this._mainVisible()) this._show(win); });
+    win.once("ready-to-show", () => { if (this._mainVisible() && !this.suspended) this._show(win); });
     const visibility = () => {
       if (!win.isDestroyed()) win.webContents.send("app:visibility", { visible: win.isVisible() && !win.isMinimized(), focused: win.isFocused() });
     };
@@ -115,7 +115,14 @@ class Hud {
     this.bridge.call("sendToBack", { hwnd }, 4000).catch(() => {});
   }
 
-  showAll() { for (const win of this.huds.values()) this._show(win); }
+  showAll() { if (!this.suspended) for (const win of this.huds.values()) this._show(win); }
+
+  // Game mode: hidden while a game runs, back afterwards (if eDEX is shown).
+  setSuspended(on) {
+    this.suspended = on;
+    if (on) this.hideAll();
+    else if (this._mainVisible()) this.showAll();
+  }
 
   hideAll() { for (const win of this.huds.values()) if (!win.isDestroyed()) win.hide(); }
 

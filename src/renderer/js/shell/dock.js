@@ -9,11 +9,13 @@ import { emit } from "../core/bus.js";
 import { toast, contextMenu, cleanError } from "../core/ui.js";
 import { openLauncher, loadAppsCached, appIcons, exeIcons, launchApp, togglePinnedApp } from "./launcher.js";
 import { openSnapPicker, snapWindow } from "./arrange.js";
+import { openGameLibrary, loadGames, launchGame, gameArt, gameMenu, onGames } from "./games.js";
 
 const api = window.edex;
 
 export function initDock(root) {
   const start = h("button", { class: "icon-btn dock-start", type: "button", title: "Apps (Ctrl+Shift+Space)", onclick: () => openLauncher({ filter: "apps" }) }, icon("apps"));
+  const gamesBtn = h("button", { class: "icon-btn dock-start", type: "button", title: "Games (Ctrl+Shift+G)", onclick: () => openGameLibrary() }, icon("gamepad"));
   const pins = h("div", { class: "dock-pins" });
   const wins = h("div", { class: "dock-windows" });
   const kbBtn = h("button", { class: "icon-btn", type: "button", title: "On-screen keyboard (Ctrl+Shift+K)", onclick: () => settings.set({ showKeyboard: !settings.get("showKeyboard") }) }, icon("keyboard"));
@@ -33,7 +35,7 @@ export function initDock(root) {
     kbBtn,
     h("button", { class: "icon-btn", type: "button", title: "Process manager", onclick: () => runCommand("processes.open") }, icon("process")),
     h("button", { class: "icon-btn", type: "button", title: "Hide eDEX (show the Windows desktop)", onclick: () => api.app.hide() }, icon("minimize")));
-  root.append(start, pins, h("div", { class: "dock-sep" }), wins, tray);
+  root.append(start, gamesBtn, pins, h("div", { class: "dock-sep" }), wins, tray);
   settings.watch("showKeyboard", (v) => kbBtn.classList.toggle("active", !!v));
   kbBtn.classList.toggle("active", !!settings.get("showKeyboard"));
 
@@ -42,9 +44,18 @@ export function initDock(root) {
     if (!ids.length) { pins.replaceChildren(); return; }
     const apps = await loadAppsCached();
     const byId = new Map(apps.map((a) => [a.id, a]));
+    // Pinned games ("game:steam:620") show their cover art.
+    const games = ids.some((id) => id.startsWith("game:")) ? await loadGames() : [];
+    const gameById = new Map(games.map((g) => [`game:${g.id}`, g]));
     const list = ids.map((id) => byId.get(id)).filter(Boolean);
     const icons = await appIcons(list.filter((a) => a.hasIcon).map((a) => a.id));
-    pins.replaceChildren(...list.map((app) => h("button", {
+    const gameButtons = ids.filter((id) => gameById.has(id)).map((id) => {
+      const g = gameById.get(id);
+      const art = gameArt(g);
+      return h("button", { class: "dock-app dock-game", type: "button", title: `${g.name} (game)`, onclick: () => launchGame(g), oncontextmenu: (e) => gameMenu(e, g) },
+        art ? h("img", { src: art, alt: "" }) : icon("gamepad"));
+    });
+    pins.replaceChildren(...gameButtons, ...list.map((app) => h("button", {
       class: "dock-app", type: "button", title: app.name,
       onclick: () => launchApp(app),
       oncontextmenu: (e) => contextMenu(e, [
@@ -108,6 +119,7 @@ export function initDock(root) {
   const winPoll = poll(renderWindows, 2000);
   window.addEventListener("focus", () => winPoll.kick());
   settings.watch("pinnedApps", renderPins);
+  onGames(() => { if ((settings.get("pinnedApps") || []).some((id) => id.startsWith("game:"))) renderPins(); });
   renderPins();
   return { refresh: () => { winPoll.kick(); renderPins(); } };
 }

@@ -1386,6 +1386,155 @@ public static class EdexWin {
     }
 }
 
+// -- Live wallpaper -----------------------------------------------------------
+// Puts an eDEX window behind the desktop icons. Message 0x052C asks Explorer
+// to split the desktop into a wallpaper layer and the icon layer. On the
+// classic layout (up to Windows 11 23H2) that makes a top-level WorkerW
+// behind the icons' WorkerW, which becomes the parent. On the "raised"
+// layout (24H2 and later) the icons (SHELLDLL_DefView) and the wallpaper
+// WorkerW are both children of Progman: the window becomes a layered child
+// of Progman placed directly below the icons.
+public static class EdexWall {
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string name);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string name);
+    [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint timeout, out IntPtr result);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+    [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child, IntPtr parent);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int idx);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr(IntPtr h, int idx, IntPtr v);
+    [DllImport("user32.dll")] static extern bool SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
+    [DllImport("user32.dll")] static extern bool RedrawWindow(IntPtr h, IntPtr rect, IntPtr rgn, uint flags);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
+
+    const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
+    const long WS_CHILD = 0x40000000L, WS_POPUP = 0x80000000L, WS_CAPTION = 0x00C00000L, WS_THICKFRAME = 0x00040000L;
+    const long WS_EX_LAYERED = 0x00080000L, WS_EX_APPWINDOW = 0x00040000L, WS_EX_TOOLWINDOW = 0x00000080L, WS_EX_NOACTIVATE = 0x08000000L;
+    const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040, SWP_NOZORDER = 0x0004, SWP_FRAMECHANGED = 0x0020;
+
+    static IntPtr progman, defView, workerW;
+    static string mode = "none";
+
+    static IntPtr Aware() { try { return SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { return IntPtr.Zero; } }
+    static void Restore(IntPtr old) { if (old != IntPtr.Zero) { try { SetThreadDpiAwarenessContext(old); } catch { } } }
+
+    static void Split() {
+        IntPtr r;
+        SendMessageTimeout(progman, 0x052C, new IntPtr(0xD), new IntPtr(1), 0, 1000, out r);
+        SendMessageTimeout(progman, 0x052C, IntPtr.Zero, IntPtr.Zero, 0, 1000, out r);
+    }
+
+    static bool Find() {
+        IntPtr dv = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        if (dv != IntPtr.Zero) {
+            IntPtr w = FindWindowEx(progman, IntPtr.Zero, "WorkerW", null);
+            if (w != IntPtr.Zero) { defView = dv; workerW = w; mode = "raised"; return true; }
+            return false;
+        }
+        IntPtr host = IntPtr.Zero;
+        EnumWindows(delegate (IntPtr h, IntPtr l) {
+            if (FindWindowEx(h, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero) { host = h; return false; }
+            return true;
+        }, IntPtr.Zero);
+        if (host == IntPtr.Zero) return false;
+        IntPtr behind = FindWindowEx(IntPtr.Zero, host, "WorkerW", null);
+        if (behind == IntPtr.Zero) return false;
+        defView = FindWindowEx(host, IntPtr.Zero, "SHELLDLL_DefView", null);
+        workerW = behind;
+        mode = "classic";
+        return true;
+    }
+
+    public static string Locate() {
+        progman = FindWindow("Progman", null);
+        mode = "none";
+        if (progman == IntPtr.Zero) return "\"none\"";
+        if (!Find()) {
+            Split();
+            for (int i = 0; i < 25 && !Find(); i++) System.Threading.Thread.Sleep(80);
+        }
+        return EdexNative.Q(mode);
+    }
+
+    // Parents the window behind the icons; x, y, w, h in physical screen pixels.
+    public static string Attach(long handle, int x, int y, int w, int h) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd)) return "{\"ok\":false,\"mode\":\"none\"}";
+        if (mode == "none" || !IsWindow(progman) || !IsWindow(workerW)) Locate();
+        if (mode == "none") return "{\"ok\":false,\"mode\":\"none\"}";
+        IntPtr old = Aware();
+        try {
+            long style = GetWindowLongPtr(hWnd, GWL_STYLE).ToInt64();
+            style = (style & ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME)) | WS_CHILD;
+            SetWindowLongPtr(hWnd, GWL_STYLE, new IntPtr(style));
+            long ex = GetWindowLongPtr(hWnd, GWL_EXSTYLE).ToInt64();
+            ex = (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+            IntPtr parent = mode == "raised" ? progman : workerW;
+            if (mode == "raised") ex |= WS_EX_LAYERED;
+            SetWindowLongPtr(hWnd, GWL_EXSTYLE, new IntPtr(ex));
+            SetParent(hWnd, parent);
+            if (mode == "raised") SetLayeredWindowAttributes(hWnd, 0, 255, 2); // LWA_ALPHA
+            POINT p; p.x = x; p.y = y;
+            ScreenToClient(parent, ref p);
+            if (mode == "raised") SetWindowPos(hWnd, defView, p.x, p.y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            else SetWindowPos(hWnd, IntPtr.Zero, p.x, p.y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER | SWP_FRAMECHANGED);
+            return "{\"ok\":true,\"mode\":" + EdexNative.Q(mode) + "}";
+        } finally { Restore(old); }
+    }
+
+    // Is the window still behind the icons (Explorer restarts destroy that)?
+    public static string Check(long handle) {
+        IntPtr hWnd = new IntPtr(handle);
+        bool ok = IsWindow(hWnd) && (GetParent(hWnd) == progman || GetParent(hWnd) == workerW) && IsWindow(progman);
+        return ok ? "true" : "false";
+    }
+
+    // After the windows close: let Explorer repaint the normal wallpaper.
+    public static string Refresh() {
+        IntPtr target = mode == "raised" ? progman : workerW;
+        if (target != IntPtr.Zero && IsWindow(target)) RedrawWindow(target, IntPtr.Zero, IntPtr.Zero, 0x0001 | 0x0004 | 0x0080 | 0x0100 | 0x0400);
+        if (progman != IntPtr.Zero && IsWindow(progman)) RedrawWindow(progman, IntPtr.Zero, IntPtr.Zero, 0x0001 | 0x0004 | 0x0080 | 0x0100);
+        return "true";
+    }
+
+    // Is a maximised or full-screen window in front on the monitor containing
+    // the point (the wallpaper can't be seen there, so it pauses)?
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left, top, right, bottom; }
+    [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
+    [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder sb, int max);
+    public static string Covered() {
+        IntPtr old = Aware();
+        try {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return "null";
+            // The desktop itself (clicked on) spans the monitor too.
+            var cls = new System.Text.StringBuilder(64);
+            GetClassName(fg, cls, 64);
+            string c = cls.ToString();
+            if (c == "Progman" || c == "WorkerW" || c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd") return "null";
+            var mi = new MONITORINFO();
+            mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+            if (!GetMonitorInfo(MonitorFromWindow(fg, 2), ref mi)) return "null";
+            RECT r;
+            GetWindowRect(fg, out r);
+            RECT m = mi.rcMonitor;
+            bool full = r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom;
+            if (!IsZoomed(fg) && !full) return "null";
+            return "[" + m.left + "," + m.top + "," + (m.right - m.left) + "," + (m.bottom - m.top) + "]";
+        } finally { Restore(old); }
+    }
+}
+
 // -- Disk usage scan ---------------------------------------------------------
 // Runs on a background thread so the helper keeps answering while it walks
 // the tree. FindFirstFileEx with large fetches returns sizes with the listing
@@ -1734,6 +1883,42 @@ function Set-BluetoothRadio([bool]$on) {
     Get-Bluetooth
 }
 
+# -- Xbox / Microsoft Store games ------------------------------------------------
+# Installed packages that carry a MicrosoftGame.config are games; the Start
+# menu id (family!app) launches them.
+function Get-XboxGames {
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($p in @(Get-AppxPackage -PackageTypeFilter Main -ErrorAction SilentlyContinue)) {
+        if ($p.IsFramework -or -not $p.InstallLocation) { continue }
+        $cfg = Join-Path $p.InstallLocation 'MicrosoftGame.config'
+        if (-not (Test-Path -LiteralPath $cfg)) { continue }
+        $name = ''; $logo = ''; $appId = ''
+        try {
+            [xml]$x = Get-Content -LiteralPath $cfg -Raw -ErrorAction Stop
+            $sv = $x.Game.ShellVisuals
+            if ($sv) {
+                $name = [string]$sv.DefaultDisplayName
+                foreach ($k in 'Square480x480Logo', 'Square150x150Logo', 'StoreLogo') {
+                    $v = [string]$sv.GetAttribute($k)
+                    if ($v) { $logo = $v; break }
+                }
+            }
+        } catch { }
+        try {
+            $m = Get-AppxPackageManifest -Package $p -ErrorAction Stop
+            $apps = @($m.Package.Applications.Application)
+            if ($apps.Count) { $appId = [string]$apps[0].Id }
+            if (-not $name -or $name -like 'ms-resource:*') {
+                $dn = [string]$m.Package.Properties.DisplayName
+                if ($dn -and $dn -notlike 'ms-resource:*') { $name = $dn }
+            }
+        } catch { }
+        if (-not $appId) { continue }
+        $out.Add('{"aumid":' + (J ($p.PackageFamilyName + '!' + $appId)) + ',"name":' + (J $name) + ',"dir":' + (J ([string]$p.InstallLocation)) + ',"logo":' + (J $logo) + '}')
+    }
+    '[' + ($out -join ',') + ']'
+}
+
 # -- Windows Search index -----------------------------------------------------
 # Names (prefix match per word) or, in content mode, text inside documents.
 # Only letters, digits and a few joiners reach the query, so input can't
@@ -1837,6 +2022,11 @@ while ($true) {
             'minimizeQuiet' { $data = [EdexWin]::MinimizeQuiet([long]$a.hwnd) }
             'saverBlocked' { $data = [EdexWin]::SaverBlocked([long[]]@($a.exclude | Where-Object { $_ -ne $null })) }
             'windowSnapshot' { $data = [EdexWin]::Snapshot([long]$a.hwnd, [int]$a.max) }
+            'wallLocate'   { $data = [EdexWall]::Locate() }
+            'wallAttach'   { $data = [EdexWall]::Attach([long]$a.hwnd, [int]$a.x, [int]$a.y, [int]$a.w, [int]$a.h) }
+            'wallCheck'    { $data = [EdexWall]::Check([long]$a.hwnd) }
+            'wallRefresh'  { $data = [EdexWall]::Refresh() }
+            'wallCovered'  { $data = [EdexWall]::Covered() }
             'diskScan'     { $data = [EdexDisk]::Start([string]$a.path) }
             'diskProgress' { $data = [EdexDisk]::Progress() }
             'diskNode'     { $data = [EdexDisk]::Children([string]$a.path, [int]$a.depth) }
@@ -1847,6 +2037,7 @@ while ($true) {
             'bluetooth'    { $data = Get-Bluetooth }
             'bluetoothRadio' { $data = Set-BluetoothRadio ([bool]$a.on) }
             'searchIndex'  { $data = Search-Index $a }
+            'xboxGames'    { $data = Get-XboxGames }
             'properties' { $data = if ([EdexNative]::Properties([string]$a.path)) { 'true' } else { 'false' } }
             'lock'      { $data = if ([EdexNative]::Lock()) { 'true' } else { 'false' } }
             'sleep'     { $data = if ([EdexNative]::Sleep()) { 'true' } else { 'false' } }

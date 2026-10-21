@@ -187,7 +187,48 @@ contextBridge.exposeInMainWorld("edex", {
     hide: invoke("apptab:hide"),
     check: invoke("apptab:check"),
     snapshot: invoke("apptab:snapshot"),
-    release: invoke("apptab:release")
+    release: invoke("apptab:release"),
+    onNew: subscribe("apptab:new")
+  },
+  notices: {
+    list: invoke("notices:list"),
+    seen: invoke("notices:seen"),
+    remove: invoke("notices:remove"),
+    clear: invoke("notices:clear"),
+    add: invoke("notices:add"),
+    onNew: subscribe("notices:new"),
+    onChange: subscribe("notices:changed")
+  },
+  games: {
+    list: invoke("games:list"),
+    launch: invoke("games:launch"),
+    reveal: invoke("games:reveal"),
+    state: invoke("game:state"),
+    onChange: subscribe("games:changed"),
+    onArt: subscribe("games:art"),
+    onGameMode: subscribe("app:game")
+  },
+  lyrics: {
+    get: invoke("lyrics:get")
+  },
+  radio: {
+    search: invoke("radio:search"),
+    icon: invoke("radio:icon"),
+    onMeta: subscribe("radio:meta")
+  },
+  library: {
+    list: invoke("library:list"),
+    scan: invoke("library:scan"),
+    addFolder: invoke("library:addFolder"),
+    removeFolder: invoke("library:removeFolder"),
+    art: invoke("library:art"),
+    onProgress: subscribe("library:progress")
+  },
+  calendars: {
+    events: invoke("calfeeds:events"),
+    status: invoke("calfeeds:status"),
+    refresh: invoke("calfeeds:refresh"),
+    onChange: subscribe("calfeeds:changed")
   },
   spotify: {
     status: invoke("spotify:status"),

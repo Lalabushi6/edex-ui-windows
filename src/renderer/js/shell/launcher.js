@@ -10,6 +10,8 @@ import { emit, booted } from "../core/bus.js";
 import { allCommands } from "../core/commands.js";
 import { openModal, toast, contextMenu, copyText, cleanError } from "../core/ui.js";
 import { openUrl } from "../core/links.js";
+import { loadGames, launchGame, gameArt, gameMenu } from "./games.js";
+import { profiles, switchProfile } from "./profiles.js";
 import { evaluate, looksLikeMath, formatNumber } from "./calc.js";
 import { convert, parseDuration } from "./convert.js";
 
@@ -132,8 +134,9 @@ export function togglePinnedApp(id) {
   settings.set({ pinnedApps: pins.includes(id) ? pins.filter((p) => p !== id) : [...pins, id] });
 }
 
-const FILTERS = [["all", "All"], ["apps", "Apps"], ["windows", "Windows"], ["files", "Files"], ["commands", "Commands"]];
-const GROUP_WEIGHT = { Pinned: 220, Apps: 200, "Open windows": 150, Commands: 100, "Windows Settings": 80, Themes: 60 };
+const FILTERS = [["all", "All"], ["apps", "Apps"], ["games", "Games"], ["windows", "Windows"], ["files", "Files"], ["commands", "Commands"]];
+const GROUP_WEIGHT = { Pinned: 220, Apps: 200, Games: 190, "Open windows": 150, Commands: 100, Workspaces: 95, "Windows Settings": 80, Themes: 60 };
+const GAME_SOURCE = { steam: "Steam game", epic: "Epic Games game", xbox: "Xbox game" };
 
 export function openLauncher(opts = {}) {
   if (openInstance) {
@@ -149,6 +152,7 @@ export function openLauncher(opts = {}) {
   let activeIdx = 0;
   let windows = [];
   let themes = [];
+  let games = [];
   let pathEntries = { dir: null, entries: [] };
   let renderToken = 0;
   // Windows Search index results for the current query (names, or text
@@ -302,6 +306,16 @@ export function openLauncher(opts = {}) {
       if (q || mode === "apps") add("Apps", apps, lim(8, 400));
     }
 
+    if (want("games") && games.length) {
+      const items = games.map((g) => ({
+        key: `game:${g.id}`, title: g.name, sub: GAME_SOURCE[g.source] || "Game", art: gameArt(g), icon: "gamepad",
+        run: () => launchGame(g),
+        alt: () => api.games.reveal(g.id).catch((e) => toast(cleanError(e), { level: "warn" })),
+        menu: (e) => gameMenu(e, g, close)
+      }));
+      if (q || mode === "games") add("Games", items, lim(5, 300));
+    }
+
     if (want("windows")) {
       add("Open windows", windows.map((w) => ({
         key: `win:${w.app}`, title: w.title, match: `${w.title} ${w.app}`, sub: w.app || "Window", exe: w.exe, icon: "window",
@@ -329,8 +343,14 @@ export function openLauncher(opts = {}) {
         key: `ms:${uri}`, title: `Windows: ${label}`, match: `windows settings ${label}`, sub: "Open Windows Settings", icon: "gear",
         run: () => api.shell.openSettings(uri)
       }));
+      const current = settings.get("activeProfile") || "main";
+      const wsItems = profiles().map((p) => ({
+        key: `ws:${p.id}`, title: `Workspace: ${p.name}`, match: `workspace profile switch ${p.name}`, sub: p.id === current ? "Current workspace" : "Switch to it",
+        icon: "layers", run: () => switchProfile(p.id)
+      }));
       if (q || mode === "commands") {
         add("Commands", cmds, lim(6, 100));
+        add("Workspaces", wsItems, lim(3, 12));
         add("Themes", themeItems, lim(3, 60));
         add("Windows Settings", winSettings, lim(3, 20));
       }
@@ -433,6 +453,8 @@ export function openLauncher(opts = {}) {
         const url = cache.exeIcons.get(r.exe);
         iconBox.append(url ? h("img", { src: url, alt: "" }) : icon("window"));
         if (!cache.exeIcons.has(r.exe)) wantExeIcons.push([r.exe, iconBox]);
+      } else if (r.art) {
+        iconBox.append(h("img", { class: "game-thumb", src: r.art, alt: "" }));
       } else if (r.swatch) {
         iconBox.append(h("span", { class: "theme-swatch", style: { background: `rgb(${r.swatch.join(",")})`, color: `rgb(${r.swatch.join(",")})` } }));
       } else iconBox.append(icon(r.icon || "file"));
@@ -572,6 +594,7 @@ export function openLauncher(opts = {}) {
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
   loadApps().then(render);
+  loadGames().then((l) => { games = l || []; render(); }).catch(() => {});
   refreshWindows();
   loadIndex().then(render);
   api.themes.list().then((t) => { themes = t; render(); }).catch(() => {});

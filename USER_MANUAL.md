@@ -95,7 +95,34 @@ hides it again a moment later), and the **taskbar button in the dock**
 (next to the keyboard button) shows it for 15 seconds whenever you need the
 tray icons. Settings → General shows the current status.
 
-## 4. Launcher
+## 4. Workspaces
+
+A workspace is a named setup — *Work*, *Gaming*, *Study* — with its own tabs.
+Everyone starts in **Main**. Switch with the workspace name next to the logo
+(click it for the list), the launcher (type the name: "Workspace: Gaming"),
+a hotkey of the workspace's own, or automatically at a time of day.
+
+- **New workspace…** (the same menu, or the launcher) asks for a name, whether
+  to start with a copy of the tabs open now (otherwise one terminal), and
+  what it should remember: the **theme**, the **layout** (regions, columns,
+  widgets) and **where your app windows are**.
+- **Tabs** belong to the workspace they were opened in. The other
+  workspaces' tabs keep running in the background (terminals keep their
+  programs going, downloads continue) and come back exactly as they were.
+  App tabs made automatically by "Show every open window as a tab" show in
+  every workspace.
+- **Theme and layout**: switching to a workspace that remembers them brings
+  them back; switching to one that doesn't restores the look you had before.
+  **Save the current setup** (the menu, or Settings → Workspaces → Save
+  current) stores what you have now.
+- **App windows**: a workspace that remembers them saves a window arrangement
+  ("Workspace · name", section 6) and restores it when you switch there:
+  windows move back, programs that aren't running start.
+- Settings → **Workspaces** sets each one's **hotkey** (works from any app
+  and brings eDEX up in that workspace), its **switch time** and days, what
+  it remembers, and renames or deletes it (deleting closes its tabs).
+
+## 5. Launcher
 
 Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 
@@ -105,7 +132,7 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 | a window title | switches to that window |
 | a file name | recent files and your Desktop / Documents / Downloads / Pictures / Music / Videos, then **On this PC**: matches anywhere the Windows Search index covers |
 | `"budget 2026"` (in quotes) | **Inside files**: documents containing those words (Windows Search index) |
-| `? how do I find large files` | asks Claude (needs the AI assistant, see section 17) |
+| `? how do I find large files` | asks Claude (needs the AI assistant, see section 19) |
 | `>` then text | commands (new tab, settings, themes, power, media …) |
 | `=2*(3+4)^2` | calculator — Enter copies the result |
 | `10 km to mi`, `72 f in c`, `5 gb to mib`, `90 kmh to mph` | unit conversion (length, mass, volume, area, speed, time, data, energy, power, temperature) — Enter copies |
@@ -117,13 +144,17 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 | anything else | web search (engine set in Settings → General) |
 
 `Enter` opens, `Ctrl+Enter` reveals the file location (or closes a window),
-`Tab` cycles the All / Apps / Windows / Files / Commands filters, right-click a
-result for more (pin to dock, run as administrator, open file location).
+`Tab` cycles the All / Apps / Games / Windows / Files / Commands filters,
+right-click a result for more (pin to dock, run as administrator, open file
+location). Games show with their cover art; workspaces show as "Workspace:
+name".
 
-## 5. Dock
+## 6. Dock
 
-- **Apps button** opens the launcher on the app list.
-- **Pinned apps**: pin from the launcher (right-click → Pin to dock).
+- **Apps button** opens the launcher on the app list; the **games button**
+  next to it opens the game library.
+- **Pinned apps** and **pinned games**: pin from the launcher or the game
+  library (right-click → Pin to dock).
 - **Open windows**: click to switch; click the active one to minimize;
   middle-click to close; right-click for maximize / restore / close, **Snap
   left / right half**, or **Snap layouts…** (halves, quarters, thirds, two
@@ -137,7 +168,34 @@ Restoring an arrangement moves each window back, starts programs that
 aren't running (Store apps are reported as not found) and minimises the
 ones that were minimised.
 
-## 6. Terminal
+## 7. Games
+
+**Game library**: `Ctrl+Shift+G`, the dock's games button, or the launcher
+("Games"). It finds the games installed through **Steam**, the **Epic Games
+Launcher** and the **Xbox app** (PC Game Pass and Microsoft Store games),
+with their cover art, in a full-screen grid: type to search, filter by
+store, click to play (each game starts through its own launcher, so
+sign-in, updates and cloud saves work as usual). Right-click a game to pin
+it to the dock, open its install folder or rescan. Recently played games
+come first. Cover art comes from the launchers' own caches; art that isn't
+cached is downloaded once from Steam's or Epic's image servers while
+Outbound lookups are on.
+
+**Game mode** (Settings → Games): while a game is in front — one from the
+library, or anything else Windows reports as running full-screen on
+Direct3D — eDEX rests:
+
+- panel refreshes and animations stop (the globe, the visualizer, effects);
+- the multi-monitor HUD hides;
+- the screen saver and the live wallpaper hold back;
+- notifications go quietly into the notification centre instead of popping
+  up (turn that off with **Quiet notifications in game mode**).
+
+A **GAME MODE** badge shows in the top bar while it's on. *Automatic* is the
+default; *On* keeps eDEX resting, *Off* never does. It ends a few seconds
+after the game closes or leaves the foreground.
+
+## 8. Terminal
 
 New tab: `Ctrl+Shift+T` (default shell) or the ⌄ menu for a specific shell.
 
@@ -163,7 +221,7 @@ When a shell exits, press Enter in its tab to restart it. Double-click a tab to
 rename it. Tabs (and their split panes) are restored the next time eDEX
 starts.
 
-## 7. Browser tabs
+## 9. Browser tabs
 
 New browser tab: `Ctrl+Shift+B`, the ⌄ tab menu → **Browser**, or the
 launcher ("New browser tab"). With Settings → Web & apps → **Open web links
@@ -197,7 +255,7 @@ USB devices are refused. While an eDEX menu or dialog is open, the page
 waits behind a still picture of itself. Some sites (Google sign-in, for
 one) refuse embedded browsers: use **Open in your browser** for those.
 
-## 8. App tabs
+## 10. App tabs
 
 Any open window can live in a workspace tab:
 
@@ -222,7 +280,15 @@ itself.
 App tabs work best in Desktop mode: in Overlay mode eDEX hides itself when
 it shows a tabbed window.
 
-## 9. File explorer
+**Open apps inside eDEX** (Settings → Web & apps) goes one step further:
+every app window that opens from then on — from the launcher, the dock, the
+Start menu, a file you double-click, anywhere — becomes a tab and is shown
+inside the workspace (straight away while eDEX is on screen, the next time
+you bring eDEX up otherwise). Windows that were already open are left as
+they are, dialogs and tool windows aren't picked up, and games are left
+alone.
+
+## 11. File explorer
 
 New tab: `Ctrl+Shift+E`.
 
@@ -263,7 +329,7 @@ the largest folders and files; right-click for Open in explorer, Terminal
 here or Copy path. Junctions and symbolic links aren't followed, so nothing
 is counted twice.
 
-## 10. Media player
+## 12. Media player
 
 Open it with `Ctrl+Shift+M`, the tab menu (⌄ → Media player), the launcher
 ("media player"), or the **Media** widget. Add music and video by:
@@ -283,6 +349,7 @@ Open it with `Ctrl+Shift+M`, the tab menu (⌄ → Media player), the launcher
 | Mute | `M` |
 | Fullscreen | `F` or double-click the picture |
 | Equalizer | `E` or the equalizer button (three sliders) |
+| Lyrics | `L` or the lyrics button |
 | Play a track | double-click it (or select and press `Enter`) |
 | Remove a track | `Del`, or right-click → Remove |
 | Reorder | drag tracks in the playlist |
@@ -293,8 +360,9 @@ night). Drag a slider to make your own curve, double-click one to reset it.
 Boosts are balanced by lowering the overall level slightly, so loud tracks
 don't distort. The button is lit while the equalizer is on.
 
-Shuffle and repeat (off → all → one) are on the control bar. MP3 titles,
-artists and cover art are read from the file's tags. The playlist, volume
+Shuffle and repeat (off → all → one) are on the control bar. Titles,
+artists, albums and cover art are read from the file's tags (MP3, FLAC,
+Ogg / Opus and M4A). The playlist, volume
 and position are remembered; playback keeps going when you switch tabs or
 close the player tab, and Windows' media keys and media overlay control it.
 Formats are whatever Chromium plays: MP3, AAC/M4A, FLAC, WAV, Ogg/Opus,
@@ -316,6 +384,53 @@ visualizer panel; Settings → Media has the same options:
 
 Changes show at once, even while paused; **Reset** returns to the default
 look.
+
+The **Now playing | Library | Radio** bar at the top of the player switches
+the main area between the visualizer, your music library and internet radio.
+
+### Music library
+
+The **Library** view lists the music in your music folders (your Windows
+*Music* folder to begin with; **Folders** adds or removes others, Settings →
+Media has the same list) by **Albums** (a grid of covers), **Artists** and
+**Songs**, with a search box. Cover art comes from a `cover.jpg`,
+`folder.jpg` or similar image in the album's folder, or from the art inside
+the files. Click an artist for their albums and an album for its tracks,
+with **Play**, **Shuffle** and **Add to playlist**; double-click a song to
+play it, or right-click it to add it to the playlist or show it in the
+explorer. The index is kept between runs and only files that changed are
+read again; the ⟳ button rescans.
+
+### Synced lyrics
+
+`L` (or the lyrics button) shows the words over the visualizer, the current
+line highlighted and scrolling in time with the song; the **Lyrics** widget
+(Settings → Layout → widgets) shows them in a side column. They work for
+your files, internet radio (from the station's *now playing* title), the
+Spotify view and whatever another app reports in *Now playing*.
+
+A `.lrc` file with the same name next to a song is used first. Otherwise
+eDEX asks [LRCLIB](https://lrclib.net), a free community lyrics database,
+by title, artist, album and length — only while Outbound lookups are on
+(Settings → Privacy) — and remembers the answer. Songs without timed lyrics
+show plain lyrics, and instrumentals say so. Settings → Media → **Synced
+lyrics** turns the feature off.
+
+### Internet radio
+
+The **Radio** view finds stations in the community
+[Radio Browser](https://www.radio-browser.info) directory: search by name or
+pick a genre (lofi, jazz, rock, news …). While Outbound lookups are on the
+most popular stations show when you open it. Double-click a station (or ▶)
+to play it; ★ keeps it in your **Favourites**. **Add URL…** adds any station
+by its stream address — `.pls` and `.m3u` links work, HLS (`.m3u8`) streams
+don't.
+
+A playing station is a playlist entry like a song, so the visualizer, the
+equalizer, media keys and the Media widget all work with it; the progress
+bar shows **● LIVE**, and the station's *now playing* title (when it sends
+one) shows as the track. Streams are fetched by eDEX itself, so station
+pages and adverts never load.
 
 ### Spotify
 
@@ -352,7 +467,7 @@ controlling playback needs Premium, and up to five people can use one app.
 The sign-in is encrypted with your Windows account and never includes your
 password; **Disconnect** (the ⋯ menu or Settings → Media) removes it.
 
-## 11. On-screen keyboard
+## 13. On-screen keyboard
 
 Show it with `Ctrl+Shift+K`, the keyboard button in the dock, or Settings →
 Keyboard. It types into the focused text field (launcher, dialogs,
@@ -392,7 +507,7 @@ draws arrows; `ESCAPED|-- ACUTE` (GRAVE, CIRCUM, TREMA, TILDE, CEDILLA,
 CARON, BREVE, MACRON, OVERRING, BAR, GREEK, IOTASUB) are dead keys. An
 optional top-level `"name"` sets the name shown in the picker.
 
-## 12. Boot logo, ASCII art and wallpaper
+## 14. Boot logo, ASCII art and wallpaper
 
 Settings → Appearance → **Boot logo** → **Edit…** opens the editor:
 
@@ -420,9 +535,28 @@ matrix rain, hex grid, starfield) and the **clock**; Settings → Appearance →
 ASCII wallpaper has the same options. The Eco profile keeps it still.
 
 The wallpaper is also an idle style (it takes the terminal's place while
-you're away) and an idle-screen / screen-saver effect (section 13).
+you're away) and an idle-screen / screen-saver effect (section 15).
 
-## 13. Top bar and tools
+### Live wallpaper
+
+Settings → Appearance → **Live wallpaper** makes eDEX your actual Windows
+desktop background while it's hidden: matrix rain, hex grid, starfield, the
+globe, your ASCII wallpaper or the telemetry panels keep running behind the
+desktop icons, which stay clickable. It appears when you hide eDEX
+(`` Ctrl+` ``, the tray, or launching an app in Overlay mode) and goes away
+when eDEX comes back, so the two never run at once.
+
+- **Displays**: every display, or only the main one.
+- **Pause when it can't be seen** (on by default): it stops drawing behind
+  maximised or full-screen windows and on battery (unless the performance
+  profile is Performance). It also rests while game mode is on.
+- Turning it off (or quitting eDEX) brings your normal wallpaper back. If
+  Explorer restarts, the live wallpaper sets itself up again.
+
+It uses the same desktop layer as other live-wallpaper apps; run only one of
+them at a time.
+
+## 15. Top bar and tools
 
 - **Now playing**: when another app plays something (Spotify, YouTube in a
   browser, VLC, Media Player …), its title shows next to the media keys;
@@ -446,6 +580,9 @@ you're away) and an idle-screen / screen-saver effect (section 13).
   use the arrows to change month, **Today** to jump back). Days with events
   have a dot; click a day to see its events and add one, with an optional
   time and reminder (at the time, 5 / 15 / 30 / 60 minutes or a day before).
+  Events from calendar subscriptions (below) show too, in their calendar's
+  colour.
+- **Notifications** (the bell): see *Notification centre* below.
 - **Brightness** (☀, laptop screens only): click for a slider, or scroll over
   the icon to step by 5%. External monitors don't expose brightness to
   Windows, so the icon is hidden on them.
@@ -493,6 +630,48 @@ and when a fixed drive has less than the free-space limit left (5 GB, or 10%
 on small drives). The warning appears in eDEX and, if eDEX is hidden, as a
 Windows notification. Plugging in or freeing space re-arms it.
 
+### Notification centre
+
+Everything eDEX tells you — reminders, timers and focus sessions, battery
+and disk alerts, finished downloads, screen-time limits, update notices —
+also goes into the notification centre: click the **bell** in the top bar
+(a number shows how many are new). Notifications are grouped by day and kept
+for two weeks; click one that has an action (a download, an update) to open
+it, × to dismiss it, **Clear** to empty the list.
+
+**Do not disturb** (the switch in the panel, Settings → General →
+Notifications, or the launcher "Do not disturb") stops pop-ups,
+alarm sounds and Windows notifications from eDEX; everything still collects
+in the list and the bell shows a moon. A critically low battery still
+warns. **Hold notifications during games** does the same automatically
+while game mode is on.
+
+### Calendar subscriptions
+
+Settings → **Calendar** (or **Calendar subscriptions…** under the top-bar
+calendar) shows read-only calendars from Google, Outlook, iCloud or
+anything else with an iCal (`.ics`) link next to your own events, in the
+top-bar calendar and the Tasks widget.
+
+1. Copy the calendar's secret iCal address:
+   - **Google Calendar** (on the web): Settings → your calendar → *Integrate
+     calendar* → *Secret address in iCal format*.
+   - **Outlook.com / Microsoft 365**: Settings → Calendar → *Shared
+     calendars* → *Publish a calendar* → pick the calendar and *Can view all
+     details* → *Publish* → copy the **ICS** link.
+   - **iCloud**: share the calendar as a *Public Calendar* and copy the
+     `webcal://` link.
+2. Paste it with a name and click **Add**.
+
+Each calendar gets a colour (click it to change), optional reminders (at the
+time, or 5 minutes to an hour before), and an on / off switch; repeating
+events, exceptions, time zones and all-day events are handled. eDEX
+downloads each calendar about every 30 minutes while Outbound lookups are on
+(or when you click **Refresh**) and keeps a copy, so events still show at
+startup and offline. Events can't be edited from eDEX. Treat these links
+like passwords: anyone who has one can read that calendar (remove it in the
+calendar's own settings to revoke it).
+
 New widgets appear at the end of their column; drag them where you want them
 or hide them in Settings → Layout.
 
@@ -523,7 +702,7 @@ that fills the screen) or a program keeps the display on (video playback,
 calls); turn **Not during videos or full-screen apps** off if it never
 starts. Starting it by hand (Preview, the tray, the launcher) never locks.
 
-## 14. Performance
+## 16. Performance
 
 eDEX is built to stay out of the way:
 
@@ -546,7 +725,7 @@ The page also shows eDEX's own CPU and memory use per process (interface,
 GPU process, native helper …), refreshed every two seconds. The launcher has
 **Cycle performance profile** for switching quickly.
 
-## 15. Global shortcuts
+## 17. Global shortcuts
 
 | Keys | Action |
 |---|---|
@@ -561,40 +740,49 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 | `Ctrl+Shift+F` | Find files |
 | `Ctrl+Shift+K` | On-screen keyboard |
 | `Ctrl+Shift+M` | Media player |
+| `Ctrl+Shift+G` | Game library |
 | `Ctrl+Shift+J` | Ask Claude (AI assistant) |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |
 | `F1` | Shortcut sheet |
 
-The two global hotkeys can be changed in Settings → General. If another app
-already owns one, eDEX shows a notice at startup.
+The two global hotkeys can be changed in Settings → General, and each
+workspace can have a global hotkey of its own (Settings → Workspaces). If
+another app already owns one, eDEX shows a notice.
 
-## 16. Settings
+## 18. Settings
 
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
   with Windows, desktop takeover, hotkeys, web search engine, sounds,
-  multi-monitor HUD, idle screen (style and effect), screen saver, battery
-  and disk alerts.
+  notifications (Do not disturb, hold during games), multi-monitor HUD, idle
+  screen (style and effect), screen saver, battery and disk alerts.
 - **Appearance**: themes, the theme editor (every colour, fonts, terminal
   palette, globe, layout hints and theme CSS, with live preview), theme
   import / export, custom CSS, interface scale, animated background, clock
-  format, temperature unit, the ASCII wallpaper, boot screen and boot logo /
-  ASCII art (see section 12). Details in [THEME_GUIDE.md](THEME_GUIDE.md).
+  format, temperature unit, the ASCII wallpaper, the live wallpaper, boot
+  screen and boot logo / ASCII art (see section 14). Details in
+  [THEME_GUIDE.md](THEME_GUIDE.md).
 - **Terminal**: default shell, font size, cursor, scrollback, copy on select.
 - **Keyboard**: on-screen keyboard, layout, custom layouts folder and import,
-  password mode (see section 11).
+  password mode (see section 13).
 - **Layout**: presets, every region, panel side and widths, file browser,
   widgets and command widgets (see section 2).
+- **Workspaces**: each workspace's hotkey, switch time and days, what it
+  remembers, rename and delete (see section 4).
 - **Media**: the visualizer (style, bars, colours, peaks, reflection,
-  smoothing, sensitivity) and the Spotify connection (see section 10).
-- **Web & apps**: opening web links in eDEX, clearing browsing data, and app
-  tabs (see sections 7 and 8).
+  smoothing, sensitivity), the Spotify connection, synced lyrics and the
+  music library's folders (see section 12).
+- **Games**: game mode (Automatic / On / Off), holding notifications during
+  games, and rescanning the library (see section 7).
+- **Calendar**: calendar subscriptions (see section 15).
+- **Web & apps**: opening web links in eDEX, clearing browsing data, app
+  tabs and opening apps inside eDEX (see sections 9 and 10).
 - **Files**: hidden items, delete confirmation, default view, whole-PC
   search, history.
 - **Performance**: profile, background slow-down, GPU terminal, eDEX's own
-  resource use (see section 14).
+  resource use (see section 16).
 - **Privacy**: outbound network lookups, screen time and daily limits, the AI
   assistant, clipboard history.
 - **About**: version, data folder (portable or this PC), updates, **Back up
@@ -605,7 +793,7 @@ Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
 run.
 
-## 17. Privacy and network
+## 19. Privacy and network
 
 With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 
@@ -616,15 +804,21 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 | Network ping | google.com | every 30 seconds while visible |
 | Weather | api.open-meteo.com (approximate coordinates only) | at most every 20 minutes |
 | Update check | api.github.com (this project's latest release) | at most once a day, if "Check automatically" is on |
+| Synced lyrics | lrclib.net (title, artist, album and length of the song) | once per song while lyrics are shown; answers are remembered |
+| Game cover art | Steam's (steamstatic.com) and Epic's image servers | once per game whose art isn't in its launcher's cache |
+| Radio: popular stations | radio-browser.info | when you open the Radio view |
+| Calendar subscriptions | the links you added | about every 30 minutes |
 
 Turn it off and eDEX makes no outbound requests of its own. Clipboard history
 is kept in memory only and can be disabled.
 
 Things you use yourself go online regardless: pages you open in **browser
 tabs** (in their own session, with their own cookies and sign-ins, cleared
-in Settings → Web & apps), **Check now** for updates, and **Spotify** once
-you connect it (accounts.spotify.com and api.spotify.com, plus Spotify's
-image servers for cover art; only while the Spotify view is open).
+in Settings → Web & apps), **Check now** for updates, **radio** stations you
+play and station searches (radio-browser.info; station logos come from each
+station's site), calendar **Refresh**, and **Spotify** once you connect it
+(accounts.spotify.com and api.spotify.com, plus Spotify's image servers for
+cover art; only while the Spotify view is open).
 
 **AI assistant** (off until you turn it on in Settings → Privacy and add
 your own Anthropic API key from console.anthropic.com): the key is
@@ -636,10 +830,12 @@ cheaper); usage is billed to your API account. If Opus or Sonnet declines a
 request, the API retries it on a fallback model automatically. Commands in
 answers run in the terminal only when you click **Run in terminal**.
 
-Whole-PC search, the disk map, Bluetooth, Now playing and the mixer all work
-locally through Windows; they send nothing anywhere.
+Whole-PC search, the disk map, Bluetooth, Now playing, the mixer, the game
+library (read from the launchers' files on this PC) and the music library
+all work locally; they send nothing anywhere. The notification history
+(notifications.json, two weeks) stays in eDEX's data folder.
 
-## 18. Updates and portable use
+## 20. Updates and portable use
 
 ### Updates
 
@@ -673,7 +869,7 @@ Explorer).
 - **Start with Windows** in the portable build starts the `.exe` on the
   drive, so it only works while the drive is plugged in.
 
-## 19. Troubleshooting
+## 21. Troubleshooting
 
 - **A hotkey does nothing**: another app owns it — pick a new one in Settings → General.
 - **The screen saver never starts**: Windows thinks a full-screen app is
@@ -699,6 +895,24 @@ Explorer).
   play).
 - **Dock shows "Window list unavailable"**: the native helper uses Windows
   PowerShell 5.1; make sure `powershell.exe` is not blocked by policy.
+- **The live wallpaper doesn't show, or the desktop turns black**: another
+  live-wallpaper app (Wallpaper Engine, Lively …) may own the desktop layer —
+  run one at a time. Turning the live wallpaper off and on, or restarting
+  Explorer, rebuilds it; turning it off always brings your wallpaper back.
+- **Game mode doesn't start for a game**: games outside Steam, Epic and the
+  Xbox app are only noticed when they run full-screen on Direct3D. Use the
+  launcher's "Game mode: on / auto" to turn it on by hand.
+- **No lyrics found**: lyrics need Outbound lookups (Settings → Privacy),
+  and LRCLIB doesn't have every song; a `.lrc` file next to the song always
+  works.
+- **A radio station won't play**: some stations only offer HLS (`.m3u8`)
+  streams, which aren't supported; try the station's MP3 or AAC stream
+  address.
+- **A calendar says the link was refused**: use the *secret* iCal address
+  (not the public web link), and check it hasn't been reset in the
+  calendar's settings.
+- **Repeated "Hotkey unavailable" notices**: another app (or a second copy
+  of eDEX) owns the hotkey; pick another in Settings.
 - **CPU temperature shows N/A**: Windows only exposes it to elevated apps on
   most hardware.
 - **Something looks wrong**: power menu → Reload interface, or Settings →

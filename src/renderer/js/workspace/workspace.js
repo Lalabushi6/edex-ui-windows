@@ -39,6 +39,9 @@ export class Workspace {
     on("open-path", ({ path, newTab, select }) => this.openPath(path, { newTab, select }));
     on("open-browser", ({ url = "" } = {}) => this.openBrowser(url));
     on("open-app-tab", (w) => this.openApp(w));
+    // "Open apps inside eDEX": a window that just opened becomes a tab, shown
+    // straight away while eDEX is on screen.
+    window.edex.appTabs.onNew((w) => { this.openApp(w, { activate: !!w.show, auto: false }); });
     on("open-wallpaper", () => this.openWallpaper());
     on("idle-wallpaper", () => this.showIdleWallpaper());
     on("open-terminal", ({ cwd, shell } = {}) => this.add("terminal", { cwd, shell }));
@@ -50,7 +53,7 @@ export class Workspace {
       if (focus) await this.openMedia();
     });
     on("terminal-input", ({ text }) => {
-      const tab = this.active?.type === "terminal" ? this.active : this.tabs.find((x) => x.type === "terminal");
+      const tab = this.active?.type === "terminal" ? this.active : this.visibleTabs().find((x) => x.type === "terminal");
       if (tab) { this.activate(tab); tab.focusedPane().input(text); }
     });
     // Run a command (launcher "$ …", an AI answer): the focused pane of the
@@ -58,7 +61,7 @@ export class Workspace {
     on("terminal-run", async ({ command }) => {
       if (!command) return;
       const live = (tab) => tab?.type === "terminal" && tab.focusedPane().alive;
-      let tab = live(this.active) ? this.active : this.tabs.find(live);
+      let tab = live(this.active) ? this.active : this.visibleTabs().find(live);
       if (!tab) tab = await this.add("terminal");
       if (!tab) return;
       this.activate(tab);
@@ -70,15 +73,75 @@ export class Workspace {
     });
   }
 
+  // ── Workspaces ───────────────────────────────────────────────────────────
+  // Each workspace has its own tabs. Switching hides one set and shows the
+  // other, so terminals keep running; a workspace's tabs are built the first
+  // time it's shown. "main" keeps its tabs in settings.workspace (as before
+  // workspaces existed), the others in their entry of settings.profiles.
+  // Tabs made for every open window ("*") show in all of them.
+  visibleTabs() {
+    return this.tabs.filter((t) => t.profile === this.profile || t.profile === "*");
+  }
+
+  specFor(id) {
+    if (id === "main") return settings.get("workspace");
+    return (settings.get("profiles") || []).find((p) => p.id === id)?.tabs || null;
+  }
+
+  async loadProfile(id) {
+    const saved = this.specFor(id);
+    this.restoring = true;
+    const specs = saved?.tabs?.length ? saved.tabs : (id === "main" ? [{ type: "terminal", welcome: true }, { type: "files" }] : [{ type: "terminal" }]);
+    for (const spec of specs) await this.add(spec.type, { ...spec, profile: id }, { activate: false });
+    this.restoring = false;
+    this.loaded.add(id);
+    const visible = this.visibleTabs();
+    return visible[Math.min(saved?.active ?? 0, visible.length - 1)] || visible[0] || null;
+  }
+
+  async switchProfile(id) {
+    const exists = id === "main" || (settings.get("profiles") || []).some((p) => p.id === id);
+    if (!exists || id === this.profile) return false;
+    if (this.idle) this.hideIdleWallpaper();
+    this.lastActive.set(this.profile, this.active);
+    if (this.active) {
+      this.active.tabEl.classList.remove("active");
+      this.active.el.classList.remove("active");
+      this.active.deactivate?.();
+      this.active = null;
+    }
+    this.profile = id;
+    for (const t of this.tabs) t.tabEl.hidden = !(t.profile === id || t.profile === "*");
+    let first = null;
+    if (!this.loaded.has(id)) first = await this.loadProfile(id);
+    const remembered = this.lastActive.get(id);
+    const target = remembered && this.tabs.includes(remembered) ? remembered : first || this.visibleTabs()[0];
+    if (target) this.activate(target, { silent: true });
+    else await this.add("terminal");
+    settings.set({ activeProfile: id });
+    this.persist();
+    return true;
+  }
+
+  // A deleted workspace's tabs close.
+  dropProfile(id) {
+    for (const t of this.tabs.filter((x) => x.profile === id)) {
+      t.dispose();
+      t.tabEl.remove();
+      t.el.remove();
+      this.tabs.splice(this.tabs.indexOf(t), 1);
+    }
+    this.loaded.delete(id);
+  }
+
   async init() {
     this.shells = await window.edex.term.shells().catch(() => []);
-    const saved = settings.get("workspace");
-    this.restoring = true;
-    const specs = saved?.tabs?.length ? saved.tabs : [{ type: "terminal", welcome: true }, { type: "files" }];
-    for (const spec of specs) await this.add(spec.type, spec, { activate: false });
-    this.restoring = false;
-    const idx = Math.min(saved?.active ?? 0, this.tabs.length - 1);
-    if (this.tabs[idx]) this.activate(this.tabs[idx], { silent: true });
+    const wanted = settings.get("activeProfile") || "main";
+    this.profile = wanted === "main" || (settings.get("profiles") || []).some((p) => p.id === wanted) ? wanted : "main";
+    this.loaded = new Set();
+    this.lastActive = new Map();
+    const first = await this.loadProfile(this.profile);
+    if (first) this.activate(first, { silent: true });
     this.persist();
     // "Show every open window as a tab" (Settings → Web & apps).
     this.appSync = poll(() => this.syncAppTabs(), 2500, { immediate: false });
@@ -89,12 +152,15 @@ export class Workspace {
   async add(type, opts = {}, { activate = true } = {}) {
     const Ctor = TYPES[type];
     if (!Ctor) return null;
+    const profile = opts.profile || (type === "app" && opts.auto ? "*" : this.profile || "main");
+    const mine = this.tabs.filter((t) => t.profile === profile);
     const apps = this.tabs.filter((t) => t.type === "app").length;
-    if (type === "app" ? apps >= MAX_APP_TABS : this.tabs.length - apps >= MAX_TABS) {
+    if (type === "app" ? apps >= MAX_APP_TABS : mine.filter((t) => t.type !== "app").length >= MAX_TABS) {
       toast(type === "app" ? `At most ${MAX_APP_TABS} app tabs` : `At most ${MAX_TABS} tabs — close one first`, { level: "warn" });
       return null;
     }
     const tab = new Ctor(this, opts);
+    tab.profile = profile;
     tab.iconEl = icon(TYPE_ICON[type]);
     tab.tabEl = h("button", { class: `tab tab-${type}`, type: "button", role: "tab" },
       tab.iconEl,
@@ -122,9 +188,10 @@ export class Workspace {
       tab.type === "app" && { label: "Close window", icon: "close", danger: true, run: () => tab.closeWindow() },
       { separator: true },
       { label: tab.type === "app" ? "Close tab (put the window back)" : "Close tab", icon: "close", run: () => this.close(tab) },
-      { label: "Close other tabs", icon: "close", disabled: this.tabs.length < 2, run: () => this.tabs.filter((t) => t !== tab).forEach((t) => this.close(t)) }
+      { label: "Close other tabs", icon: "close", disabled: this.visibleTabs().length < 2, run: () => this.visibleTabs().filter((t) => t !== tab && t.profile !== "*").forEach((t) => this.close(t)) }
     ]));
     this.tabs.push(tab);
+    tab.tabEl.hidden = !(profile === this.profile || profile === "*");
     this.tabsEl.append(tab.tabEl);
     this.panes.append(tab.el);
     if (activate) this.activate(tab);
@@ -159,16 +226,19 @@ export class Workspace {
     const i = this.tabs.indexOf(tab);
     if (i < 0) return;
     if (this.idle?.tab === tab) this.idle = null;
+    const visibleBefore = this.visibleTabs();
+    const vi = visibleBefore.indexOf(tab);
     tab.dispose();
     tab.tabEl.remove();
     tab.el.remove();
     this.tabs.splice(i, 1);
+    const visible = this.visibleTabs();
     if (this.active === tab) {
       this.active = null;
-      const next = this.tabs[Math.min(i, this.tabs.length - 1)];
+      const next = visible[Math.min(Math.max(0, vi), visible.length - 1)];
       if (next) this.activate(next);
     }
-    if (!this.tabs.length) this.add("terminal");
+    if (!visible.length) this.add("terminal");
     this.persist();
   }
 
@@ -180,13 +250,15 @@ export class Workspace {
   }
 
   cycle(delta) {
-    if (!this.tabs.length) return;
-    const i = this.tabs.indexOf(this.active);
-    this.activate(this.tabs[(i + delta + this.tabs.length) % this.tabs.length]);
+    const list = this.visibleTabs();
+    if (!list.length) return;
+    const i = list.indexOf(this.active);
+    this.activate(list[(i + delta + list.length) % list.length]);
   }
 
   byIndex(i) {
-    if (this.tabs[i]) this.activate(this.tabs[i]);
+    const list = this.visibleTabs();
+    if (list[i]) this.activate(list[i]);
   }
 
   async rename(tab) {
@@ -218,7 +290,7 @@ export class Workspace {
     const tab = this.active;
     if (!tab) return;
     const kind = { terminal: "TERMINAL", files: "FILESYSTEM", processes: "PROCESSES", media: "MEDIA", disk: "DISK USAGE", browser: "BROWSER", ascii: "WALLPAPER", app: "APPLICATION" }[tab.type] || "WORKSPACE";
-    const first = this.tabs.find((t) => t.type === "terminal");
+    const first = this.visibleTabs().find((t) => t.type === "terminal");
     setText(document.getElementById("work-title-a"), kind);
     setText(document.getElementById("work-title-b"), tab === first && !tab.customLabel ? "MAIN SHELL" : String(tab.label).toUpperCase());
   }
@@ -230,16 +302,30 @@ export class Workspace {
   persist() {
     if (this.restoring) return;
     clearTimeout(this.persistTimer);
+    if (!this.loaded) return;
     this.persistTimer = setTimeout(() => {
-      // Some tabs aren't restored (the idle pane, auto app tabs).
-      const kept = this.tabs.map((t) => [t, t.serialize()]).filter(([, s]) => s);
-      const active = kept.findIndex(([t]) => t === this.active);
-      settings.set({ workspace: { tabs: kept.map(([, s]) => s), active: Math.max(0, active) } });
+      // Each loaded workspace saves its own tabs; some tabs aren't restored
+      // at all (the idle pane, tabs made for every open window).
+      const patch = {};
+      const profiles = (settings.get("profiles") || []).map((p) => ({ ...p }));
+      let profilesChanged = false;
+      for (const id of this.loaded) {
+        const kept = this.tabs.filter((t) => t.profile === id).map((t) => [t, t.serialize()]).filter(([, s]) => s);
+        const activeTab = id === this.profile ? this.active : this.lastActive.get(id);
+        const spec = { tabs: kept.map(([, s]) => s), active: Math.max(0, kept.findIndex(([t]) => t === activeTab)) };
+        if (id === "main") patch.workspace = spec;
+        else {
+          const p = profiles.find((x) => x.id === id);
+          if (p && JSON.stringify(p.tabs) !== JSON.stringify(spec)) { p.tabs = spec; profilesChanged = true; }
+        }
+      }
+      if (profilesChanged) patch.profiles = profiles;
+      settings.set(patch);
     }, 400);
   }
 
   async openPath(path, { newTab = false, select } = {}) {
-    let tab = !newTab && (this.active?.type === "files" ? this.active : this.tabs.find((t) => t.type === "files"));
+    let tab = !newTab && (this.active?.type === "files" ? this.active : this.visibleTabs().find((t) => t.type === "files"));
     if (!tab) {
       tab = await this.add("files", { cwd: path });
       if (select) tab?.selectPath(select);
@@ -250,7 +336,7 @@ export class Workspace {
   }
 
   async openProcesses({ pid, sort } = {}) {
-    let tab = this.tabs.find((t) => t.type === "processes");
+    let tab = this.visibleTabs().find((t) => t.type === "processes");
     if (!tab) tab = await this.add("processes");
     else this.activate(tab);
     if (!tab) return;
@@ -260,7 +346,7 @@ export class Workspace {
 
   // { path? } — the disk usage map, scanning `path` when given.
   async openDisk({ path } = {}) {
-    const tab = this.tabs.find((t) => t.type === "disk");
+    const tab = this.visibleTabs().find((t) => t.type === "disk");
     if (tab) {
       this.activate(tab);
       if (path) tab.scan(path);
@@ -270,7 +356,7 @@ export class Workspace {
   }
 
   async openMedia() {
-    const tab = this.tabs.find((t) => t.type === "media");
+    const tab = this.visibleTabs().find((t) => t.type === "media");
     if (tab) { this.activate(tab); return tab; }
     return this.add("media");
   }
@@ -285,7 +371,7 @@ export class Workspace {
   }
 
   async openWallpaper() {
-    const tab = this.tabs.find((t) => t.type === "ascii" && !t.idle);
+    const tab = this.visibleTabs().find((t) => t.type === "ascii" && !t.idle);
     if (tab) { this.activate(tab); return tab; }
     return this.add("ascii");
   }
@@ -294,7 +380,16 @@ export class Workspace {
   async openApp(w, { activate = true, auto = false } = {}) {
     if (!w?.hwnd) return null;
     const existing = this.tabs.find((t) => t.type === "app" && t.hwnd === w.hwnd);
-    if (existing) { if (activate) this.activate(existing); return existing; }
+    if (existing) {
+      // A window lives in one tab; asked for from another workspace, it moves here.
+      if (existing.profile !== "*" && existing.profile !== this.profile) {
+        existing.profile = this.profile;
+        existing.tabEl.hidden = false;
+        this.persist();
+      }
+      if (activate) this.activate(existing);
+      return existing;
+    }
     return this.add("app", { hwnd: w.hwnd, title: w.title, exe: w.exe, auto }, { activate });
   }
 
@@ -332,7 +427,7 @@ export class Workspace {
   async showIdleWallpaper() {
     if (this.idle || this.active?.type === "ascii") return;
     const prev = this.active;
-    let tab = this.tabs.find((t) => t.type === "ascii");
+    let tab = this.visibleTabs().find((t) => t.type === "ascii");
     const temp = !tab;
     if (temp) tab = await this.add("ascii", { idle: true }, { activate: false });
     if (!tab) return;

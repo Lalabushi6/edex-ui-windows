@@ -64,6 +64,63 @@ const commandWidgets = () => (v, d) => {
       column: w.column === "left" ? "left" : "right"
     }));
 };
+// Internet radio favourites.
+const stations = () => (v, d) => {
+  if (!Array.isArray(v)) return d;
+  return v.filter((s) => s && typeof s.url === "string" && /^https?:\/\/\S+$/i.test(s.url) && s.url.length <= 1024).slice(0, 100).map((s) => ({
+    name: typeof s.name === "string" && s.name.trim() ? s.name.trim().slice(0, 80) : s.url.slice(0, 80),
+    url: s.url,
+    favicon: typeof s.favicon === "string" && /^https?:\/\//i.test(s.favicon) ? s.favicon.slice(0, 1024) : "",
+    tags: typeof s.tags === "string" ? s.tags.slice(0, 120) : "",
+    country: typeof s.country === "string" ? s.country.slice(0, 8) : ""
+  }));
+};
+// Calendar subscriptions (.ics / webcal links).
+const feeds = () => (v, d) => {
+  if (!Array.isArray(v)) return d;
+  return v.slice(0, 10).filter((f) => f && typeof f.url === "string" && /^(https?|webcal):\/\/\S+$/i.test(f.url.trim()) && f.url.length <= 2048).map((f, i) => ({
+    id: typeof f.id === "string" && /^[\w-]{1,32}$/.test(f.id) ? f.id : `cal${Date.now().toString(36)}${i}`,
+    name: typeof f.name === "string" && f.name.trim() ? f.name.trim().slice(0, 60) : "Calendar",
+    url: f.url.trim().replace(/^webcal:/i, "https:"),
+    color: typeof f.color === "string" && /^#[0-9a-f]{6}$/i.test(f.color) ? f.color.toLowerCase() : "#7fc8ff",
+    remind: f.remind === null || f.remind === undefined || f.remind === "" ? null : int(0, 1440)(f.remind, null),
+    enabled: f.enabled !== false
+  }));
+};
+// Workspaces: named setups (tabs, theme, layout, windows) with an optional
+// hotkey and a time of day to switch on.
+const LAYOUT_SNAPSHOT_KEYS = ["layoutPreset", "showTopbar", "showDock", "showLeftColumn", "showRightColumn", "columnsSide", "columnWidth", "filesPanel", "filesWidth", "bottomOrder", "showKeyboard", "hiddenWidgets", "widgetOrder"];
+const layoutSnapshot = (l) => {
+  if (!l || typeof l !== "object") return null;
+  const layout = {};
+  for (const k of LAYOUT_SNAPSHOT_KEYS) {
+    if (l[k] === undefined) continue;
+    const clean = sanitize(k, l[k], undefined);
+    if (clean !== undefined) layout[k] = clean;
+  }
+  return layout;
+};
+const themeName = (t) => (typeof t === "string" && t ? t.slice(0, 64) : null);
+const profiles = () => (v, d) => {
+  if (!Array.isArray(v)) return d;
+  const seen = new Set();
+  return v.slice(0, 10).filter((p) => p && typeof p.id === "string" && /^[\w-]{1,32}$/.test(p.id) && !seen.has(p.id) && seen.add(p.id)).map((p) => {
+    const layout = layoutSnapshot(p.layout);
+    const sched = p.schedule && typeof p.schedule === "object" && /^([01]\d|2[0-3]):[0-5]\d$/.test(p.schedule.time || "")
+      ? { time: p.schedule.time, days: Array.isArray(p.schedule.days) ? [...new Set(p.schedule.days.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))] : [0, 1, 2, 3, 4, 5, 6] }
+      : null;
+    return {
+      id: p.id,
+      name: typeof p.name === "string" && p.name.trim() ? p.name.trim().slice(0, 40) : "Workspace",
+      tabs: p.id === "main" ? null : workspace()(p.tabs, null),
+      theme: themeName(p.theme),
+      layout,
+      windows: !!p.windows,
+      hotkey: accelerator()(p.hotkey, ""),
+      schedule: sched
+    };
+  });
+};
 // Screen-time daily limits: program name -> minutes.
 const limits = () => (v, d) => {
   if (!v || typeof v !== "object" || Array.isArray(v)) return d;
@@ -126,6 +183,7 @@ const SCHEMA = {
   showKeyboard: [bool(), false],
   keyboardLayout: [(v, d) => (typeof v === "string" && (v === "auto" || /^[A-Za-z0-9][\w.-]{0,63}$/.test(v)) ? v : d), "auto"],
   hiddenWidgets: [strList(32, 64), []],
+  shownWidgets: [strList(32, 64), []],
   widgetOrder: [widgetOrder(), { left: [], right: [] }],
   workspace: [workspace(), null],
 
@@ -164,6 +222,10 @@ const SCHEMA = {
   mediaEqPreset: [str(32), "flat"],
   mediaEq: [(v, d) => (Array.isArray(v) && v.length === 10 ? v.map((x) => Math.max(-12, Math.min(12, Math.round(Number(x) * 2) / 2 || 0))) : d), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
   mediaSource: [oneOf("local", "spotify"), "local"],
+  mediaView: [oneOf("player", "library", "radio"), "player"],
+  musicFolders: [strList(12, 1024), []],
+  radioStations: [stations(), []],
+  lyrics: [bool(), true],
 
   // Visualizer (media player)
   vizStyle: [oneOf("bars", "mirror", "line", "wave", "radial", "dots", "blocks"), "bars"],
@@ -217,6 +279,29 @@ const SCHEMA = {
   browserLinks: [bool(), false],
   browserHome: [(v, d) => (typeof v === "string" && (v === "" || /^https?:\/\/\S+$/i.test(v)) ? v.slice(0, 2048) : d), ""],
   appTabs: [oneOf("off", "all"), "off"],
+  openAppsInside: [bool(), false],
+
+  // Notification centre
+  dnd: [bool(), false],
+
+  // Games: the library, and game mode while one runs
+  gameMode: [oneOf("auto", "on", "off"), "auto"],
+  gameModeQuiet: [bool(), true],
+
+  // Calendar subscriptions
+  calendarFeeds: [feeds(), []],
+
+  // Workspaces
+  profiles: [profiles(), []],
+  activeProfile: [(v, d) => (typeof v === "string" && /^[\w-]{1,32}$/.test(v) ? v : d), "main"],
+  // The theme / layout of workspaces that don't remember their own, kept
+  // while you're in one that does.
+  profileBase: [(v, d) => (v && typeof v === "object" && !Array.isArray(v) ? { theme: themeName(v.theme), layout: layoutSnapshot(v.layout) } : d), null],
+
+  // Live wallpaper (behind the desktop icons while eDEX is hidden)
+  liveWallpaper: [oneOf("off", "matrix", "hex", "stars", "globe", "ascii", "panels"), "off"],
+  liveWallpaperDisplays: [oneOf("all", "primary"), "all"],
+  liveWallpaperPause: [bool(), true],
 
   // Updates from the GitHub releases page
   updateCheck: [bool(), true],
@@ -277,6 +362,8 @@ function migrateLegacy() {
 class Settings extends EventEmitter {
   constructor(userDataDir) {
     super();
+    // Most main-process modules watch settings.
+    this.setMaxListeners(50);
     this.store = new JsonStore(path.join(userDataDir, "settings.json"), { fallback: {} });
     const isFresh = !this.store.exists;
     const seed = isFresh ? migrateLegacy() : {};

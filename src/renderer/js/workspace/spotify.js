@@ -12,6 +12,7 @@ import { poll, appActive } from "../core/poll.js";
 import { toast, cleanError, contextMenu, popover, copyText } from "../core/ui.js";
 import { openUrl } from "../core/links.js";
 import { formatTime } from "../media/player.js";
+import { createLyricsView } from "../media/lyrics.js";
 
 const api = window.edex;
 const art = new Map(); // remote cover URL -> data URL (or a pending promise)
@@ -39,7 +40,9 @@ const webLink = (uri) => {
 };
 
 export class SpotifyView {
-  constructor({ makeSwitch }) {
+  constructor({ makeSwitch, toggleLyrics }) {
+    this.toggleLyrics = toggleLyrics;
+    try { this.lyricsOn = localStorage.getItem("edex.lyricsOn") === "1"; } catch (_) { this.lyricsOn = false; }
     this.active = false;
     this.status = null;     // spotify:status
     this.state = null;      // web player state (connected)
@@ -58,8 +61,10 @@ export class SpotifyView {
     this.artistEl = h("div", { class: "mp-artist" });
     this.deviceEl = h("div", { class: "sp-device muted" });
     this.empty = h("div", { class: "mp-empty sp-empty" });
+    this.lyrics = createLyricsView({ className: "ly-stage" });
     this.stage = h("div", { class: "mp-stage sp-stage" }, this.bg,
       h("div", { class: "sp-now" }, this.bigArt, h("div", { class: "mp-now-text" }, this.titleEl, this.artistEl, this.deviceEl)),
+      this.lyrics.el,
       this.empty);
 
     this.playBtn = btn("play", "Play / pause (Space)", () => this.control("toggle"), "big");
@@ -70,6 +75,7 @@ export class SpotifyView {
     this.shuffleBtn = btn("shuffle", "Shuffle", () => this.control("shuffle"));
     this.repeatBtn = btn("repeat", "Repeat", () => this.control("repeat"));
     this.deviceBtn = btn("desktop", "Play on…", () => this.pickDevice());
+    this.lyricsBtn = btn("lyrics", "Lyrics (L)", () => this.toggleLyrics?.());
     this.volFill = h("div", { class: "mp-vol-fill" }, h("i"));
     this.vol = h("div", { class: "mp-vol", title: "Spotify volume" }, h("i", { class: "mp-vol-bg" }), this.volFill);
     this.controls = h("div", { class: "mp-controls" },
@@ -77,7 +83,7 @@ export class SpotifyView {
       this.playBtn,
       btn("next", "Next", () => this.control("next")),
       this.cur, this.progress, this.dur,
-      this.shuffleBtn, this.repeatBtn, this.deviceBtn,
+      this.shuffleBtn, this.repeatBtn, this.deviceBtn, this.lyricsBtn,
       h("span", { class: "mp-btn sp-vol-ico" }, icon("volume")), this.vol,
       btn("external", "Open in Spotify", () => openUrl(webLink(this.state?.item?.uri || this.state?.context), { external: true })));
 
@@ -96,7 +102,26 @@ export class SpotifyView {
       if (e.key === " ") { e.preventDefault(); this.control("toggle"); }
       else if (e.key === "ArrowRight" && e.shiftKey) { e.preventDefault(); this.control("next"); }
       else if (e.key === "ArrowLeft" && e.shiftKey) { e.preventDefault(); this.control("prev"); }
+      else if (e.key.toLowerCase() === "l" && !e.ctrlKey) { e.preventDefault(); this.toggleLyrics?.(); }
     });
+    this.setLyrics(this.lyricsOn);
+  }
+
+  setLyrics(on) {
+    this.lyricsOn = !!on;
+    this.lyrics.el.hidden = !this.lyricsOn;
+    this.stage.classList.toggle("with-lyrics", this.lyricsOn);
+    this.lyricsBtn.classList.toggle("on", this.lyricsOn);
+    if (this.lyricsOn) this.syncLyrics();
+  }
+
+  syncLyrics() {
+    if (!this.lyricsOn) return;
+    const n = this.now();
+    if (!n) { this.lyrics.setTrack(null); return; }
+    const [artist, album] = this.state?.item ? [this.state.item.artists, this.state.item.album] : [this.local?.artist, this.local?.album];
+    this.lyrics.setTrack({ title: n.title, artist: artist || "", album: album || "", duration: n.duration || 0 });
+    this.lyrics.tick(n.position);
   }
 
   get connected() {
@@ -205,6 +230,7 @@ export class SpotifyView {
     if (n?.web && n.device) this.volFill.style.width = `${n.device.volume ?? 0}%`;
     this.renderArt(n);
     this.renderTime();
+    this.syncLyrics();
   }
 
   renderArt(n) {
@@ -229,6 +255,7 @@ export class SpotifyView {
 
   renderTime() {
     const n = this.now();
+    if (this.lyricsOn && n) this.lyrics.tick(n.position);
     setText(this.cur, n ? formatTime(n.position) : "--:--");
     setText(this.dur, n ? formatTime(n.duration) : "--:--");
     this.progressFill.style.width = `${n?.duration ? Math.min(100, (n.position / n.duration) * 100) : 0}%`;

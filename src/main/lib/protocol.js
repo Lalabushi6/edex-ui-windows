@@ -33,7 +33,9 @@ const VENDOR_DIRS = {
 function registerSchemes() {
   protocol.registerSchemesAsPrivileged([
     { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } },
-    { scheme: "localfile", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+    { scheme: "localfile", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    // Internet radio, proxied by the main process (see ipc/radio.js).
+    { scheme: "edexradio", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
   ]);
 }
 

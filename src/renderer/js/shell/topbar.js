@@ -15,6 +15,9 @@ import { openMixer } from "./mixer.js";
 import { openBluetoothPanel } from "./bluetooth.js";
 import { openBatteryPanel } from "./battery.js";
 import { runCommand } from "../core/commands.js";
+import { noticesButton } from "./notices.js";
+import { gameModeBadge } from "./games.js";
+import { profilesButton } from "./profiles.js";
 
 const api = window.edex;
 
@@ -23,7 +26,7 @@ export function initTopbar(root) {
   const brand = h("div", { class: "brand" },
     h("span", { class: "brand-mark", svg: LOGO_SVG }),
     h("span", { class: "brand-name" }, "eDEX-UI"),
-    mode);
+    mode, profilesButton());
   mode.addEventListener("click", () => settings.set({ mode: settings.get("mode") === "overlay" ? "desktop" : "overlay" }));
   const renderMode = () => setText(mode, settings.get("mode") === "overlay" ? "Overlay" : "Desktop");
   settings.watch("mode", renderMode);
@@ -136,13 +139,14 @@ export function initTopbar(root) {
   const powerBtn = h("button", { class: "icon-btn", type: "button", title: "Power", onclick: (e) => powerMenu(e) }, icon("power"));
 
   root.append(brand, pill, h("div", { class: "status" },
+    gameModeBadge(),
     npLabel, media("prev", "prev", "Previous track"), media("playpause", "playpause", "Play / pause"), media("next", "next", "Next track"),
     h("span", { class: "status-sep" }),
     volIcon, volSlider, volLabel, mixBtn, brightBtn,
     h("span", { class: "status-sep" }),
     snipBtn, bt, net, battery, clock,
     h("span", { class: "status-sep" }),
-    settingsBtn, powerBtn));
+    noticesButton(), settingsBtn, powerBtn));
 
   return { stop() { volPoll.stop(); brightness.stop(); offNet(); offBattery(); clockPoll.stop(); offNp(); } };
 }
