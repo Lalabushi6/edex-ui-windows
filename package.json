@@ -4,6 +4,11 @@
   "version": "2.0.2",
   "description": "A sci-fi desktop shell for Windows: launcher, window dock, terminal, file explorer and live system telemetry in one full-screen surface.",
   "main": "src/main/main.js",
+  "homepage": "https://github.com/Lalabushi6/edex-ui-windows",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lalabushi6/edex-ui-windows.git"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "set EDEX_DEV_WINDOWED=1&& electron .",

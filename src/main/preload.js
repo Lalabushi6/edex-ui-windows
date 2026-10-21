@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("edex", {
     takeoverState: invoke("takeover:state"),
     takeoverPeek: invoke("takeover:peek"),
     idle: invoke("app:idle"),
+    openData: invoke("app:openData"),
     onVisibility: subscribe("app:visibility"),
     onMode: subscribe("app:mode"),
     onCommand: subscribe("app:command"),
@@ -151,6 +152,58 @@ contextBridge.exposeInMainWorld("edex", {
     cancel: invoke("ai:cancel"),
     onChunk: subscribe("ai:chunk"),
     onDone: subscribe("ai:done")
+  },
+  updates: {
+    info: invoke("updates:info"),
+    check: invoke("updates:check"),
+    download: invoke("updates:download"),
+    install: invoke("updates:install"),
+    skip: invoke("updates:skip"),
+    openPage: invoke("updates:openPage"),
+    onAvailable: subscribe("updates:available"),
+    onProgress: subscribe("updates:progress")
+  },
+  saver: {
+    start: invoke("saver:start"),
+    dismiss: invoke("saver:dismiss")
+  },
+  browser: {
+    create: invoke("browser:create"),
+    go: invoke("browser:go"),
+    action: invoke("browser:action"),
+    layout: invoke("browser:layout"),
+    focus: invoke("browser:focus"),
+    snapshot: invoke("browser:snapshot"),
+    find: invoke("browser:find"),
+    close: invoke("browser:close"),
+    clearData: invoke("browser:clearData"),
+    onState: subscribe("browser:state"),
+    onOpen: subscribe("browser:open"),
+    onKey: subscribe("browser:key"),
+    onDownload: subscribe("browser:download")
+  },
+  appTabs: {
+    show: invoke("apptab:show"),
+    hide: invoke("apptab:hide"),
+    check: invoke("apptab:check"),
+    snapshot: invoke("apptab:snapshot"),
+    release: invoke("apptab:release")
+  },
+  spotify: {
+    status: invoke("spotify:status"),
+    connect: invoke("spotify:connect"),
+    cancel: invoke("spotify:cancel"),
+    disconnect: invoke("spotify:disconnect"),
+    me: invoke("spotify:me"),
+    player: invoke("spotify:player"),
+    devices: invoke("spotify:devices"),
+    control: invoke("spotify:control"),
+    playlists: invoke("spotify:playlists"),
+    playlistTracks: invoke("spotify:playlistTracks"),
+    liked: invoke("spotify:liked"),
+    recent: invoke("spotify:recent"),
+    search: invoke("spotify:search"),
+    art: invoke("spotify:art")
   },
   media: {
     key: invoke("media:key"),

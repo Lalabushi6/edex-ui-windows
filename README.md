@@ -22,8 +22,9 @@
 </p>
 
 **eDEX-UI Windows Edition** is a fullscreen, sci-fi **desktop shell for Windows**:
-a launcher, a window dock, tabbed terminals with split panes, a file explorer,
-a media player and live system telemetry, all on one surface in the style of
+a launcher, a window dock, tabbed terminals with split panes, browser tabs,
+your app windows as tabs, a file explorer, a media player with Spotify and
+live system telemetry, all on one surface in the style of
 [eDEX-UI](https://github.com/GitSquared/edex-ui). You launch apps, switch
 windows, browse and open files, play media, run terminals and watch your system
 without ever dropping back to the Windows desktop. It can even **take over the
@@ -88,7 +89,7 @@ locked down.
   | `$ ipconfig /all` | runs the command in the active terminal (or a new one) |
   | `? how do I find large files` | asks Claude (optional AI assistant) |
   | `C:\Users\` | browse paths; Tab completes the highlighted folder |
-  | `example.com` | opens in your browser |
+  | `google.com` | opens in your browser, or in an eDEX browser tab |
   | anything else | web search (engine set in Settings) |
 
   `Enter` opens, `Ctrl+Enter` reveals the file location (or closes a window),
@@ -104,12 +105,35 @@ locked down.
   side*, in *three columns* or a *grid*, or **save an arrangement** that
   remembers where every window is. Restoring it moves each window back, starts
   programs that aren't running and re-minimises the ones that were minimised.
+- **App tabs**: any open window can live in a workspace tab (right-click it
+  in the dock or launcher → *Show as a tab in eDEX*, the tab menu → *App
+  window…*, or let **every open window get a tab** automatically). The tab
+  moves the real window into its area and brings it forward; switching tabs
+  minimises it, the tab keeps a picture of it while eDEX is in front, and
+  closing the tab or quitting eDEX puts the window back where it was. Nothing
+  is injected into the app.
 - **Multi-monitor HUD**: every display except the main one shows eDEX's
   telemetry panels, the globe and a large clock. It sits behind your windows
   on that display like a desktop does, and hides and returns with eDEX.
+- **Screen saver mode**: after the minutes you choose without any input
+  anywhere, eDEX covers every display with its effect (matrix rain, hex grid,
+  starfield, globe or your ASCII wallpaper), above every app, even while it's
+  hidden in the tray. Any input ends it; it can lock Windows as it ends, and
+  it holds back during full-screen apps and video.
 - Tray icon, single instance, start with Windows (straight onto the screen
   when it has taken over the desktop), session restore of tabs and split
   panes, close-to-tray.
+
+### Web
+- **Browser tabs** (`Ctrl+Shift+B`): real web pages in the workspace, with an
+  eDEX toolbar (back / forward / reload, an address bar that also searches,
+  zoom, find in page, open in your browser), favicons and page titles on the
+  tabs, pop-ups as new tabs, downloads through a Save dialog, and tabs
+  restored next time. Pages run in their own sandboxed session, separate from
+  your usual browser and from eDEX itself; camera, microphone, location and
+  notification requests are refused.
+- Optionally, **web links open in eDEX**: from the launcher, quick links, the
+  terminal and the explorer.
 
 ### Terminal
 - **Tabs** for PowerShell, PowerShell 7, Command Prompt, WSL and Git Bash
@@ -181,6 +205,16 @@ locked down.
 - **10-band equalizer** (32 Hz to 16 kHz, ±12 dB) with presets (Bass boost,
   Treble boost, Vocal, Rock, Electronic, Acoustic, Loudness, Late night) and
   your own curves; boosts are balanced so loud tracks don't distort.
+- **Visualizer styles** (`V`): bars, mirrored bars, LED blocks, dots, a
+  spectrum line, the waveform or a radial burst; 16–128 bands; the theme
+  colour, a theme gradient, a rainbow or your own colour; peak caps,
+  reflection, smoothing and sensitivity.
+- **Spotify inside the player**: switch the player to *Spotify* to see what's
+  playing (cover art, progress, device), browse your playlists, liked songs
+  and recent tracks, search, pick the device it plays on, and control
+  playback, shuffle, repeat and volume. Connects with a free Spotify developer
+  app of your own (PKCE sign-in, nothing secret stored in plain text);
+  without an account it still shows and controls the Spotify app on this PC.
 - **System-wide Now playing**: whatever Spotify, a browser, VLC or any other
   app reports to Windows (title, artist, cover art, play / pause / skip and
   seek) in the Media widget and the top bar.
@@ -237,8 +271,13 @@ locked down.
   mode. It types into the terminal, any text field, or triggers app shortcuts.
 - **Boot logo**: your own title or ASCII art (pasted, loaded from .txt / .nfo /
   .ans, or generated as block letters), scaled to fit the screen.
-- **Idle screen and animated backgrounds**: matrix rain, hex grid, starfield
-  or globe, in the theme colour.
+- **ASCII wallpaper**: your ASCII art as a workspace pane instead of a
+  terminal, huge and in the theme colour, with a scanline, glitch, typing or
+  pulse animation, a clock and an ambient effect behind it. It can also take
+  the terminal's place while you're away (idle pane) and be the idle-screen
+  or screen-saver effect.
+- **Idle screen and animated backgrounds**: matrix rain, hex grid, starfield,
+  globe or the ASCII wallpaper, in the theme colour.
 - Interface scaling, 12 / 24-hour clock, Celsius / Fahrenheit.
 
 ### Light on resources
@@ -251,10 +290,18 @@ locked down.
   to Eco on battery or battery saver) set refresh rates and animation frame
   rates; Settings → Performance shows eDEX's own CPU and memory use.
 
-### Settings backup
-- Export / import every setting, your custom themes and keyboard layouts as
-  one file, to keep or move to another PC. Importing a file that contains
-  command widgets asks before allowing them.
+### Settings, updates and portable use
+- **Settings backup**: export / import every setting, your custom themes and
+  keyboard layouts as one file, to keep or move to another PC. Importing a
+  file that contains command widgets asks before allowing them.
+- **Updates from GitHub**: eDEX checks this repository's releases (once a
+  day, or on demand), shows the release notes, and downloads and installs the
+  new version — the installer for an installed copy, the new `.exe` for the
+  portable one — after checking it against GitHub's SHA-256 digest.
+- **Portable on a USB drive**: the portable `.exe` keeps all its data
+  (settings, notes, tasks, themes, sign-ins) in an `eDEX-UI Data` folder next
+  to itself, so your eDEX travels with the drive; on a PC that has eDEX
+  installed it offers to copy that setup over.
 
 ## Screenshots
 
@@ -283,13 +330,14 @@ locked down.
 | `Ctrl+Shift+P` | Command palette |
 | `Ctrl+Shift+A` | Switch window |
 | `Ctrl+Shift+T` / `Ctrl+Shift+E` | New terminal / explorer tab |
+| `Ctrl+Shift+B` | New browser tab (in it: `Ctrl+L` address, `Ctrl+F` find, `Ctrl+T` / `Ctrl+W` new / close, `F5` reload, `Alt+←/→` back / forward) |
 | `Ctrl+Shift+W` | Close tab (or the focused split pane) |
 | `Ctrl+Tab`, `Ctrl+1…9` | Switch tabs |
 | `Alt+Shift+=` / `Alt+Shift+-` / `Ctrl+Shift+D` | Split the terminal right / down |
 | `Alt`+arrows | Move between split panes |
 | `Ctrl+Shift+F` | Find in terminal (or find files outside a terminal) |
 | `Ctrl+Shift+K` | On-screen keyboard |
-| `Ctrl+Shift+M` | Media player |
+| `Ctrl+Shift+M` | Media player (in it: `E` equalizer, `V` visualizer) |
 | `Ctrl+Shift+J` | Ask Claude (AI assistant) |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |
@@ -335,14 +383,55 @@ Layout for layout presets (or `>layout`). Some of the original's themes
 (*disrupted*, *notype*, *typeleft*, *fulltype*) also move panels around; turn
 that off with "Themes can change the layout".
 
+#### Can I browse the web inside eDEX?
+Yes: `Ctrl+Shift+B` (or the tab menu → Browser) opens a browser tab with an
+address bar that also searches, back / forward, zoom, find in page and pop-ups
+as new tabs. Pages run in their own sandboxed session with separate sign-ins.
+Turn on Settings → Web & apps → **Open web links in eDEX** to send links from
+the launcher, quick links, the terminal and the explorer there too. A few
+sites (Google sign-in, for one) refuse embedded browsers; the ↗ button opens
+the page in your usual browser.
+
+#### Can my apps live inside eDEX?
+As tabs, yes. Right-click a window in the dock or launcher → **Show as a tab
+in eDEX**, or turn on **Show every open window as a tab** (Settings → Web &
+apps). The tab moves the app's real window into the workspace and brings it
+forward; switching tabs minimises it, and closing the tab or quitting eDEX
+puts it back where it was. eDEX doesn't inject anything into the app, so a
+misbehaving app can't freeze eDEX.
+
+#### Does it work with Spotify?
+Two ways. Without any setup, the media player's *Spotify* view (and the Now
+playing widget) shows and controls whatever the Spotify app on this PC is
+playing. Connect your account (a free Spotify developer app of your own,
+about two minutes — the steps are in the view and in
+[USER_MANUAL.md](USER_MANUAL.md)) to also browse playlists, liked songs and
+recent tracks, search, and choose which device plays. Spotify itself plays
+the music; its rules require Premium for playback control. eDEX-UI isn't
+affiliated with Spotify.
+
+#### Can I run it from a USB stick?
+Yes, use `eDEX-UI-Portable.exe`. It keeps everything (settings, notes, tasks,
+themes, sign-ins) in an `eDEX-UI Data` folder next to itself, so your setup
+moves with the drive. The AI key and Spotify sign-in are encrypted with the
+Windows account that saved them, so on another PC you enter them again.
+
+#### How do I update?
+Settings → About → **Check now** (eDEX also checks once a day while outbound
+lookups are on). If there's a new release it shows the notes; **Download and
+install** fetches it from GitHub, checks its SHA-256, and runs the installer
+(or replaces the portable `.exe`) after you confirm. Your settings are kept.
+
 #### Does it send anything over the internet?
 Only if you let it. With **Outbound lookups** on (the default), the world-view
 globe looks up your approximate location from your public IP and checks
-latency to a few public sites, and the weather widget fetches a forecast.
-Turn it off under Settings → Privacy and eDEX makes no outbound requests at
-all. The AI assistant is off until you add your own API key, and only sends
-what you ask. Whole-PC search, the disk map, Bluetooth, Now playing and the
-mixer work locally through Windows. See [Security model](#security-model).
+latency to a few public sites, the weather widget fetches a forecast, and
+eDEX checks GitHub for a new release once a day. Turn it off under Settings →
+Privacy and eDEX makes no outbound requests of its own. Pages you open in
+browser tabs, Spotify (once you connect it) and the AI assistant (off until
+you add your own API key) only go online when you use them. Whole-PC search,
+the disk map, Bluetooth, Now playing, the mixer and app tabs work locally
+through Windows. See [Security model](#security-model).
 
 #### What does the AI assistant cost, and is my key safe?
 It uses your own Anthropic API key (console.anthropic.com), billed to your
@@ -362,8 +451,10 @@ download is about 100 MB (most of it is the Electron runtime).
 
 #### Where are my settings? Can I move them to another PC?
 In `%APPDATA%\eDEX-UI` (settings, notes, tasks, themes, keyboard layouts,
-screen time). Settings → About → **Back up settings** exports everything to
-one file and imports it elsewhere. Settings from the original eDEX-UI
+screen time, browser-tab sign-ins), or, for the portable `.exe`, in
+`eDEX-UI Data` next to it; Settings → About shows which and opens it.
+Settings → About → **Back up settings** exports everything to one file and
+imports it elsewhere. Settings from the original eDEX-UI
 (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first run.
 
 #### Does it run on Windows 10, ARM, macOS or Linux?
@@ -402,11 +493,12 @@ page:
 | File | What it is |
 |---|---|
 | [`eDEX-UI-Setup.exe`](https://github.com/Lalabushi6/edex-ui-windows/releases/latest/download/eDEX-UI-Setup.exe) | Installer: per user, no admin rights, choose the folder, Start menu and desktop shortcuts, uninstaller (your settings are kept). |
-| [`eDEX-UI-Portable.exe`](https://github.com/Lalabushi6/edex-ui-windows/releases/latest/download/eDEX-UI-Portable.exe) | A single file that runs without installing; settings go to `%APPDATA%\eDEX-UI` like the installed version. |
+| [`eDEX-UI-Portable.exe`](https://github.com/Lalabushi6/edex-ui-windows/releases/latest/download/eDEX-UI-Portable.exe) | A single file that runs without installing — from a USB drive too. Everything it remembers goes into an `eDEX-UI Data` folder next to it, so it travels with the drive. |
 
 Requirements: Windows 10 (1809) or 11, 64-bit. The executables aren't
 code-signed, so SmartScreen may warn the first time: **More info → Run
-anyway**. Every push also produces test builds under the repository's
+anyway**. Once installed, eDEX finds new releases itself (Settings → About →
+Updates). Every push also produces test builds under the repository's
 **Actions** tab (see [Getting the bleeding edge](#getting-the-bleeding-edge)).
 
 Read [USER_MANUAL.md](USER_MANUAL.md) for everything eDEX can do, and
@@ -442,8 +534,13 @@ Environment variables for development:
 
 | Variable | Effect |
 |---|---|
-| `EDEX_DEV_WINDOWED=1` | Run in a normal resizable window instead of full screen (what `npm run dev` sets) |
+| `EDEX_DEV_WINDOWED=1` | Run in a normal resizable window instead of full screen (what `npm run dev` sets); screen saver windows are windowed too |
 | `EDEX_HUD_PREVIEW=1` | With `EDEX_DEV_WINDOWED=1` on a single-monitor PC, opens the multi-monitor HUD as a window so you can see it |
+| `EDEX_PORTABLE_DIR=<folder>` | Behave like the portable build with its `.exe` in that folder (data goes to `<folder>\eDEX-UI Data`) |
+| `EDEX_UPDATE_API=<url>`, `EDEX_UPDATE_KIND=installer` | Point the update check at a test server, and pretend to be an installed copy so downloads can be tried |
+| `EDEX_SPOTIFY_ACCOUNTS=<url>`, `EDEX_SPOTIFY_API=<url>` | Point the Spotify sign-in and Web API at a test server |
+
+These only work when running from source; packaged builds ignore them.
 
 #### Building:
 
@@ -503,19 +600,22 @@ src/main/            Electron main process
   preload.js         the renderer's only bridge (window.edex)
   ipc/               terminal, system, files, desktop (apps/windows/media keys/power), media player,
                      audio mixer, now playing, Bluetooth, disk usage, window arrangements,
-                     tools (command widgets, git, battery health, tasks, settings backup), AI, extras
+                     tools (command widgets, git, battery health, tasks, settings backup), AI,
+                     browser tabs, app tabs, Spotify, updates, extras
   lib/               protocols, path policy, cache, JSON store, telemetry, icon service,
-                     takeover, screen time, alerts
+                     takeover, screen time, alerts, screen saver, portable mode
   native/bridge.ps1  long-lived PowerShell helper for Win32 / Core Audio / WinRT / Windows Search;
                      a second instance handles slow calls (media sessions, Bluetooth, search, disk scans)
 src/renderer/        UI (ES modules served from app://edex)
   js/core/           DOM builder, settings, theme, commands/hotkeys, scheduler,
-                     shared telemetry feeds, UI kit
+                     shared telemetry feeds, UI kit, web links
   js/widgets/        side-column widgets (incl. tasks, git, command widgets)
-  js/workspace/      tabs: terminal (split panes), explorer, process manager, media player, disk usage
+  js/workspace/      tabs: terminal (split panes), explorer, process manager, media player (+ Spotify
+                     view), disk usage, browser, app windows, ASCII wallpaper
   js/shell/          top bar, dock, launcher, settings, viewer, keyboard, boot, mixer, Bluetooth,
-                     battery, now playing, window arrangements, agenda, AI panel, idle screen, effects
-  js/media/          media player engine
+                     battery, now playing, window arrangements, agenda, AI panel, idle screen, effects,
+                     wallpaper, updates
+  js/media/          media player engine, visualizer
   lib/encom-globe.js the ENCOM globe (from eDEX-UI)
 themes/              built-in themes (JSON, eDEX-UI format)
 keyboards/           on-screen keyboard layouts (JSON, eDEX-UI format)
@@ -530,7 +630,7 @@ docs/                PUBLISHING.md (GitHub and releases)
 
 | File | What's in it |
 |---|---|
-| [USER_MANUAL.md](USER_MANUAL.md) | Everything eDEX does: layout, modes, launcher, dock, terminal, explorer, media, keyboard, tools, settings, privacy, troubleshooting |
+| [USER_MANUAL.md](USER_MANUAL.md) | Everything eDEX does: layout, modes, launcher, dock, terminal, browser tabs, app tabs, explorer, media and Spotify, keyboard, wallpaper, tools, screen saver, settings, privacy, updates and portable use, troubleshooting |
 | [THEME_GUIDE.md](THEME_GUIDE.md) | Making and editing themes, custom CSS hooks |
 | [docs/PUBLISHING.md](docs/PUBLISHING.md) | Putting the project on GitHub, automatic builds, releases |
 | [SECURITY.md](SECURITY.md) | Reporting security problems, how eDEX is built to be safe |
@@ -562,16 +662,34 @@ docs/                PUBLISHING.md (GitHub and releases)
   that resolves to a network share; page scripts can't `fetch` them.
 - **The Git widget** won't inspect a repository whose own config would make Git
   start programs (fsmonitor, clean/smudge filters, includes).
+- **Browser tabs** are separate sandboxed views in their own session
+  (`persist:edex-browser`) with no preload bridge, so pages can't call eDEX
+  or reach `app://` / `localfile:`. Only `http(s)` loads, pop-ups become tabs,
+  web permissions are refused (apart from fullscreen and clipboard writes),
+  downloads go through a Save dialog, and the page steps aside behind a
+  still picture whenever an eDEX menu or dialog is open.
+- **App tabs** only move, minimise and restore another app's window (and
+  picture it); nothing is injected or re-parented, and windows go back where
+  they were when the tab closes or eDEX quits.
+- **Secrets** — the AI key and the Spotify refresh token — are encrypted with
+  your Windows account (DPAPI) and unreadable through eDEX's own file
+  previews. Spotify uses PKCE sign-in through a loopback address, so there's
+  no client secret.
+- **Updates** must match the size and SHA-256 digest GitHub publishes for the
+  release file before anything runs, and installing always asks first.
 - **Packaged builds** disable Node inspection and `NODE_OPTIONS` and load code
   only from the app archive (Electron fuses).
 
 **Privacy:** the world-view globe looks up your public IP location (ipapi.co,
 falling back to ipinfo.io) and checks latency to google.com and twelve public
 sites; the weather widget fetches a forecast for that approximate location
-from open-meteo.com. Turn all of this off under Settings → Privacy. Clipboard
-history is never written to disk. Screen time stores only program names and
-durations, on this PC, for two weeks. The AI assistant is off until you add
-your own key and sends only what you ask. Report problems as described in
+from open-meteo.com; once a day eDEX asks api.github.com for the latest
+release. Turn all of this off under Settings → Privacy. Browser tabs,
+Spotify (accounts.spotify.com, api.spotify.com and its cover-art servers) and
+the AI assistant only go online when you use them. Clipboard history is never
+written to disk. Screen time stores only program names and durations, on
+this PC, for two weeks. The AI assistant is off until you add your own key
+and sends only what you ask. Report problems as described in
 [SECURITY.md](SECURITY.md).
 
 ## Credits
@@ -617,3 +735,7 @@ behind the optional AI assistant.
 Licensed under the [GPLv3.0](https://github.com/Lalabushi6/edex-ui-windows/blob/main/LICENSE),
 because it includes code and assets from the original eDEX-UI (GPL-3.0). See
 [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Spotify is a trademark of Spotify AB, and Google of Google LLC; eDEX-UI isn't
+affiliated with or endorsed by either. The Spotify integration uses the
+public Spotify Web API with your own developer app, under Spotify's terms.

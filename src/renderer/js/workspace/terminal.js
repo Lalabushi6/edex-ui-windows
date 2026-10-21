@@ -8,6 +8,7 @@ import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { on, emit } from "../core/bus.js";
 import { toast, contextMenu, copyText, cleanError } from "../core/ui.js";
+import { openUrl } from "../core/links.js";
 
 const api = window.edex;
 const sessions = new Map(); // pty id -> TerminalTab
@@ -361,7 +362,7 @@ export class TerminalTab {
             text: m[0],
             range: { start: { x: m.index + 1, y }, end: { x: m.index + m[0].length, y } },
             activate: (event, uri) => {
-              if (event.ctrlKey) api.shell.openExternal(uri).catch((err) => toast(cleanError(err), { level: "warn" }));
+              if (event.ctrlKey) openUrl(uri);
               else toast("Ctrl+click to open link", { timeout: 1600 });
             }
           });

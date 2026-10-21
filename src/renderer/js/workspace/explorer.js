@@ -7,6 +7,7 @@ import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { emit } from "../core/bus.js";
 import { toast, contextMenu, prompt, confirm, copyText, cleanError } from "../core/ui.js";
+import { openUrl } from "../core/links.js";
 import { openViewer } from "../shell/viewer.js";
 import { isMediaPath } from "../media/player.js";
 
@@ -347,7 +348,7 @@ export class ExplorerTab {
     if (!value) return;
     if (value === "~" || value.startsWith("~\\") || value.startsWith("~/")) value = (await api.fs.home()) + value.slice(1);
     if (/^this pc$/i.test(value)) { this.closeAddress(); this.navigate(""); return; }
-    if (/^https?:\/\//i.test(value)) { api.shell.openExternal(value); this.closeAddress(); return; }
+    if (/^https?:\/\//i.test(value)) { openUrl(value); this.closeAddress(); return; }
     try {
       const st = await api.fs.stat(value);
       this.closeAddress();

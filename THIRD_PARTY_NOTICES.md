@@ -51,3 +51,8 @@ systeminformation (MIT), the Anthropic TypeScript SDK `@anthropic-ai/sdk`
 
 Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), used
 only when outbound lookups are enabled.
+
+The optional Spotify view uses the [Spotify Web API](https://developer.spotify.com/documentation/web-api)
+with the user's own developer app, under the Spotify Developer Terms; cover
+art and metadata are Spotify's and its licensors'. Spotify is a trademark of
+Spotify AB. eDEX-UI isn't affiliated with or endorsed by Spotify.

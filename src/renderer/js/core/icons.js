@@ -99,7 +99,14 @@ const P = {
   git: '<circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8.2v7.6M18 11.2c0 3-3 3.8-6 4.3-2.5.4-4 1-4.8 1.6"/>',
   disk: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/>',
   grid4: '<rect x="3.5" y="3.5" width="7" height="7"/><rect x="13.5" y="3.5" width="7" height="7"/><rect x="3.5" y="13.5" width="7" height="7"/><rect x="13.5" y="13.5" width="7" height="7"/>',
-  mixer: '<path d="M5 20v-6M5 10V4M12 20v-9M12 7V4M19 20v-4M19 12V4"/><path d="M3 14h4M10 7h4M17 16h4"/>',  tomato: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 6V3M9 6.5c1-1.5 5-1.5 6 0M12 6l-2.5-2M12 6l2.5-2"/>'
+  mixer: '<path d="M5 20v-6M5 10V4M12 20v-9M12 7V4M19 20v-4M19 12V4"/><path d="M3 14h4M10 7h4M17 16h4"/>',
+  tomato: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 6V3M9 6.5c1-1.5 5-1.5 6 0M12 6l-2.5-2M12 6l2.5-2"/>',
+  wallpaper: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M6.5 8.5h3M11.5 8.5h6M6.5 12h5M13.5 12h4M6.5 15.5h11"/>',
+  spotify: '<circle cx="12" cy="12" r="9"/><path d="M7.2 9.4c3.2-1 6.9-.7 9.8.9M7.8 12.6c2.6-.7 5.5-.4 7.8.8M8.5 15.6c2-.5 4-.3 5.8.6"/>',
+  update: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/><path d="M12 8.5v7M9 12.8l3 2.9 3-2.9"/>',
+  viz: '<path d="M4 20v-5M8 20V8M12 20v-9M16 20V5M20 20v-7"/>',
+  apptab: '<rect x="3" y="6" width="18" height="14" rx="1.5"/><path d="M3 10h18"/><path d="M5.5 6V4h7v2"/>',
+  saver: '<rect x="3" y="4" width="18" height="13" rx="1"/><path d="M8.5 21h7M12 17v4"/><path d="M14.5 8.2a3.2 3.2 0 1 0 1.3 4.6 3.6 3.6 0 0 1-1.3-4.6z"/>'
 };
 
 // The eDEX-UI logo (ring, square and "e"), drawn in the theme colour.

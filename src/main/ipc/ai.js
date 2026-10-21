@@ -32,8 +32,11 @@ function registerAi({ settings }) {
     } catch (_) { return null; }
   };
 
+  // A key saved on another PC or Windows account (a portable drive) exists
+  // but can't be decrypted here.
   handle("ai:status", () => ({
-    configured: fs.existsSync(keyFile) && safeStorage.isEncryptionAvailable(),
+    configured: !!readKey(),
+    unreadable: fs.existsSync(keyFile) && !readKey(),
     encryption: safeStorage.isEncryptionAvailable(),
     enabled: !!settings.get("aiEnabled"),
     model: settings.get("aiModel")

@@ -8,6 +8,7 @@ import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { emit, on } from "../core/bus.js";
 import { toast, contextMenu, prompt, confirm, copyText, cleanError } from "../core/ui.js";
+import { openUrl } from "../core/links.js";
 import { defineWidget } from "./registry.js";
 
 const api = window.edex;
@@ -186,7 +187,7 @@ defineWidget({
 
 // ── Quick links ─────────────────────────────────────────────────────────────
 export async function openTarget(target) {
-  if (/^(https?|mailto):/i.test(target)) return api.shell.openExternal(target);
+  if (/^(https?|mailto):/i.test(target)) return openUrl(target);
   try {
     const st = await api.fs.stat(target);
     if (st.isDir) emit("open-path", { path: st.path });

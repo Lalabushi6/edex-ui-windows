@@ -116,6 +116,24 @@ With GitHub Desktop: update `"version"` in `package.json`, commit, then in
 **History** right-click the commit → **Create Tag…** → `v2.0.1` → **Push
 origin** (it asks to push the tag too).
 
+### How eDEX finds its own updates
+
+Installed and portable copies check this repository's **latest release**
+(once a day, or Settings → About → Check now) and offer to install it. For
+that to work:
+
+- The repository must be **public** (a private one answers "not found").
+- The release needs files named exactly `eDEX-UI-Setup.exe` (installed
+  copies) and `eDEX-UI-Portable.exe` (portable copies) — the workflow
+  uploads both.
+- The tag must be a higher version than the running copy (`v2.0.3` >
+  `2.0.2`); drafts and pre-releases are ignored.
+- eDEX checks each download against the SHA-256 digest GitHub computes for
+  every release file, so don't replace a file in a published release; cut a
+  new one instead.
+- The repository it checks comes from `"repository"` in `package.json`. If
+  you fork or rename the project, change that URL.
+
 ## If something goes wrong
 
 - **Push rejected ("fetch first" / "non-fast-forward")**: the GitHub repo was

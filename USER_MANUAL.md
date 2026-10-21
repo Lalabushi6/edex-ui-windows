@@ -3,9 +3,10 @@
 ## 1. What it is
 
 eDEX-UI is a full-screen shell that sits on top of Windows. From it you can
-launch any installed app, switch between open windows, manage files, run
-terminals and monitor the machine, so you rarely need the Windows desktop or
-taskbar.
+launch any installed app, switch between open windows (or keep them in
+tabs), manage files, run terminals, browse the web, play music and video
+(Spotify included) and monitor the machine, so you rarely need the Windows
+desktop or taskbar.
 
 ## 2. Layout
 
@@ -104,7 +105,7 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 | a window title | switches to that window |
 | a file name | recent files and your Desktop / Documents / Downloads / Pictures / Music / Videos, then **On this PC**: matches anywhere the Windows Search index covers |
 | `"budget 2026"` (in quotes) | **Inside files**: documents containing those words (Windows Search index) |
-| `? how do I find large files` | asks Claude (needs the AI assistant, see section 15) |
+| `? how do I find large files` | asks Claude (needs the AI assistant, see section 17) |
 | `>` then text | commands (new tab, settings, themes, power, media …) |
 | `=2*(3+4)^2` | calculator — Enter copies the result |
 | `10 km to mi`, `72 f in c`, `5 gb to mib`, `90 kmh to mph` | unit conversion (length, mass, volume, area, speed, time, data, energy, power, temperature) — Enter copies |
@@ -112,7 +113,7 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 | `pomodoro`, `focus` | starts a focus session (the Timer widget's Focus mode) |
 | `$ ipconfig /all` | runs the command in the active terminal (or a new one) |
 | `C:\Users\` | browse paths; Tab completes the highlighted folder |
-| `example.com` | opens in your browser |
+| `google.com` | opens in your browser (or an eDEX browser tab, with "Open web links in eDEX" on) |
 | anything else | web search (engine set in Settings → General) |
 
 `Enter` opens, `Ctrl+Enter` reveals the file location (or closes a window),
@@ -162,7 +163,66 @@ When a shell exits, press Enter in its tab to restart it. Double-click a tab to
 rename it. Tabs (and their split panes) are restored the next time eDEX
 starts.
 
-## 7. File explorer
+## 7. Browser tabs
+
+New browser tab: `Ctrl+Shift+B`, the ⌄ tab menu → **Browser**, or the
+launcher ("New browser tab"). With Settings → Web & apps → **Open web links
+in eDEX** on, links from the launcher, quick links, the terminal (Ctrl+click)
+and the explorer's address bar open here instead of your default browser
+(right-click a web result in the launcher to pick either way).
+
+| Action | Keys / mouse |
+|---|---|
+| Address or search | type in the address bar and press Enter (`Ctrl+L` focuses it); text that isn't an address searches with the engine from Settings → General |
+| Back / forward | `Alt+←` / `Alt+→`, or the arrows |
+| Reload / stop | `F5` or `Ctrl+R` |
+| Zoom | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` (a badge shows the zoom; click it to reset) |
+| Find in page | `Ctrl+F` (Enter / Shift+Enter for next / previous, Esc to close) |
+| New tab / close tab | `Ctrl+T` / `Ctrl+W` |
+| Open in your browser | the ↗ button, or right-click the page |
+
+Right-click a page for back / forward / reload, open a link in a new tab or
+in your browser, copy a link, save an image, or inspect. Links that open a
+new window (target=_blank, pop-ups) open as new eDEX browser tabs.
+Downloads ask where to save, and a notice offers to show the file. eDEX's
+own shortcuts (Ctrl+Shift+…, Ctrl+Tab, Ctrl+1…9, Ctrl+, and F1) keep
+working while a page has focus. An empty tab shows your web quick links.
+Browser tabs and their pages come back the next time eDEX starts.
+
+Pages run in their own session: sign-ins and cookies are separate from your
+usual browser and kept until you clear them (Settings → Web & apps →
+Browsing data, or the tab's ⋯ menu). Pages can't reach your files or eDEX
+itself, and requests for the camera, microphone, location, notifications or
+USB devices are refused. While an eDEX menu or dialog is open, the page
+waits behind a still picture of itself. Some sites (Google sign-in, for
+one) refuse embedded browsers: use **Open in your browser** for those.
+
+## 8. App tabs
+
+Any open window can live in a workspace tab:
+
+- right-click it in the dock, or among the launcher's open windows → **Show
+  as a tab in eDEX**;
+- the ⌄ tab menu → **App window…** (or the launcher, "Show a window as a
+  tab…") and pick it;
+- or Settings → Web & apps → **Show every open window as a tab**: every
+  open window gets a tab of its own automatically.
+
+Activating the tab moves the window into the tab's area and brings it
+forward, so it works like part of eDEX (it keeps its own title bar).
+Switching to another tab minimises it; going back restores it. Clicking
+eDEX elsewhere puts the window behind eDEX, and the tab then shows a
+picture of it — click the picture (or the tab) to bring the window back. If
+you move or maximise the window yourself, the tab notices and offers to put
+it back in. **Close tab** puts the window back where it was (the app keeps
+running); **Close window** in the tab closes the app's window. Quitting eDEX
+puts every tabbed window back. A tab whose window closes goes away by
+itself.
+
+App tabs work best in Desktop mode: in Overlay mode eDEX hides itself when
+it shows a tabbed window.
+
+## 9. File explorer
 
 New tab: `Ctrl+Shift+E`.
 
@@ -203,7 +263,7 @@ the largest folders and files; right-click for Open in explorer, Terminal
 here or Copy path. Junctions and symbolic links aren't followed, so nothing
 is counted twice.
 
-## 8. Media player
+## 10. Media player
 
 Open it with `Ctrl+Shift+M`, the tab menu (⌄ → Media player), the launcher
 ("media player"), or the **Media** widget. Add music and video by:
@@ -240,7 +300,59 @@ close the player tab, and Windows' media keys and media overlay control it.
 Formats are whatever Chromium plays: MP3, AAC/M4A, FLAC, WAV, Ogg/Opus,
 MP4 (H.264), WebM and most MKV files.
 
-## 9. On-screen keyboard
+### Visualizer
+
+`V` or the visualizer button (the bars icon on the control bar) opens the
+visualizer panel; Settings → Media has the same options:
+
+| Option | Choices |
+|---|---|
+| Style | Bars, Mirrored, LED blocks, Dots, Spectrum line, Waveform (the sound wave itself), Radial |
+| Bars | 16–128 bands |
+| Colour | theme colour, theme gradient, rainbow, or a custom colour |
+| Peak caps / Reflection | on or off |
+| Smoothing | higher is calmer, lower reacts faster |
+| Sensitivity | 50–200 % |
+
+Changes show at once, even while paused; **Reset** returns to the default
+look.
+
+### Spotify
+
+The **Files | Spotify** switch above the playlist shows Spotify instead of
+your files.
+
+- **Without an account**: whatever the Spotify app on this PC is playing
+  (cover art, title, progress), with play / pause / skip and seek, through
+  Windows' media controls.
+- **With your account connected**: what's playing on your account and on
+  which device; your **Playlists**, **Liked** songs, **Recent** tracks and
+  **Search** (songs, albums, playlists); a device picker (**Play on…**: this
+  PC, your phone, a speaker); shuffle, repeat, volume and seek. Double-click
+  a playlist or song to play it; click one of your own playlists to see its
+  songs (Spotify only lists the songs of playlists you own or collaborate
+  on — others still play). Right-click for Open in Spotify or copy link. If
+  no device is active, eDEX wakes the first available one.
+
+Spotify plays the music itself (its app, your phone, a speaker) and eDEX
+tells it what to play, so the equalizer and visualizer don't apply to it.
+
+To connect (once, a few minutes):
+
+1. Open [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
+   sign in and choose **Create app** (any name and description).
+2. Add the Redirect URI `http://127.0.0.1:43821/callback`, tick **Web API**
+   and save.
+3. Copy the app's **Client ID** into the Spotify view (or Settings → Media)
+   and click **Connect**. Spotify's sign-in page opens in your browser;
+   approve, and come back.
+
+Spotify's rules for these personal apps: the app's owner needs Premium,
+controlling playback needs Premium, and up to five people can use one app.
+The sign-in is encrypted with your Windows account and never includes your
+password; **Disconnect** (the ⋯ menu or Settings → Media) removes it.
+
+## 11. On-screen keyboard
 
 Show it with `Ctrl+Shift+K`, the keyboard button in the dock, or Settings →
 Keyboard. It types into the focused text field (launcher, dialogs,
@@ -280,7 +392,7 @@ draws arrows; `ESCAPED|-- ACUTE` (GRAVE, CIRCUM, TREMA, TILDE, CEDILLA,
 CARON, BREVE, MACRON, OVERRING, BAR, GREEK, IOTASUB) are dead keys. An
 optional top-level `"name"` sets the name shown in the picker.
 
-## 10. Boot logo and ASCII art
+## 12. Boot logo, ASCII art and wallpaper
 
 Settings → Appearance → **Boot logo** → **Edit…** opens the editor:
 
@@ -295,7 +407,22 @@ Settings → Appearance → **Boot logo** → **Edit…** opens the editor:
 
 Up to 120 lines × 240 columns. Leave it empty for the default logo.
 
-## 11. Top bar and tools
+### ASCII wallpaper
+
+A workspace tab that shows ASCII art large, in the theme colour, in place of
+a terminal: the ⌄ tab menu → **ASCII wallpaper**, or the launcher
+("ASCII wallpaper tab"). Double-click it (or right-click → **Edit ASCII
+art…**) for the same editor as the boot logo: paste art, load a `.txt` /
+`.nfo` / `.ans` file or make block letters. Left empty it uses your boot
+logo art, or eDEX in block letters. Right-click for the **animation**
+(Still, Scanline, Glitch, Typing, Pulse), what's **behind it** (nothing,
+matrix rain, hex grid, starfield) and the **clock**; Settings → Appearance →
+ASCII wallpaper has the same options. The Eco profile keeps it still.
+
+The wallpaper is also an idle style (it takes the terminal's place while
+you're away) and an idle-screen / screen-saver effect (section 13).
+
+## 13. Top bar and tools
 
 - **Now playing**: when another app plays something (Spotify, YouTube in a
   browser, VLC, Media Player …), its title shows next to the media keys;
@@ -377,11 +504,26 @@ and hides and returns with eDEX.
 **Idle screen** (Settings → General → Idle screen): after the minutes you
 choose without typing or clicking — and only when eDEX is the window in
 front — eDEX switches to an animated screen (matrix rain, hex grid,
-starfield or globe) with the clock, date and weather. Any input brings it
-back. **Animated background** (Settings → Appearance) draws the same effects
-faintly behind the panels.
+starfield, globe or your ASCII wallpaper) with the clock, date and weather.
+With the **Wallpaper pane** style only the workspace changes: your ASCII
+wallpaper takes the active tab's place while the panels keep running. Any
+input brings it back (the key or click that wakes it isn't passed on to the
+terminal). **Animated background** (Settings → Appearance) draws the same
+effects faintly behind the panels.
 
-## 12. Performance
+**Screen saver** (Settings → General → Screen saver; also the tray menu
+and the launcher, "Start screen saver"): a system-wide screen saver. After
+the minutes you choose without any input anywhere, eDEX covers every
+display (or just the main one) with its effect — above all apps, even while
+eDEX is hidden in the tray. Any key, click or mouse movement ends it, and
+**Lock Windows when it ends** works like Windows' "On resume, display logon
+screen". It holds back while Windows reports a full-screen app (a game, a
+full-screen video, a presentation — Windows also counts a borderless window
+that fills the screen) or a program keeps the display on (video playback,
+calls); turn **Not during videos or full-screen apps** off if it never
+starts. Starting it by hand (Preview, the tray, the launcher) never locks.
+
+## 14. Performance
 
 eDEX is built to stay out of the way:
 
@@ -404,7 +546,7 @@ The page also shows eDEX's own CPU and memory use per process (interface,
 GPU process, native helper …), refreshed every two seconds. The launcher has
 **Cycle performance profile** for switching quickly.
 
-## 13. Global shortcuts
+## 15. Global shortcuts
 
 | Keys | Action |
 |---|---|
@@ -413,6 +555,7 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 | `Ctrl+Shift+P` | Command palette |
 | `Ctrl+Shift+A` | Switch window |
 | `Ctrl+Shift+T` / `Ctrl+Shift+E` | New terminal / explorer tab |
+| `Ctrl+Shift+B` | New browser tab |
 | `Ctrl+Shift+W` | Close tab |
 | `Ctrl+Tab`, `Ctrl+1…9` | Switch tabs |
 | `Ctrl+Shift+F` | Find files |
@@ -426,37 +569,43 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 The two global hotkeys can be changed in Settings → General. If another app
 already owns one, eDEX shows a notice at startup.
 
-## 14. Settings
+## 16. Settings
 
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
   with Windows, desktop takeover, hotkeys, web search engine, sounds,
-  multi-monitor HUD, idle screen, battery and disk alerts.
+  multi-monitor HUD, idle screen (style and effect), screen saver, battery
+  and disk alerts.
 - **Appearance**: themes, the theme editor (every colour, fonts, terminal
   palette, globe, layout hints and theme CSS, with live preview), theme
-  import / export, custom CSS, interface scale, clock format, temperature
-  unit, boot screen and boot logo / ASCII art (see section 10). Details in
-  [THEME_GUIDE.md](THEME_GUIDE.md).
+  import / export, custom CSS, interface scale, animated background, clock
+  format, temperature unit, the ASCII wallpaper, boot screen and boot logo /
+  ASCII art (see section 12). Details in [THEME_GUIDE.md](THEME_GUIDE.md).
 - **Terminal**: default shell, font size, cursor, scrollback, copy on select.
 - **Keyboard**: on-screen keyboard, layout, custom layouts folder and import,
-  password mode (see section 9).
+  password mode (see section 11).
 - **Layout**: presets, every region, panel side and widths, file browser,
   widgets and command widgets (see section 2).
+- **Media**: the visualizer (style, bars, colours, peaks, reflection,
+  smoothing, sensitivity) and the Spotify connection (see section 10).
+- **Web & apps**: opening web links in eDEX, clearing browsing data, and app
+  tabs (see sections 7 and 8).
 - **Files**: hidden items, delete confirmation, default view, whole-PC
   search, history.
 - **Performance**: profile, background slow-down, GPU terminal, eDEX's own
-  resource use (see section 12).
+  resource use (see section 14).
 - **Privacy**: outbound network lookups, screen time and daily limits, the AI
   assistant, clipboard history.
-- **About**: version, **Back up settings** (Export… / Import… — every setting,
-  your own themes and keyboard layouts in one `.json` file), developer tools.
+- **About**: version, data folder (portable or this PC), updates, **Back up
+  settings** (Export… / Import… — every setting, your own themes and keyboard
+  layouts in one `.json` file), developer tools.
 
 Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
 run.
 
-## 15. Privacy and network
+## 17. Privacy and network
 
 With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 
@@ -466,9 +615,16 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 | World-view latency | 12 public sites (BBC, NYT, ABC …) | every 2 minutes while visible |
 | Network ping | google.com | every 30 seconds while visible |
 | Weather | api.open-meteo.com (approximate coordinates only) | at most every 20 minutes |
+| Update check | api.github.com (this project's latest release) | at most once a day, if "Check automatically" is on |
 
-Turn it off and eDEX makes no outbound requests. Clipboard history is kept in
-memory only and can be disabled.
+Turn it off and eDEX makes no outbound requests of its own. Clipboard history
+is kept in memory only and can be disabled.
+
+Things you use yourself go online regardless: pages you open in **browser
+tabs** (in their own session, with their own cookies and sign-ins, cleared
+in Settings → Web & apps), **Check now** for updates, and **Spotify** once
+you connect it (accounts.spotify.com and api.spotify.com, plus Spotify's
+image servers for cover art; only while the Spotify view is open).
 
 **AI assistant** (off until you turn it on in Settings → Privacy and add
 your own Anthropic API key from console.anthropic.com): the key is
@@ -483,9 +639,56 @@ answers run in the terminal only when you click **Run in terminal**.
 Whole-PC search, the disk map, Bluetooth, Now playing and the mixer all work
 locally through Windows; they send nothing anywhere.
 
-## 16. Troubleshooting
+## 18. Updates and portable use
+
+### Updates
+
+Settings → About → **Check now** (or the launcher: "Check for updates")
+looks at this project's GitHub releases page. When there's a newer version
+you see its release notes and **Download and install**: the file downloads,
+is checked against its size and the SHA-256 digest GitHub publishes for it,
+and — after you confirm — eDEX closes and the installer starts (your
+settings stay). The portable build downloads the new portable `.exe`,
+replaces itself on the drive and starts again. **Skip this version** stops
+that version being offered automatically; **Check automatically** (on by
+default) checks once a day while Outbound lookups (Settings → Privacy) are
+on. Checks only work while the GitHub repository is public.
+
+### Portable use (USB drives)
+
+The portable build (`eDEX-UI-Portable.exe`) keeps everything it remembers —
+settings, notes, tasks, themes, keyboard layouts, screen time, browser-tab
+sign-ins, the Spotify sign-in — in an **`eDEX-UI Data`** folder next to the
+`.exe`, so it travels with the drive and leaves the PC's own profile alone.
+Settings → About → **Data folder** shows where (**Open** shows it in
+Explorer).
+
+- The first time it runs on a PC where eDEX is also installed, it offers to
+  copy that installation's settings, notes, tasks, themes and keyboard
+  layouts to the drive.
+- On a read-only drive it uses the PC's profile instead (Settings → About
+  says so).
+- The AI key and the Spotify sign-in are encrypted with the Windows account
+  that saved them: on another PC, paste the key and connect Spotify again.
+- **Start with Windows** in the portable build starts the `.exe` on the
+  drive, so it only works while the drive is plugged in.
+
+## 19. Troubleshooting
 
 - **A hotkey does nothing**: another app owns it — pick a new one in Settings → General.
+- **The screen saver never starts**: Windows thinks a full-screen app is
+  running (it also counts a borderless window that fills the screen) or a
+  program keeps the display on (a browser playing video, a call). Turn off
+  "Not during videos or full-screen apps" in Settings → General.
+- **A website says the browser isn't supported, or won't let you sign in**:
+  some sites (Google sign-in among them) refuse embedded browsers — use the
+  ↗ button (Open in your browser).
+- **Spotify says "Playback control needs Spotify Premium"**: Spotify only
+  allows controlling playback with Premium; browsing still works.
+- **Spotify says "Port 43821 is in use"**: another program holds the
+  sign-in port; close it and click Connect again.
+- **Updates say "No published release found"**: the repository is private
+  or has no releases yet.
 - **Everything refreshes slowly**: you are probably on battery, where the
   Auto profile switches to Eco. Pick Balanced or Performance in Settings →
   Performance.

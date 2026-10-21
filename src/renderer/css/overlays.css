@@ -223,3 +223,20 @@
 .greeting em { font-style: normal; font-weight: 500; margin-left: .35em; }
 /* ── Drag ghost ─────────────────────────────────────────────────────────── */
 .drop-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-family: var(--font-ui); letter-spacing: .2em; text-transform: uppercase; color: var(--c); background: rgb(var(--rgb) / .06); border: 2px dashed var(--c-50); }
+
+/* Updates dialog */
+.dialog.upd-dialog { width: min(46rem, 92vw); }
+.upd-dialog .dialog-title { display: flex; align-items: center; gap: .4rem; }
+.upd-from { font-size: .78rem; }
+.upd-status { font-size: 1rem; }
+.upd-bar { height: 5px; background: rgb(var(--rgb) / .25); }
+.upd-bar > i { display: block; height: 100%; width: 0; background: var(--c); transition: width .2s; }
+.upd-body { display: flex; flex-direction: column; gap: .5rem; min-height: 0; }
+.upd-body:empty { display: none; }
+.upd-meta { font-size: .78rem; }
+.upd-notes { max-height: 40vh; overflow-y: auto; padding: .6rem .8rem; border: 1px solid var(--c-30); background: var(--c-06); font-size: .88rem; line-height: 1.45; display: flex; flex-direction: column; gap: .3rem; }
+.upd-h { letter-spacing: .08em; margin-top: .4rem; text-transform: uppercase; font-size: .9rem; }
+.upd-h1, .upd-h2 { font-size: 1rem; }
+.upd-li { padding-left: 1rem; position: relative; }
+.upd-li::before { content: "›"; position: absolute; left: .2rem; color: var(--c-70); }
+.upd-dialog .dialog-actions .grow { flex: 1; }

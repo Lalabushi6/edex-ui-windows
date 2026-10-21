@@ -198,13 +198,19 @@ export function previewBootTitle(raw, subtitle) {
 }
 
 // ── Editor ──────────────────────────────────────────────────────────────────
-export function openBootLogoEditor(onSaved) {
+// Edits the boot logo, or (with `key`) any other art setting such as the
+// ASCII wallpaper.
+export function openBootLogoEditor(onSaved, {
+  key = "bootLogo", title = "Boot logo", emptyLabel = "Default logo",
+  emptyHint = "Leave empty for the default eDEX-UI logo."
+} = {}) {
+  const isBoot = key === "bootLogo";
   openModal((close) => {
     const area = h("textarea", {
       class: "input bootart-area", spellcheck: false, wrap: "off",
-      placeholder: "Type a title, or paste ASCII art (several lines).\n\nLeave empty for the default eDEX-UI logo."
+      placeholder: `Type a title, or paste ASCII art (several lines).\n\n${emptyHint}`
     });
-    area.value = settings.get("bootLogo") || "";
+    area.value = settings.get(key) || "";
     const previewLogo = h("h1", { class: "bootart-logo" });
     const previewBox = h("div", { class: "bootart-preview" }, previewLogo);
     const info = h("span", { class: "muted bootart-info" });
@@ -217,7 +223,7 @@ export function openBootLogoEditor(onSaved) {
       const { lines, cols } = artSize(text);
       const tooBig = text.length > MAX_ART || lines > MAX_LINES || cols > MAX_COLS;
       info.classList.toggle("warn-text", tooBig);
-      setText(info, !text ? "Default logo"
+      setText(info, !text ? emptyLabel
         : !text.includes("\n") ? `Title text · ${text.length} characters`
           : `ASCII art · ${lines} lines × ${cols} columns · ${text.length.toLocaleString()} / ${MAX_ART.toLocaleString()} characters${tooBig ? " — too large, trim it" : ""}`);
       return { text, tooBig };
@@ -250,17 +256,17 @@ export function openBootLogoEditor(onSaved) {
     };
     const save = () => {
       const { text, tooBig } = refresh();
-      if (tooBig) { toast(`Boot logo must be at most ${MAX_LINES} lines × ${MAX_COLS} columns and ${MAX_ART.toLocaleString()} characters`, { level: "warn" }); return; }
-      settings.set({ bootLogo: text });
+      if (tooBig) { toast(`${title} must be at most ${MAX_LINES} lines × ${MAX_COLS} columns and ${MAX_ART.toLocaleString()} characters`, { level: "warn" }); return; }
+      settings.set({ [key]: text });
       onSaved?.(text);
-      toast(text ? "Boot logo saved" : "Default boot logo restored", { level: "ok" });
+      toast(text ? `${title} saved` : `${title}: default restored`, { level: "ok" });
       close(true);
     };
     area.addEventListener("keydown", (e) => { if (e.key === "s" && e.ctrlKey) { e.preventDefault(); save(); } });
     requestAnimationFrame(refresh);
 
     return h("div", { class: "bootart" },
-      h("div", { class: "modal-head" }, icon("terminal"), h("span", { class: "modal-title grow" }, "Boot logo"),
+      h("div", { class: "modal-head" }, icon(isBoot ? "terminal" : "wallpaper"), h("span", { class: "modal-title grow" }, title),
         h("button", { class: "icon-btn", type: "button", title: "Close (Esc)", onclick: () => close() }, icon("close"))),
       h("div", { class: "bootart-body" },
         h("div", { class: "bootart-col" }, area,
@@ -271,9 +277,9 @@ export function openBootLogoEditor(onSaved) {
             h("button", { class: "btn sm", type: "button", onclick: () => setArt("") }, icon("trash"), "Clear"))),
         h("div", { class: "bootart-col" }, previewBox, info)),
       h("div", { class: "dialog-actions bootart-actions" },
-        h("button", { class: "btn", type: "button", onclick: () => previewBootTitle(area.value, settings.get("bootSubtitle")) }, icon("play"), "Preview boot"),
+        isBoot && h("button", { class: "btn", type: "button", onclick: () => previewBootTitle(area.value, settings.get("bootSubtitle")) }, icon("play"), "Preview boot"),
         h("span", { class: "grow" }),
         h("button", { class: "btn", type: "button", onclick: () => close() }, "Cancel"),
         h("button", { class: "btn primary", type: "button", onclick: save }, "Save")));
-  }, { className: "bootart-modal", label: "Boot logo" });
+  }, { className: "bootart-modal", label: title });
 }
