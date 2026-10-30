@@ -51,6 +51,14 @@ jobs:
       - name: Check sources
         run: npm run check
 
+      # Starts the app on a throwaway profile and clicks through its main
+      # parts (scripts/smoke.js). Informational for now: a failure shows in
+      # the run but doesn't stop the build or a release.
+      - name: Smoke test
+        run: npm run smoke
+        continue-on-error: true
+        timeout-minutes: 6
+
       - name: Build installer and portable exe
         run: npm run dist
 

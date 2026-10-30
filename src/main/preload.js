@@ -230,6 +230,15 @@ contextBridge.exposeInMainWorld("edex", {
     refresh: invoke("calfeeds:refresh"),
     onChange: subscribe("calfeeds:changed")
   },
+  bench: {
+    mark: invoke("bench:mark"),
+    info: invoke("bench:info"),
+    begin: invoke("bench:begin"),
+    end: invoke("bench:end"),
+    sample: invoke("bench:sample"),
+    helper: invoke("bench:helper"),
+    save: invoke("bench:save")
+  },
   spotify: {
     status: invoke("spotify:status"),
     connect: invoke("spotify:connect"),

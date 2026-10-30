@@ -150,6 +150,17 @@ export function startEffect(canvas, kind, { maxFps = 24, scale = 1 } = {}) {
   };
 }
 
+// One frame of an effect per call, with no timer or pausing (the benchmark
+// times how long drawing takes on this PC).
+export function effectStepper(canvas, kind, { scale = 1 } = {}) {
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2) * scale;
+  const r = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(r.width * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  return (EFFECTS[kind] || matrix)(ctx, canvas.width, canvas.height, dpr);
+}
+
 // Optional animated background behind the panels (Settings → Appearance).
 export function initBackgroundFx() {
   let canvas = null;

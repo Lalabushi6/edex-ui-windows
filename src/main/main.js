@@ -42,6 +42,7 @@ const { registerLyrics } = require("./ipc/lyrics");
 const { registerRadio } = require("./ipc/radio");
 const { registerLibrary } = require("./ipc/library");
 const { registerCalendarFeeds } = require("./ipc/calfeeds");
+const { registerBenchmark } = require("./ipc/benchmark");
 const { Hud } = require("./hud");
 const { Screensaver } = require("./lib/screensaver");
 const { Notices } = require("./lib/notices");
@@ -95,6 +96,8 @@ function start() {
   let appTabFront = false;
   let tabKeys = null; // tab hotkeys registered while an app tab is in front
   let tabKeysNote = "";
+  // Startup timings (epoch ms) for the benchmark.
+  const startup = { processStart: Date.now() - process.uptime() * 1000 };
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -117,6 +120,7 @@ function start() {
   });
 
   app.whenReady().then(async () => {
+    startup.appReady = Date.now();
     registerHandlers();
     // First run of the portable build on a PC that has the installed version:
     // offer to bring its settings along to the drive.
@@ -248,6 +252,7 @@ function start() {
     registerRadio({ windows });
     library = registerLibrary({ settings, windows });
     calfeeds = registerCalendarFeeds({ settings, windows });
+    registerBenchmark({ settings, telemetry, bridge, aux, portable, startup });
     livewall = new LiveWallpaper({ settings, windows, bridge, gameMode });
     // Development runs can poke these from the main-process inspector.
     if (!app.isPackaged) globalThis.__edex = { livewall, gameMode, notices, games };
@@ -267,6 +272,7 @@ function start() {
     const recovering = takeover.recover();
 
     const win = windows.create();
+    win.once("ready-to-show", () => { startup.readyToShow = Date.now(); });
     recovering.finally(() => takeover.attach(win));
     hud.attach(win);
     browser.attach(win);

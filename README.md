@@ -333,6 +333,12 @@ locked down.
 - **Performance profiles** (Auto / Performance / Balanced / Eco; Auto switches
   to Eco on battery or battery saver) set refresh rates and animation frame
   rates; Settings → Performance shows eDEX's own CPU and memory use.
+- **Benchmark** (Settings → Performance, or "Run benchmark" in the launcher):
+  about 45 seconds measuring startup time, idle CPU and memory (with your
+  settings and in Eco), smoothness, effect drawing, terminal speed and the
+  native helper, then saves a report with no personal data to
+  `Documents\eDEX benchmarks`, so different PCs and versions can be compared.
+  The goal is for eDEX to run well on older laptops, not just fast ones.
 
 ### Settings, updates and portable use
 - **Settings backup**: export / import every setting, your custom themes and
@@ -628,6 +634,7 @@ These only work when running from source; packaged builds ignore them.
 | `npm start` | Run eDEX from source (full screen) |
 | `npm run dev` | Run it in a resizable window |
 | `npm run check` | Static checks (syntax, imports, themes, keyboard layouts) |
+| `npm run smoke` | Starts eDEX on a throwaway profile and clicks through its main parts (tabs, media views, every settings page, panels, workspaces, Ctrl+Tab, a quick benchmark); about a minute, needs Node.js 22+ and a Windows desktop session |
 | `npm run dist` | Build the installer and portable `.exe` into `dist/` |
 | `npm run dist:dir` | Build just the unpacked app (`dist/win-unpacked/eDEX-UI.exe`) |
 
@@ -703,7 +710,7 @@ src/renderer/        UI (ES modules served from app://edex)
 themes/              built-in themes (JSON, eDEX-UI format)
 keyboards/           on-screen keyboard layouts (JSON, eDEX-UI format)
 build/               app icon and the afterPack hook (rcedit)
-scripts/             check.js
+scripts/             check.js (static checks), smoke.js (end-to-end smoke test)
 media/               README logo and screenshots
 docs/                PUBLISHING.md (GitHub and releases)
 .github/workflows/   build.yml (installer + portable exe, releases), cleanup-artifacts.yml

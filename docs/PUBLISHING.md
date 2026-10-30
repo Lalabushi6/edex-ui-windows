@@ -114,6 +114,17 @@ files on the release page instead, which doesn't use artifact storage.
 A release is a permanent page with the `.exe` files attached, under the
 repository's **Releases**.
 
+Before each release:
+
+- `npm run check` and `npm run smoke` both pass (the smoke test starts eDEX
+  on a throwaway profile and clicks through its main parts in about a
+  minute).
+- Run **Settings → Performance → Run benchmark…** on your oldest test
+  laptop and compare the report with the previous version's: startup, idle
+  CPU and memory shouldn't get worse without a reason.
+- Releases can't be changed once published if release immutability is on,
+  so check the version number before pushing the tag.
+
 1. Bump the version (this edits `package.json`, commits, and creates the tag
    `v2.0.1`; use `minor` or `major` for bigger steps):
 

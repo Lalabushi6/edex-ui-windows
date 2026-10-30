@@ -38,6 +38,7 @@ import { editWallpaperArt, mountWallpaper } from "./shell/wallpaper.js";
 import { clearBrowsingData } from "./workspace/browser.js";
 import { initNotices } from "./shell/notices.js";
 import { openGameLibrary, loadGames } from "./shell/games.js";
+import { openBenchmark, markStartup } from "./shell/benchmark.js";
 import { initProfiles, switchProfile, newProfileDialog, captureProfile, activeProfile } from "./shell/profiles.js";
 import { startEffect } from "./shell/fx.js";
 
@@ -100,6 +101,7 @@ async function registerCommands() {
     // In a focused terminal the same keys open find-in-terminal instead.
     when: () => !document.activeElement?.closest?.(".xterm")
   });
+  cmd("benchmark.open", "Run benchmark", () => openBenchmark(), { icon: "gauge", keywords: "benchmark performance speed test measure slow old laptop report" });
   cmd("snapshot.export", "Export system snapshot", async () => {
     try {
       const path = await api.sys.snapshot();
@@ -352,9 +354,11 @@ async function main() {
   preloadLauncher();
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
+  markStartup("uiReady");
 
   await boot;
   markBooted();
+  markStartup("booted");
   // Re-arms task and event reminders even when the Tasks widget is hidden.
   loadAgenda();
   showGreeting($("#workspace"));

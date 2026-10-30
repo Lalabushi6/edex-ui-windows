@@ -681,6 +681,9 @@ async function buildPage(id) {
         h("span", { style: { display: "flex", alignItems: "center", gap: ".6rem" } }, active, select("perfProfile", [["auto", "Auto"], ["performance", "Performance"], ["balanced", "Balanced"], ["eco", "Eco"]]))),
       row("Slow down in the background", "Refresh less often and lower animation frame rates while another app has focus. eDEX always pauses completely when hidden, minimised or covered.", toggle("throttleUnfocused")),
       row("GPU-accelerated terminal", "Draw terminals with WebGL. Much faster for heavy output; turn off if text looks wrong on your graphics driver.", toggle("termGpu")),
+      h("h3", null, "Benchmark"),
+      row("Benchmark this PC", "About 45 seconds: startup time, idle CPU and memory (your settings and Eco), smoothness, effect drawing, terminal speed and the native helper. Saves a report with no personal data to Documents › eDEX benchmarks, to compare PCs and versions.",
+        h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("benchmark.open"), 200); } }, icon("gauge"), "Run benchmark…")),
       h("h3", null, "eDEX resource usage"),
       row("Total", "All eDEX processes, refreshed every two seconds.", usage.total),
       usage.list);

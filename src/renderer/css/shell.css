@@ -600,6 +600,27 @@ button.cal-day { background: transparent; color: inherit; font: inherit; cursor:
 .ws-btn { display: inline-flex; align-items: center; gap: .3rem; margin-left: .35rem; }
 .ws-btn .ico { width: .85rem; height: .85rem; }
 .dialog.ws-dialog { width: min(34rem, 92vw); }
+
+/* Benchmark */
+.dialog.bench { width: min(46rem, 94vw); display: flex; flex-direction: column; gap: .6rem; }
+.dialog.bench .dialog-title { display: flex; align-items: center; gap: .5rem; }
+.bench-head { display: flex; gap: .5rem; }
+.bench-head .input { flex: 1; }
+.bench-steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .25rem .8rem; font-size: .8rem; }
+.bench-step { display: flex; align-items: center; gap: .45rem; color: var(--c-50); }
+.bench-dot { width: .55rem; height: .55rem; border: 1px solid var(--c-50); flex: none; }
+.bench-step[data-state=running] { color: var(--c); }
+/* No animation while it measures: it would cost CPU in the results. */
+.bench-step[data-state=running] .bench-dot { background: var(--c); }
+.bench-step[data-state=done] { color: var(--c-70); }
+.bench-step[data-state=done] .bench-dot { background: var(--c-70); border-color: var(--c-70); }
+.bench-step[data-state=failed], .bench-step[data-state=stopped] { color: #ff8a80; }
+.bench-area { height: 11rem; border: 1px solid var(--c-20); background: var(--bg-deep, #000); overflow: hidden; position: relative; }
+.bench-area:empty::after { content: "Test area"; position: absolute; inset: 0; display: grid; place-items: center; font-size: .72rem; letter-spacing: .2em; text-transform: uppercase; color: var(--c-20); }
+.bench-area.bench-offscreen { position: fixed; left: 0; top: 0; width: 640px; height: 240px; opacity: 0; pointer-events: none; z-index: -1; }
+.bench-canvas, .bench-term { width: 100%; height: 100%; display: block; }
+.bench-status { font-size: .8rem; }
+.bench-results { margin: 0; padding: .6rem .7rem; border: 1px solid var(--c-30); font-family: var(--font-mono); font-size: .76rem; line-height: 1.5; white-space: pre-wrap; max-height: 14rem; overflow: auto; user-select: text; }
 .ws-check { display: flex; align-items: center; gap: .45rem; font-size: .86rem; color: var(--c-90); }
 .ws-card { border: 1px solid var(--c-20); padding: .5rem .7rem; margin-bottom: .7rem; background: var(--c-06); }
 .ws-card.current { border-color: var(--c-50); }

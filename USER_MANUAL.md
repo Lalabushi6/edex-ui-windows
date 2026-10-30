@@ -735,6 +735,30 @@ The page also shows eDEX's own CPU and memory use per process (interface,
 GPU process, native helper …), refreshed every two seconds. The launcher has
 **Cycle performance profile** for switching quickly.
 
+### Benchmark
+
+Settings → Performance → **Run benchmark…** (or "Run benchmark" in the
+launcher) measures how eDEX runs on this PC, in about 45 seconds. Keep eDEX
+in front and leave the PC alone while it runs; for meaningful startup times,
+run it soon after starting eDEX.
+
+| Measured | What it tells you |
+|---|---|
+| Startup | Seconds from launching eDEX to being usable (and to the end of the boot animation) |
+| Idle CPU and memory | eDEX's processes and native helpers while it sits on screen with your settings, then in the Eco profile, split by process kind (main, interface, GPU, helpers) |
+| Smoothness | Frame pacing (95th-percentile frame time, long frames) and how late timers fire |
+| Effect drawing | Milliseconds to draw one frame of the matrix effect |
+| Terminal | How fast a terminal fills with coloured output (WebGL or the plain renderer) |
+| Native helper | Round-trip time of the helper that reads system information |
+
+It also records the hardware (CPU, cores, RAM, GPU, disk type, display,
+battery), the Windows build and the settings that affect speed. The summary
+shows on screen (**Copy summary** copies it); **Save report** writes the full
+results as a `.json` file to `Documents\eDEX benchmarks`, named after the
+eDEX version, the CPU and the RAM. Reports contain no PC or user name, no
+paths and no network addresses, and nothing is sent anywhere: share the file
+yourself if you want to compare PCs.
+
 ## 17. Global shortcuts
 
 | Keys | Action |
@@ -795,8 +819,8 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
   tabs and opening apps inside eDEX (see sections 9 and 10).
 - **Files**: hidden items, delete confirmation, default view, whole-PC
   search, history.
-- **Performance**: profile, background slow-down, GPU terminal, eDEX's own
-  resource use (see section 16).
+- **Performance**: profile, background slow-down, GPU terminal, the
+  benchmark, eDEX's own resource use (see section 16).
 - **Privacy**: outbound network lookups, screen time and daily limits, the AI
   assistant, clipboard history.
 - **About**: version, data folder (portable or this PC), updates, **Back up
