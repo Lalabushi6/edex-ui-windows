@@ -645,6 +645,7 @@ These only work when running from source; packaged builds ignore them.
 | `npm run dev` | Run it in a resizable window |
 | `npm run check` | Static checks (syntax, imports, themes, keyboard layouts) |
 | `npm run smoke` | Starts eDEX on a throwaway profile and clicks through its main parts (tabs, media views, every settings page, panels, workspaces, Ctrl+Tab, a quick benchmark); about a minute, needs Node.js 22+ and a Windows desktop session |
+| `npm run bench:compare` | Lines up saved benchmark reports (`Documents\eDEX benchmarks` by default) in one table: a column per PC and version, the median of repeated runs, what got better or worse between two, and an optional check against a budget (`-- --help` lists the options) |
 | `npm run dist` | Build the installer and portable `.exe` into `dist/` |
 | `npm run dist:dir` | Build just the unpacked app (`dist/win-unpacked/eDEX-UI.exe`) |
 
@@ -720,7 +721,8 @@ src/renderer/        UI (ES modules served from app://edex)
 themes/              built-in themes (JSON, eDEX-UI format)
 keyboards/           on-screen keyboard layouts (JSON, eDEX-UI format)
 build/               app icon and the afterPack hook (rcedit)
-scripts/             check.js (static checks), smoke.js (end-to-end smoke test)
+scripts/             check.js (static checks), smoke.js (end-to-end smoke test),
+                     bench-compare.js (compares benchmark reports; bench-budget.json holds its limits)
 media/               README logo and screenshots
 docs/                PUBLISHING.md (GitHub and releases)
 .github/workflows/   build.yml (installer + portable exe, releases), cleanup-artifacts.yml

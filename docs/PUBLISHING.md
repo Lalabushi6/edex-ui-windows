@@ -120,7 +120,9 @@ Before each release:
   on a throwaway profile and clicks through its main parts in about a
   minute).
 - Run **Settings → Performance → Run benchmark…** on your oldest test
-  laptop and compare the report with the previous version's: startup, idle
+  laptop and compare the report with the previous version's
+  (`npm run bench:compare -- <the two reports>`, or the whole folder; add
+  `--budget scripts/bench-budget.json` to check your limits): startup, idle
   CPU and memory shouldn't get worse without a reason.
 - Releases can't be changed once published if release immutability is on,
   so check the version number before pushing the tag.

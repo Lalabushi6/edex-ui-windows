@@ -1,0 +1,15 @@
+{
+  "name": "Oldest test laptop",
+  "note": "Fill in the limits for your oldest laptop (null means no limit), then check its reports with: npm run bench:compare -- <folder of that laptop's reports> --budget scripts/bench-budget.json. Names are the keys of a report's summary. max = at most, min = at least.",
+  "max": {
+    "startupToUsableSec": null,
+    "idleCpuPctOfCore": null,
+    "calmIdleCpuPctOfCore": null,
+    "ecoIdleCpuPctOfCore": null,
+    "idleMemoryMB": null,
+    "mainLagP95Ms": null
+  },
+  "min": {
+    "terminalMBps": null
+  }
+}
