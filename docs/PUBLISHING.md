@@ -82,9 +82,14 @@ Every push runs the **Build** workflow
 Windows machine at GitHub: it installs dependencies, runs the checks and
 builds the installer and the portable `.exe`.
 
-To download those builds: repository → **Actions** tab → the latest
-**Build** run → **Artifacts** → `eDEX-UI-windows` (a zip with both `.exe`
-files). Artifacts are kept for 90 days.
+Ordinary pushes only check that everything builds; they don't keep the
+`.exe` files, because GitHub's artifact storage is small on private
+repositories (500 MB on the free plan, and one build is about 200 MB). To
+get a test build you can download: repository → **Actions** tab → **Build**
+→ **Run workflow** → **Run workflow**. When it finishes, the run's
+**Artifacts** list `eDEX-UI-Setup.exe` and `eDEX-UI-Portable.exe`, each
+downloadable as the `.exe` itself, for 3 days. Release builds put their
+files on the release page instead, which doesn't use artifact storage.
 
 ## Publishing a release (the download page)
 
@@ -144,6 +149,15 @@ that to work:
   → Save, then re-run the job (Actions → the run → Re-run jobs).
 - **Build fails in `npm ci`**: `package-lock.json` is out of date; run
   `npm install` locally, commit the updated lock file and push.
+- **"Artifact storage quota has been hit"**: old build artifacts fill the
+  repository's storage (they used to be kept for 90 days after every push).
+  Run **Actions → Clean up artifacts → Run workflow** (it deletes old
+  artifacts; release files aren't touched); GitHub recalculates the usage
+  6–12 hours later. Uploads no longer fail the build either way.
+- **"Node.js 20 is deprecated" warnings**: an action in a workflow is on an
+  old major version. Bump it (`actions/checkout@v7`, `actions/setup-node@v7`,
+  `actions/upload-artifact@v7`, `softprops/action-gh-release@v3` are the
+  Node 24 ones the workflows use).
 - **SmartScreen warns about the downloaded .exe**: expected for unsigned
   apps. Users click **More info → Run anyway**. Signing needs a paid
   code-signing certificate; electron-builder picks one up from the

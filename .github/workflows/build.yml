@@ -1,6 +1,11 @@
 # Builds the Windows installer and portable .exe on every push and pull
-# request (downloadable from the run's "Artifacts"), and publishes them as a
-# GitHub Release when a version tag such as v2.0.0 is pushed.
+# request (as a check), and publishes them as a GitHub Release when a version
+# tag such as v2.0.0 is pushed.
+#
+# Artifact storage is small on private repositories (500 MB on the free
+# plan, and one build is about 200 MB), so the executables are only kept as
+# downloadable artifacts when you start a build by hand (Actions → Build →
+# Run workflow), for a few days. Release files don't count against it.
 name: Build
 
 on:
@@ -9,6 +14,17 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      artifacts:
+        description: "Keep the .exe files as downloadable artifacts (3 days)"
+        type: boolean
+        default: true
+
+# A newer push to the same branch replaces a build still running; release
+# builds always finish.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   windows:
@@ -17,10 +33,10 @@ jobs:
       contents: write
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -34,16 +50,34 @@ jobs:
       - name: Build installer and portable exe
         run: npm run dist
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      # Each file on its own and unzipped, so it downloads as the .exe itself.
+      # A full storage quota doesn't fail the build.
+      - name: Upload installer
+        if: github.event_name == 'workflow_dispatch' && inputs.artifacts
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
         with:
-          name: eDEX-UI-windows
-          path: dist/*.exe
+          path: dist/eDEX-UI-Setup.exe
+          archive: false
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload portable exe
+        if: github.event_name == 'workflow_dispatch' && inputs.artifacts
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/eDEX-UI-Portable.exe
+          archive: false
+          retention-days: 3
           if-no-files-found: error
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          files: dist/*.exe
+          files: |
+            dist/eDEX-UI-Setup.exe
+            dist/eDEX-UI-Portable.exe
+          fail_on_unmatched_files: true
           generate_release_notes: true
