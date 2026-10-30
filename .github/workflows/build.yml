@@ -2,10 +2,14 @@
 # request (as a check), and publishes them as a GitHub Release when a version
 # tag such as v2.0.0 is pushed.
 #
-# Artifact storage is small on private repositories (500 MB on the free
-# plan, and one build is about 200 MB), so the executables are only kept as
-# downloadable artifacts when you start a build by hand (Actions → Build →
-# Run workflow), for a few days. Release files don't count against it.
+# GitHub's artifact storage allowance is small (500 MB per account on the
+# free plan) and one build is about 200 MB, so
+# the executables are only kept as downloadable artifacts when you start a
+# build by hand (Actions → Build → Run workflow), for a few days. Release
+# files don't count against it.
+#
+# Pull requests from forks build with a read-only token (GitHub's default
+# for the pull_request event), so they can't publish anything.
 name: Build
 
 on:

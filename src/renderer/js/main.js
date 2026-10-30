@@ -295,6 +295,7 @@ async function mainWallpaper(effect) {
 }
 
 async function main() {
+  console.log("%cmade by lalabushi", "color:#7fc8ff;font:600 11px monospace;letter-spacing:.2em");
   const params = new URLSearchParams(location.search);
   if (params.has("hud")) {
     if (params.has("wall")) document.documentElement.classList.add("wall");

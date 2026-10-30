@@ -1,0 +1,11 @@
+# Keeps the workflows' actions current (new major versions, runtime moves
+# such as Node 20 -> 24) with one pull request a month.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

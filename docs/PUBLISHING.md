@@ -75,6 +75,24 @@ gh repo create edex-ui-windows --public --source . --push
 
 Later changes: `git push` after committing.
 
+## After making the repository public
+
+- **Downloads and updates work**: the README's download buttons and the
+  Releases page are open to everyone, and installed copies of eDEX can now
+  find new releases (Settings → About → Check now).
+- **Turn on private vulnerability reporting** so [SECURITY.md](../SECURITY.md)'s
+  "Report a vulnerability" button exists: repository → **Settings** → the
+  **Security** section → **Private vulnerability reporting → Enable**.
+  Dependabot alerts (same section) warn about vulnerable dependencies.
+- **Dependabot** ([`.github/dependabot.yml`](../.github/dependabot.yml))
+  opens one pull request a month when the workflows' actions have new
+  versions; merge it after the build passes.
+- **Commit email**: every commit shows the email it was made with. For
+  future commits, use GitHub's no-reply address (see *Your email address in
+  commits* above); commits already pushed keep theirs.
+- Pull requests from forks build with a read-only token, so they can't
+  publish releases or change the repository.
+
 ## The automatic build
 
 Every push runs the **Build** workflow
@@ -83,8 +101,8 @@ Windows machine at GitHub: it installs dependencies, runs the checks and
 builds the installer and the portable `.exe`.
 
 Ordinary pushes only check that everything builds; they don't keep the
-`.exe` files, because GitHub's artifact storage is small on private
-repositories (500 MB on the free plan, and one build is about 200 MB). To
+`.exe` files, because GitHub's artifact storage allowance is small (500 MB
+per account on the free plan) and one build is about 200 MB. To
 get a test build you can download: repository → **Actions** tab → **Build**
 → **Run workflow** → **Run workflow**. When it finishes, the run's
 **Artifacts** list `eDEX-UI-Setup.exe` and `eDEX-UI-Portable.exe`, each

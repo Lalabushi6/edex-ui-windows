@@ -521,7 +521,7 @@ button.cal-day { background: transparent; color: inherit; font: inherit; cursor:
 .du-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: .35rem; }
 .du-crumbs { display: flex; flex-wrap: wrap; gap: .1rem; font-size: .78rem; }
 .du-crumb { padding: 0 .15rem; border: 0; background: transparent; color: var(--c-70); }
-.du-crumb::after { content: " â€º"; color: var(--c-35); }
+.du-crumb::after { content: " \203A"; color: var(--c-35); }
 .du-crumb.current { color: var(--c); }
 .du-crumb.current::after { content: ""; }
 .du-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }

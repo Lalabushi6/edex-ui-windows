@@ -237,7 +237,7 @@ export function parseWhen(input) {
     const ms = parseDuration(m[1].replace(/\s+/g, ""));
     if (ms) { due = Date.now() + ms; text = text.slice(0, m.index).trim(); }
   }
-  // (today|tomorrow|mondayâ€¦) (at) 5pm
+  // (today|tomorrow|monday…) (at) 5pm
   if (!due) {
     m = /\s*\b(today|tonight|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?\s*$/i.exec(text);
     if (m) {
