@@ -1,0 +1,35 @@
+# Deletes old build artifacts to free the repository's artifact storage
+# ("Artifact storage quota has been hit"). Run it from Actions → Clean up
+# artifacts → Run workflow. GitHub recalculates the usage 6–12 hours later.
+# Release files aren't artifacts and are never touched.
+name: Clean up artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "How many of the newest artifacts to keep"
+        type: number
+        default: 0
+
+permissions:
+  actions: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ inputs.keep }}
+        run: |
+          case "$KEEP" in ''|*[!0-9]*) echo "keep must be a whole number"; exit 1 ;; esac
+          # Newest first, across every page.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | "\(.id) \(.size_in_bytes) \(.name)"' > artifacts.txt
+          total=$(wc -l < artifacts.txt)
+          echo "$total artifacts; keeping the newest $KEEP"
+          tail -n +"$((KEEP + 1))" artifacts.txt | while read -r id size name; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "deleted $name ($((size / 1048576)) MB)"
+          done

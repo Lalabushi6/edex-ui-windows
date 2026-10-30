@@ -648,9 +648,11 @@ How the build works:
 #### Getting the bleeding edge:
 
 **GitHub Actions** ([`.github/workflows/build.yml`](.github/workflows/build.yml))
-builds both executables on every push and pull request. Open the
-[Actions](https://github.com/Lalabushi6/edex-ui-windows/actions) tab → the
-latest **Build** run → **Artifacts** → `eDEX-UI-windows` (kept for 90 days).
+builds both executables on every push and pull request as a check. For a
+build you can download, open the
+[Actions](https://github.com/Lalabushi6/edex-ui-windows/actions) tab →
+**Build** → **Run workflow**; the run's **Artifacts** then have
+`eDEX-UI-Setup.exe` and `eDEX-UI-Portable.exe` (kept for 3 days).
 
 #### Releasing:
 
@@ -704,7 +706,7 @@ build/               app icon and the afterPack hook (rcedit)
 scripts/             check.js
 media/               README logo and screenshots
 docs/                PUBLISHING.md (GitHub and releases)
-.github/workflows/   build.yml (installer + portable exe, releases)
+.github/workflows/   build.yml (installer + portable exe, releases), cleanup-artifacts.yml
 ```
 
 #### Documentation:
