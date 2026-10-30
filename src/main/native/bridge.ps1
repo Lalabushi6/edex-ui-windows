@@ -228,7 +228,7 @@ public static class EdexNative {
         if (len > 0) GetWindowText(fg, title, title.Capacity);
         var cls = new StringBuilder(128);
         GetClassName(fg, cls, cls.Capacity);
-        return "{\"pid\":" + pid.ToString(CultureInfo.InvariantCulture) + ",\"exe\":" + Q(exe) + ",\"desc\":" + Q(desc ?? "") +
+        return "{\"hwnd\":" + fg.ToInt64().ToString(CultureInfo.InvariantCulture) + ",\"pid\":" + pid.ToString(CultureInfo.InvariantCulture) + ",\"exe\":" + Q(exe) + ",\"desc\":" + Q(desc ?? "") +
             ",\"title\":" + Q(title.ToString()) + ",\"cls\":" + Q(cls.ToString()) + "}";
     }
 
@@ -1251,6 +1251,29 @@ public static class EdexWin {
         } finally { Restore(old); }
     }
 
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextLength(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+
+    // One app-tab window's state (an app tab checks it every couple of
+    // seconds): null once it's closed or hidden, else its frame, title and
+    // whether it's minimised, maximised or in front. Cheaper than listing
+    // every window.
+    public static string WindowState(long handle) {
+        IntPtr hWnd = new IntPtr(handle);
+        if (!IsWindow(hWnd) || !IsWindowVisible(hWnd)) return "null";
+        IntPtr old = Aware();
+        try {
+            int len = GetWindowTextLength(hWnd);
+            var title = new StringBuilder(Math.Max(1, len + 1));
+            if (len > 0) GetWindowText(hWnd, title, title.Capacity);
+            return "{\"rect\":" + R(Frame(hWnd)) + ",\"minimized\":" + (IsIconic(hWnd) ? "true" : "false") +
+                ",\"maximized\":" + (IsZoomed(hWnd) ? "true" : "false") +
+                ",\"active\":" + (GetForegroundWindow() == hWnd ? "true" : "false") +
+                ",\"title\":" + EdexNative.Q(title.ToString()) + "}";
+        } finally { Restore(old); }
+    }
+
     static void PlaceAware(IntPtr hWnd, int x, int y, int w, int h, string state) {
         if (IsIconic(hWnd) || IsZoomed(hWnd)) ShowWindow(hWnd, 9); // SW_RESTORE
         RECT wr;
@@ -2016,6 +2039,7 @@ while ($true) {
             'audioSetDefault' { $data = [EdexAudio]::SetDefault([string]$a.id) }
             'monitors'     { $data = [EdexWin]::Monitors() }
             'windowRect'   { $data = [EdexWin]::GetRect([long]$a.hwnd) }
+            'windowState'  { $data = [EdexWin]::WindowState([long]$a.hwnd) }
             'placeWindow'  { $data = [EdexWin]::Place([long]$a.hwnd, [int]$a.x, [int]$a.y, [int]$a.w, [int]$a.h, [string]$a.state) }
             'sendToBack'   { $data = [EdexWin]::SendToBack([long]$a.hwnd) }
             'tileWindow'   { $data = [EdexWin]::Tile([long]$a.hwnd, [double]$a.x, [double]$a.y, [double]$a.w, [double]$a.h) }

@@ -104,7 +104,9 @@ class Player extends EventTarget {
       this.save();
       this.updateSession();
     });
-    el.addEventListener("timeupdate", () => { emit("time"); if (Math.floor(el.currentTime) % 10 === 0) this.persist(); });
+    // A station that plays again has reconnected.
+    el.addEventListener("playing", () => { this.reconnects = 0; });
+    el.addEventListener("timeupdate", () => { emit("time"); if (!this.current?.stream && Math.floor(el.currentTime) % 10 === 0) this.persist(); });
     el.addEventListener("loadedmetadata", () => {
       const item = this.current;
       if (item) item.duration = el.duration;
@@ -117,7 +119,9 @@ class Player extends EventTarget {
       if (!item || !el.getAttribute("src")) return;
       toast(item.stream ? `${item.station || "The station"} isn't answering right now` : `Cannot play ${fmt.basename(item.path)} — unsupported format or missing file`, { level: "warn" });
       this.failures++;
-      if (this.failures < 4 && this.items.length > 1) this.next(true);
+      // A station that's down stops there (skipping to the next song would
+      // be a surprise); a broken file moves on.
+      if (!item.stream && this.failures < 4 && this.items.length > 1) this.next(true);
       else emit("state");
     });
 
@@ -322,6 +326,16 @@ class Player extends EventTarget {
   }
 
   onEnded() {
+    // A live station "ends" when its connection drops: reconnect (a few
+    // times) rather than moving on to the next track.
+    if (this.current?.stream) {
+      if ((this.reconnects || 0) < 3) {
+        this.reconnects = (this.reconnects || 0) + 1;
+        const index = this.index;
+        setTimeout(() => { if (this.index === index && this.el.paused) this.load(index, { autoplay: true }); }, 1500 * this.reconnects);
+      } else this.dispatchEvent(new Event("state"));
+      return;
+    }
     const repeat = settings.get("mediaRepeat");
     if (repeat === "one") { this.el.currentTime = 0; this.play(); return; }
     const pos = this.order.indexOf(this.index);

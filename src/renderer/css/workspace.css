@@ -176,7 +176,14 @@
 .mp-empty-actions { display: flex; gap: .5rem; }
 /* Control bar in the style of eDEX-UI's media player: accent border, thin
    progress line and a triangular volume wedge. */
-.mp-controls { display: flex; align-items: center; gap: .35rem; padding: .3rem .5rem; border: 2px solid var(--c); background: var(--bg); flex: none; }
+.mp-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; row-gap: .2rem; padding: .3rem .5rem; border: 2px solid var(--c); background: var(--bg); flex: none; }
+/* A narrow player (small window, wide side columns): the seek line gets a
+   row of its own instead of the buttons running out of the frame. */
+.mp-main { container-type: inline-size; }
+@container (max-width: 44rem) {
+  .mp-controls .mp-progress { order: -1; flex: 1 1 100%; }
+  .mp-controls .mp-vol, .mp-controls .mp-vol-bg, .mp-controls .mp-vol-fill > i { width: 3.6rem; }
+}
 .mp-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; border: 0; background: transparent; color: var(--c); flex: none; position: relative; }
 .mp-btn:hover { background: rgb(var(--rgb) / .5); color: var(--bg); }
 .mp-btn.big .ico { width: 1.45rem; height: 1.45rem; }
@@ -369,8 +376,17 @@
 
 /* App tab */
 .app-host { position: relative; flex: 1; min-height: 0; overflow: hidden; cursor: pointer; background: var(--bg); }
-.app-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: top left; filter: brightness(.5) saturate(.6); }
-.app-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: .55rem; padding: 1.4rem 1.8rem; border: 1px solid var(--c-50); background: rgb(0 0 0 / .75); text-align: center; max-width: min(36rem, 90%); cursor: default; }
+.app-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: top left; transition: filter .2s; }
+/* The card (with its buttons) only when the window needs you: moved out of
+   the tab or minimised. Otherwise the tab is just the window's picture. */
+.app-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; flex-direction: column; align-items: center; gap: .55rem; padding: 1.4rem 1.8rem; border: 1px solid var(--c-50); background: rgb(0 0 0 / .75); text-align: center; max-width: min(36rem, 90%); cursor: default; }
+.app-host[data-state=moved] .app-card, .app-host[data-state=minimized] .app-card { display: flex; }
+.app-host[data-state=moved] .app-still, .app-host[data-state=minimized] .app-still { filter: brightness(.45) saturate(.6); }
+/* No picture yet (the window is on its way): just its icon and name. */
+.app-host:not(.has-still)[data-state=idle] .app-card, .app-host:not(.has-still)[data-state=shown] .app-card { display: flex; border-color: transparent; background: none; opacity: .6; }
+.app-host:not(.has-still)[data-state=idle] .app-actions, .app-host:not(.has-still)[data-state=shown] .app-actions { display: none; }
+.app-hint { position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%); padding: .3rem .8rem; border: 1px solid var(--c-20); background: rgb(0 0 0 / .75); font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--c-70); white-space: nowrap; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.app-host.has-still[data-state=shown]:hover .app-hint { opacity: 1; }
 .app-icon img, .app-icon .ico { width: 3rem; height: 3rem; }
 .app-title { font-size: 1.15rem; max-width: 32rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-state { font-size: .82rem; }

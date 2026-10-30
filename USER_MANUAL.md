@@ -271,11 +271,21 @@ forward, so it works like part of eDEX (it keeps its own title bar).
 Switching to another tab minimises it; going back restores it. Clicking
 eDEX elsewhere puts the window behind eDEX, and the tab then shows a
 picture of it — click the picture (or the tab) to bring the window back. If
-you move or maximise the window yourself, the tab notices and offers to put
-it back in. **Close tab** puts the window back where it was (the app keeps
-running); **Close window** in the tab closes the app's window. Quitting eDEX
-puts every tabbed window back. A tab whose window closes goes away by
-itself.
+you move, maximise or minimise the window yourself, the tab shows a card
+offering to put it back in. Right-click the tab for **Show window**,
+**Close window** (closes the app's window) and **Close tab** (puts the
+window back where it was; the app keeps running). Quitting eDEX puts every
+tabbed window back. A tab whose window closes goes away by itself.
+
+The next / previous tab hotkeys (`Ctrl+Tab` / `Ctrl+Shift+Tab` unless you
+change them in Settings → General → **Tab switching**) switch eDEX's tabs
+even while a tabbed app is the window in front: eDEX borrows those keys only
+then, so other apps keep their own. If another program already holds them
+system-wide, or they're one of eDEX's own hotkeys, eDEX says so and uses
+`Ctrl+PageDown` / `Ctrl+PageUp` there instead (or `Ctrl+Alt+PageDown` /
+`Ctrl+Alt+PageUp` if those are taken too). Turn the borrowing off with
+Settings → Web & apps → **Tab hotkeys work from app tabs** if you'd rather
+the app got the keys.
 
 App tabs work best in Desktop mode: in Overlay mode eDEX hides itself when
 it shows a tabbed window.
@@ -283,10 +293,10 @@ it shows a tabbed window.
 **Open apps inside eDEX** (Settings → Web & apps) goes one step further:
 every app window that opens from then on — from the launcher, the dock, the
 Start menu, a file you double-click, anywhere — becomes a tab and is shown
-inside the workspace (straight away while eDEX is on screen, the next time
-you bring eDEX up otherwise). Windows that were already open are left as
-they are, dialogs and tool windows aren't picked up, and games are left
-alone.
+inside the workspace (straight away while eDEX is on screen; otherwise its
+tab waits for you). Windows that were already open are left as they are,
+dialogs and tool windows aren't picked up, and games (from the library, or
+anything that goes full screen) are left alone.
 
 ## 11. File explorer
 
@@ -736,7 +746,8 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 | `Ctrl+Shift+T` / `Ctrl+Shift+E` | New terminal / explorer tab |
 | `Ctrl+Shift+B` | New browser tab |
 | `Ctrl+Shift+W` | Close tab |
-| `Ctrl+Tab`, `Ctrl+1…9` | Switch tabs |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab, also from an app tab's window (changeable in Settings → General → Tab switching) |
+| `Ctrl+1…9` | Go to tab 1–9 |
 | `Ctrl+Shift+F` | Find files |
 | `Ctrl+Shift+K` | On-screen keyboard |
 | `Ctrl+Shift+M` | Media player |
@@ -746,16 +757,19 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 | `Ctrl+,` | Settings |
 | `F1` | Shortcut sheet |
 
-The two global hotkeys can be changed in Settings → General, and each
-workspace can have a global hotkey of its own (Settings → Workspaces). If
-another app already owns one, eDEX shows a notice.
+The two global hotkeys and the next / previous tab keys can be changed in
+Settings → General (click a field, press the new combination; Backspace
+clears it), and each workspace can have a global hotkey of its own (Settings
+→ Workspaces). If another app already owns one, eDEX shows a notice; for the
+tab keys it also picks a free stand-in (see section 10).
 
 ## 18. Settings
 
 Open with `Ctrl+,` or the gear icon. Changes apply immediately.
 
 - **General**: mode, taskbar coverage, overlay behaviour, close-to-tray, start
-  with Windows, desktop takeover, hotkeys, web search engine, sounds,
+  with Windows, desktop takeover, hotkeys (show / hide, launcher, next /
+  previous tab), web search engine, sounds,
   notifications (Do not disturb, hold during games), multi-monitor HUD, idle
   screen (style and effect), screen saver, battery and disk alerts.
 - **Appearance**: themes, the theme editor (every colour, fonts, terminal

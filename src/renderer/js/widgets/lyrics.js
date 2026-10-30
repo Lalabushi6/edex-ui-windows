@@ -23,7 +23,9 @@ defineWidget({
     const source = () => {
       if (p.current && (p.playing || !sys)) {
         const it = p.current;
-        return { kind: "player", track: { title: it.title, artist: it.artist || "", album: it.album || "", duration: Number.isFinite(p.el.duration) ? p.el.duration : 0, path: it.path }, pos: p.el.currentTime };
+        // A radio station's title is "Artist - Song"; its artist field is the
+        // station's name, which would only confuse the lookup.
+        return { kind: "player", track: { title: it.title, artist: it.stream ? "" : it.artist || "", album: it.stream ? "" : it.album || "", duration: Number.isFinite(p.el.duration) ? p.el.duration : 0, path: it.path }, pos: p.el.currentTime };
       }
       if (sys) return { kind: "system", track: { title: sys.title, artist: sys.artist, album: sys.album, duration: sys.duration }, pos: livePosition(sys) };
       return null;

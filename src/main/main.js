@@ -8,6 +8,7 @@ const { app, dialog, globalShortcut, Menu, powerMonitor, session, shell } = requ
 const portable = require("./lib/portable");
 portable.apply();
 const paths = require("./lib/paths");
+const accel = require("./lib/accel");
 const { registerSchemes, registerHandlers, APP_ORIGIN } = require("./lib/protocol");
 const { NativeBridge } = require("./lib/native-bridge");
 const { Settings } = require("./settings");
@@ -91,6 +92,9 @@ function start() {
   let livewall;
   let profileTimer;
   let lastHotkeyFailures = "";
+  let appTabFront = false;
+  let tabKeys = null; // tab hotkeys registered while an app tab is in front
+  let tabKeysNote = "";
 
   const quit = () => {
     if (windows) windows.quitting = true;
@@ -236,8 +240,8 @@ function start() {
     handle("game:state", () => ({ active: gameMode.active, name: gameMode.name }));
 
     updates = registerUpdates({ settings, windows, notices });
-    browser = registerBrowser({ windows, notices });
-    appTabs = registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame: (exe) => !!games.match(exe), gameMode });
+    browser = registerBrowser({ windows, notices, settings });
+    appTabs = registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame: (exe) => !!games.match(exe), gameMode, onFront: (on) => { appTabFront = on; bindTabKeys(); } });
     spotify = registerSpotify({ settings, windows });
     saver = new Screensaver({ settings, windows, bridge, ownPids, windowed: DEV_WINDOWED, gameMode });
     lyrics = registerLyrics({ settings });
@@ -272,6 +276,8 @@ function start() {
     applyLoginItem();
     settings.on("change", (changed) => {
       if ("hotkeyToggle" in changed || "hotkeyLauncher" in changed || "profiles" in changed) registerHotkeys();
+      if ("appTabsCtrlTab" in changed) bindTabKeys();
+      if ("hotkeyTabNext" in changed || "hotkeyTabPrev" in changed) checkTabKeys();
       if ("openAtLogin" in changed || "takeover" in changed) applyLoginItem();
     });
 
@@ -325,6 +331,93 @@ function start() {
       }), 4000);
     }
     lastHotkeyFailures = said;
+    // unregisterAll() dropped any borrowed tab keys too.
+    tabKeys = null;
+    bindTabKeys();
+  }
+
+  // Next / previous tab (Ctrl+Tab / Ctrl+Shift+Tab unless changed in
+  // Settings → General). Inside eDEX the interface handles them; while an
+  // app tab's window is in front eDEX registers them system-wide (only then,
+  // so other apps keep theirs). If they can't be had there — another program
+  // holds them, or they're one of eDEX's own hotkeys — the first free pair
+  // below stands in, and a notice says which.
+  const TAB_KEY_FALLBACKS = [
+    ["CommandOrControl+PageDown", "CommandOrControl+PageUp"],
+    ["CommandOrControl+Alt+PageDown", "CommandOrControl+Alt+PageUp"]
+  ];
+  const ownTabKeys = () => [settings.get("hotkeyTabNext"), settings.get("hotkeyTabPrev")];
+  const eDexHotkeys = () => new Set([settings.get("hotkeyToggle"), settings.get("hotkeyLauncher"),
+    ...(settings.get("profiles") || []).map((p) => p.hotkey)].filter(Boolean).map(accel.normalize));
+
+  // Registers a [next, prev] pair (empty entries skipped); the accelerators
+  // registered, or null (and nothing left registered) if any didn't take.
+  function tryTabPair(pair) {
+    const taken = eDexHotkeys();
+    const got = [];
+    for (const [acc, delta] of [[pair[0], 1], [pair[1], -1]]) {
+      if (!acc) continue;
+      let ok = false;
+      if (!taken.has(accel.normalize(acc))) {
+        try {
+          ok = globalShortcut.register(acc, () => {
+            windows.show();
+            windows.send("app:command", { name: "tab-cycle", delta });
+          });
+        } catch (_) {}
+      }
+      if (!ok) {
+        for (const a of got) globalShortcut.unregister(a);
+        return null;
+      }
+      got.push(acc);
+    }
+    return got;
+  }
+
+  // Finds the pair to use: yours, else the first free stand-in.
+  function pickTabPair() {
+    const pairs = [ownTabKeys(), ...TAB_KEY_FALLBACKS];
+    for (let i = 0; i < pairs.length; i++) {
+      const got = tryTabPair(pairs[i]);
+      if (got) return { pair: pairs[i], got, standIn: i > 0 };
+    }
+    return { pair: null, got: [], standIn: true };
+  }
+
+  // Says (once per situation) when a stand-in is in use, or none is free.
+  function noteTabKeys({ pair, standIn }) {
+    const mine = ownTabKeys().filter(Boolean).map(accel.describe).join(" / ");
+    let msg = "";
+    if (!pair) msg = `No free hotkey for switching tabs from app windows (${mine} and the stand-ins are all taken) — pick another in Settings → General → Tab switching.`;
+    else if (standIn) msg = `${mine} can't be used from app windows (another program has it, or it's one of eDEX's hotkeys), so ${pair.map(accel.describe).join(" / ")} switch tabs there instead. Change it in Settings → General → Tab switching.`;
+    if (msg && msg !== tabKeysNote) windows.send("app:notice", { level: "warn", message: msg });
+    tabKeysNote = msg;
+  }
+
+  function bindTabKeys({ force = false } = {}) {
+    const want = appTabFront && settings.get("appTabsCtrlTab") !== false;
+    if (!force && want === !!tabKeys) return;
+    if (tabKeys) for (const a of tabKeys) { try { globalShortcut.unregister(a); } catch (_) {} }
+    tabKeys = null;
+    if (!want) return;
+    const own = ownTabKeys();
+    if (!own[0] && !own[1]) { tabKeys = []; return; } // both cleared: none wanted
+    const picked = pickTabPair();
+    // [] when nothing was free: not retried until something changes.
+    tabKeys = picked.got;
+    noteTabKeys(picked);
+  }
+
+  // The tab keys were changed: re-borrow them, or (while no app tab is in
+  // front) check right away that they're free, so a clash is said now.
+  function checkTabKeys() {
+    if (tabKeys) { bindTabKeys({ force: true }); return; }
+    const own = ownTabKeys();
+    if (!own[0] && !own[1]) { tabKeysNote = ""; return; }
+    const picked = pickTabPair();
+    for (const a of picked.got) globalShortcut.unregister(a);
+    noteTabKeys(picked);
   }
 
   // At sign-in eDEX normally starts in the tray; when it has taken over the

@@ -247,6 +247,8 @@ function hotkeyInput(read, write) {
     else if (e.code.startsWith("Digit")) k = e.code.slice(5);
     else if (k === " ") k = "Space";
     else if (e.code === "Backquote") k = "`";
+    else if (/^Arrow(Left|Right|Up|Down)$/.test(k)) k = k.slice(5); // accelerator names
+    else if (k === "+") k = "Plus";
     if (!parts.length && !/^F\d+$/.test(k)) { toast("Use at least one modifier (Ctrl, Alt or Shift)", { level: "warn" }); return; }
     parts.push(k.length === 1 ? k.toUpperCase() : k);
     write(parts.join("+"));
@@ -433,6 +435,10 @@ async function buildPage(id) {
       h("h3", null, "Global hotkeys"),
       row("Show / hide eDEX", "Works from any app. Click, then press a new combination.", hotkey("hotkeyToggle")),
       row("Open launcher", "Summons eDEX straight into search.", hotkey("hotkeyLauncher")),
+      h("h3", null, "Tab switching"),
+      row("Next tab", "Inside eDEX, in browser tabs, and while a tabbed app is in front (Settings → Web & apps). If another program already has it there, eDEX says so and uses Ctrl+PageDown / Ctrl+PageUp (or Ctrl+Alt+PageDown / PageUp) instead. Backspace clears it.", hotkey("hotkeyTabNext")),
+      row("Previous tab", null, hotkey("hotkeyTabPrev")),
+      row("Default keys", null, h("button", { class: "btn sm", type: "button", onclick: () => settings.set({ hotkeyTabNext: "CommandOrControl+Tab", hotkeyTabPrev: "CommandOrControl+Shift+Tab" }).then(() => openPanel?.show("general")) }, "Ctrl+Tab / Ctrl+Shift+Tab")),
       h("h3", null, "Launcher"),
       row("Web search URL", "%s is replaced by your query.", text("webSearchUrl", "https://www.google.com/search?q=%s")),
       h("h3", null, "Sound"),
@@ -647,6 +653,7 @@ async function buildPage(id) {
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Show an app's window as a workspace tab: the window moves into the tab's area and comes forward; switching tabs minimises it; closing the tab puts it back where it was. Right-click a window in the dock or launcher → Show as a tab, or tab menu → App window…. Works best in Desktop mode."),
       row("Open apps inside eDEX", "Every app window that opens from now on (from the launcher, the dock, or anywhere else) becomes a tab and is shown inside the workspace while eDEX is on screen. Games are left alone.", toggle("openAppsInside")),
       row("Show every open window as a tab", "Each open window gets a tab automatically; turning this off closes those tabs and puts the windows back.", select("appTabs", [["off", "Off — only windows I choose"], ["all", "On — every open window"]])),
+      row("Tab hotkeys work from app tabs", "While a tabbed app is in front, the next / previous tab hotkeys (Ctrl+Tab / Ctrl+Shift+Tab unless changed in Settings → General) go to eDEX instead of to that app. Other apps keep their own keys.", toggle("appTabsCtrlTab")),
       row("Add a window now", null, h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => runCommand("apptab.pick"), 200); } }, icon("apptab"), "Choose a window…")));
   }
   if (id === "files") {

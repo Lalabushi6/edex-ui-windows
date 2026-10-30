@@ -18,6 +18,7 @@ function stationIcon(url) {
     const p = api.radio.icon(url).catch(() => null);
     iconCache.set(url, p);
     p.then((v) => iconCache.set(url, v));
+    while (iconCache.size > 300) iconCache.delete(iconCache.keys().next().value);
   }
   return Promise.resolve(iconCache.get(url));
 }

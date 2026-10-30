@@ -145,12 +145,19 @@ function registerLibrary({ settings, windows }) {
       if (cover) out = path.join(dir, cover);
     } catch (_) {}
     if (!out) {
+      // Saved by an earlier session: no need to read the song again.
+      const stem = path.join(artDir, crypto.createHash("sha1").update(dir.toLowerCase()).digest("hex").slice(0, 16));
+      for (const ext of ["jpg", "png"]) {
+        if (!out && await fs.promises.access(`${stem}.${ext}`).then(() => true, () => false)) out = `${stem}.${ext}`;
+      }
+    }
+    if (!out) {
       try {
         const t = await readTags(p, { picture: true });
         if (t?.picture) {
-          const name = `${crypto.createHash("sha1").update(dir.toLowerCase()).digest("hex").slice(0, 16)}.${/png/.test(t.picture.mime) ? "png" : "jpg"}`;
+          const stem = path.join(artDir, crypto.createHash("sha1").update(dir.toLowerCase()).digest("hex").slice(0, 16));
           await fs.promises.mkdir(artDir, { recursive: true });
-          out = path.join(artDir, name);
+          out = `${stem}.${/png/.test(t.picture.mime) ? "png" : "jpg"}`;
           await fs.promises.writeFile(out, t.picture.data);
         }
       } catch (_) { out = null; }

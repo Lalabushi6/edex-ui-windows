@@ -11,6 +11,7 @@
 const path = require("path");
 const { app, Menu, WebContentsView, clipboard, session, shell } = require("electron");
 const { handle } = require("./util");
+const { matchesInput } = require("../lib/accel");
 
 const PARTITION = "persist:edex-browser";
 const MAX_VIEWS = 12;
@@ -18,7 +19,7 @@ const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write"])
 const ACTIONS = new Set(["back", "forward", "reload", "stop", "zoomIn", "zoomOut", "zoomReset", "external", "inspect"]);
 const isWeb = (u) => /^https?:\/\//i.test(String(u || ""));
 
-function registerBrowser({ windows, notices }) {
+function registerBrowser({ windows, notices, settings }) {
   const ses = session.fromPartition(PARTITION);
   const views = new Map(); // id -> { view, wc, bounds, visible, full }
   const idOf = (wc) => { for (const [id, v] of views) if (v.wc === wc) return id; return null; };
@@ -98,6 +99,8 @@ function registerBrowser({ windows, notices }) {
   const UI_SHIFT_KEYS = new Set([" ", "p", "a", "t", "e", "w", "f", "s", "k", "j", "m", "b", "Tab"]);
   const UI_KEYS = new Set(["Tab", "l", "t", "w", "f", ",", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
   const KEY_FOR_UI = (input) => {
+    // The tab-switching hotkeys, whatever they've been changed to.
+    if (settings && (matchesInput(settings.get("hotkeyTabNext"), input) || matchesInput(settings.get("hotkeyTabPrev"), input))) return true;
     const k = input.key.length === 1 ? input.key.toLowerCase() : input.key;
     if (input.control && input.shift && !input.alt) return UI_SHIFT_KEYS.has(k);
     if (input.control && !input.alt) return UI_KEYS.has(k);

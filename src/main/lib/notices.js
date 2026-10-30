@@ -24,6 +24,9 @@ class Notices {
     this.windows = windows;
     this.store = new JsonStore(path.join(userData, "notifications.json"), { fallback: { items: [], seen: 0 } });
     this.quietReasons = new Set(); // e.g. "game"
+    // Windows notifications on screen; kept referenced so their click
+    // handler survives garbage collection.
+    this.live = new Set();
     this.prune();
   }
 
@@ -75,7 +78,12 @@ class Notices {
     try {
       if (!Notification.isSupported()) return;
       const note = new Notification({ title: `eDEX-UI — ${n.title}`, body: n.body, silent: n.level !== "error" && n.kind !== "reminder" && n.kind !== "timer" });
-      note.on("click", () => this.windows.show());
+      const done = () => this.live.delete(note);
+      note.on("click", () => { done(); this.windows.show(); });
+      note.on("close", done);
+      note.on("failed", done);
+      this.live.add(note);
+      while (this.live.size > 20) this.live.delete(this.live.values().next().value);
       note.show();
     } catch (_) {}
   }
