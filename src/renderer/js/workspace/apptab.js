@@ -3,14 +3,17 @@
 // src/main/ipc/apptabs.js); switching away minimises it; closing the tab
 // puts it back where it was. Behind the window the tab keeps a picture of it,
 // so clicking eDEX doesn't leave a blank tab: click the picture to bring the
-// window back.
+// window back. A card with buttons only shows when the window needs you
+// (you moved it out of the tab, or minimised it).
 import { h, setText, debounce } from "../core/dom.js";
 import { icon } from "../core/icons.js";
+import { poll } from "../core/poll.js";
 import { toast, cleanError } from "../core/ui.js";
 import { exeIcons } from "../shell/launcher.js";
 
 const api = window.edex;
 const CHECK_MS = 1500;
+const STILL_FRESH_MS = 1500; // a picture this recent is reused when switching away
 const shortTitle = (t) => {
   const s = String(t || "Window");
   // "Document - App" -> "Document" keeps tab labels short.
@@ -31,7 +34,9 @@ export class AppTab {
     this.el = h("div", { class: "pane app-pane" });
     this.active = false;
     this.state = "idle"; // idle | shown | moved | minimized
-    this.timer = null;
+    this.checks = null;
+    this.capturing = null;
+    this.stillAt = 0;
   }
 
   // Tabs made by "show every open window as a tab" are rebuilt, not restored.
@@ -66,11 +71,15 @@ export class AppTab {
         h("button", { class: "btn primary", type: "button", onclick: () => this.show() }, icon("window"), "Show window"),
         h("button", { class: "btn", type: "button", title: "Put the window back where it was and close this tab", onclick: () => this.ws.close(this) }, icon("external"), "Put back"),
         h("button", { class: "btn danger", type: "button", onclick: () => this.closeWindow() }, icon("close"), "Close window")));
-    this.host = h("div", { class: "app-host" }, this.still, this.card);
+    // While the window is just behind eDEX: its picture, and on hover a
+    // small reminder that a click brings it back.
+    this.hint = h("div", { class: "app-hint" });
+    this.host = h("div", { class: "app-host", dataset: { state: this.state } }, this.still, this.card, this.hint);
     this.host.addEventListener("click", (e) => { if (!e.target.closest("button")) this.show(); });
     this.el.append(this.host);
     this.ro = new ResizeObserver(debounce(() => { if (this.active && this.state === "shown") this.place(false); }, 250));
     this.ro.observe(this.host);
+    // eDEX came forward (its window now covers this one): keep a picture.
     this.onFocus = () => { if (this.active && this.state === "shown") this.capture(); };
     window.addEventListener("focus", this.onFocus);
     exeIcons([this.exe].filter(Boolean)).then((icons) => {
@@ -82,14 +91,17 @@ export class AppTab {
 
   render() {
     if (!this.titleEl) return;
-    setText(this.titleEl, this.title || this.appName);
+    const name = this.title || this.appName;
+    setText(this.titleEl, name);
     setText(this.stateEl, {
       idle: `${this.appName} · click to show it here`,
-      shown: `${this.appName} · shown in this tab — click here if it went behind eDEX`,
+      shown: `${this.appName} · click to bring it back`,
       moved: `${this.appName} · moved out of the tab — click to put it back in`,
       minimized: `${this.appName} · minimised — click to show it`
     }[this.state] || this.appName);
-    this.card.classList.toggle("dim", this.state === "shown" && !this.still.hidden);
+    setText(this.hint, "Click to bring the window back");
+    this.host.dataset.state = this.state;
+    this.host.classList.toggle("has-still", !this.still.hidden);
   }
 
   rect() {
@@ -103,7 +115,7 @@ export class AppTab {
       const r = await api.appTabs.show(this.hwnd, this.rect(), { focus });
       if (r?.gone) return this.gone();
       if (r?.title && r.title !== this.title) this.retitle(r.title);
-      this.state = "shown";
+      if (this.active) this.state = "shown";
     } catch (e) {
       toast(cleanError(e), { level: "warn" });
     }
@@ -121,21 +133,35 @@ export class AppTab {
   }
 
   // A picture for the placeholder, taken while the window is still drawn.
-  async capture() {
-    if (!this.hwnd) return;
-    const src = await api.appTabs.snapshot(this.hwnd).catch(() => null);
-    if (src) { this.still.src = src; this.still.hidden = false; this.render(); }
+  capture() {
+    if (!this.hwnd) return Promise.resolve();
+    if (!this.capturing) {
+      this.capturing = api.appTabs.snapshot(this.hwnd).then((src) => {
+        if (!src) return;
+        this.still.src = src;
+        this.still.hidden = false;
+        this.stillAt = Date.now();
+        this.render();
+      }).catch(() => {}).finally(() => { this.capturing = null; });
+    }
+    return this.capturing;
   }
 
+  // Checks run on the shared scheduler, so they pause while eDEX is hidden.
   startChecks() {
-    clearInterval(this.timer);
-    this.timer = setInterval(() => this.check(), CHECK_MS);
+    this.checks?.stop();
+    this.checks = poll(() => this.check(), CHECK_MS, { immediate: false, fixed: true });
+  }
+
+  stopChecks() {
+    this.checks?.stop();
+    this.checks = null;
   }
 
   async check() {
     if (!this.active || !this.hwnd) return;
     const r = await api.appTabs.check(this.hwnd).catch(() => null);
-    if (!r) return;
+    if (!r || !this.active) return;
     if (r.gone) return this.gone();
     if (r.title && r.title !== this.title) { this.retitle(r.title); this.render(); }
     const next = r.moved ? "moved" : r.minimized ? "minimized" : "shown";
@@ -143,7 +169,7 @@ export class AppTab {
   }
 
   gone() {
-    clearInterval(this.timer);
+    this.stopChecks();
     this.hwnd = null;
     toast(`${this.title || this.appName} closed`, { timeout: 1800 });
     this.ws.close(this, { quiet: true });
@@ -157,15 +183,21 @@ export class AppTab {
 
   activate() {
     this.active = true;
-    if (!this.host) { requestAnimationFrame(() => this.host && this.activate()); return; }
-    requestAnimationFrame(() => this.show());
+    if (!this.host) { requestAnimationFrame(() => this.host && this.active && this.activate()); return; }
+    requestAnimationFrame(() => { if (this.active) this.show(); });
   }
 
   async deactivate() {
     this.active = false;
-    clearInterval(this.timer);
+    this.stopChecks();
     if (!this.hwnd || this.state === "moved") return;
-    await this.capture();
+    // The picture taken when eDEX came forward is reused (or a quick new one
+    // taken), so the window steps aside at once instead of lingering over
+    // the next tab.
+    if (this.capturing) await this.capturing;
+    else if (Date.now() - this.stillAt > STILL_FRESH_MS) await Promise.race([this.capture(), new Promise((r) => setTimeout(r, 700))]);
+    // Switched straight back while that ran: leave the window where it is.
+    if (this.active || !this.hwnd) return;
     api.appTabs.hide(this.hwnd).catch(() => {});
     this.state = "idle";
     this.render();
@@ -177,7 +209,7 @@ export class AppTab {
 
   dispose() {
     this.active = false;
-    clearInterval(this.timer);
+    this.stopChecks();
     this.ro?.disconnect();
     window.removeEventListener("focus", this.onFocus);
     if (this.hwnd) api.appTabs.release(this.hwnd, { focus: false }).catch(() => {});

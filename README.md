@@ -110,7 +110,8 @@ locked down.
   window…*, or let **every open window get a tab** automatically). The tab
   moves the real window into its area and brings it forward; switching tabs
   minimises it, the tab keeps a picture of it while eDEX is in front, and
-  closing the tab or quitting eDEX puts the window back where it was. Nothing
+  closing the tab or quitting eDEX puts the window back where it was;
+  `Ctrl+Tab` keeps switching eDEX's tabs while the app is in front. Nothing
   is injected into the app. Turn on **Open apps inside eDEX** and every app
   you open from then on, from anywhere, opens straight into a tab.
 - **Workspaces**: named setups such as *Work*, *Gaming* or *Study*, switched
@@ -375,7 +376,7 @@ locked down.
 | `Ctrl+Shift+T` / `Ctrl+Shift+E` | New terminal / explorer tab |
 | `Ctrl+Shift+B` | New browser tab (in it: `Ctrl+L` address, `Ctrl+F` find, `Ctrl+T` / `Ctrl+W` new / close, `F5` reload, `Alt+←/→` back / forward) |
 | `Ctrl+Shift+W` | Close tab (or the focused split pane) |
-| `Ctrl+Tab`, `Ctrl+1…9` | Switch tabs |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab`, `Ctrl+1…9` | Next / previous tab (also from an app tab's window; changeable), go to tab 1–9 |
 | `Alt+Shift+=` / `Alt+Shift+-` / `Ctrl+Shift+D` | Split the terminal right / down |
 | `Alt`+arrows | Move between split panes |
 | `Ctrl+Shift+F` | Find in terminal (or find files outside a terminal) |
@@ -387,7 +388,9 @@ locked down.
 | `Ctrl+,` | Settings |
 | `F1` | Shortcut sheet |
 
-The two global hotkeys can be changed in Settings → General, and each
+The two global hotkeys and the next / previous tab keys can be changed in
+Settings → General (if another program holds the tab keys, eDEX falls back
+to `Ctrl+PageDown` / `Ctrl+PageUp` from app windows and says so), and each
 workspace can have a global hotkey of its own (Settings → Workspaces). The
 full list,
 including the explorer, media player and keyboard keys, is in

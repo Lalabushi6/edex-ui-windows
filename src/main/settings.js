@@ -146,6 +146,9 @@ const SCHEMA = {
   closeToTray: [bool(), true],
   hotkeyToggle: [accelerator(), "CommandOrControl+`"],
   hotkeyLauncher: [accelerator(), "CommandOrControl+Shift+Space"],
+  // Next / previous workspace tab: inside eDEX, and from an app tab's window.
+  hotkeyTabNext: [accelerator(), "CommandOrControl+Tab"],
+  hotkeyTabPrev: [accelerator(), "CommandOrControl+Shift+Tab"],
 
   // Appearance & feedback
   theme: [str(64), "tron"],
@@ -280,6 +283,7 @@ const SCHEMA = {
   browserHome: [(v, d) => (typeof v === "string" && (v === "" || /^https?:\/\/\S+$/i.test(v)) ? v.slice(0, 2048) : d), ""],
   appTabs: [oneOf("off", "all"), "off"],
   openAppsInside: [bool(), false],
+  appTabsCtrlTab: [bool(), true],
 
   // Notification centre
   dnd: [bool(), false],

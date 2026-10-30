@@ -118,7 +118,8 @@ async function steamGames() {
       const art = await steamLocalArt(root, st.appid);
       out.push({
         id: `steam:${st.appid}`, source: "steam", name: st.name, appid: st.appid,
-        dir: path.join(dir, "common", st.installdir || ""),
+        // Without an install folder name, steamapps/common would match every game.
+        dir: st.installdir ? path.join(dir, "common", st.installdir) : "",
         art: art?.file || null, tall: art ? art.tall : true,
         remoteArt: art?.tall ? null : `https://shared.steamstatic.com/store_item_assets/steam/apps/${st.appid}/library_600x900.jpg`
       });
@@ -169,8 +170,14 @@ async function epicGames() {
 async function xboxGames(aux, bridge) {
   let list = [];
   try { list = await aux.call("xboxGames", {}, 60000); } catch (_) { return []; }
+  // Packages that only name themselves through a resource string get the
+  // Start menu's name. Asked of the slow-call helper, and only when needed,
+  // so the panels' helper isn't held up.
   let names = new Map();
-  try { names = new Map((await bridge.call("startApps", {}, 20000)).map((a) => [a.appId, a.name])); } catch (_) {}
+  const needNames = (Array.isArray(list) ? list : []).some((g) => !g?.name || /^ms-resource:/i.test(g.name));
+  if (needNames) {
+    try { names = new Map((await (aux || bridge).call("startApps", {}, 20000)).map((a) => [a.appId, a.name])); } catch (_) {}
+  }
   const out = [];
   for (const g of Array.isArray(list) ? list : []) {
     if (!g?.aumid || !/^[\w.-]+_[a-z0-9]+![\w.-]+$/i.test(g.aumid)) continue;
@@ -280,8 +287,13 @@ function registerGames({ settings, windows, bridge, aux }) {
     return true;
   });
 
-  // Background refresh now and then, so new installs show up.
-  const timer = setInterval(() => { if (Date.now() - scannedAt > RESCAN_MS) scan().catch(() => {}); }, 5 * 60 * 1000);
+  // Background refresh now and then, so new installs show up — only while
+  // eDEX is on screen (the Xbox part runs Get-AppxPackage, which isn't free).
+  const timer = setInterval(() => {
+    const win = windows.win;
+    const onScreen = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+    if (onScreen && Date.now() - scannedAt > RESCAN_MS) scan().catch(() => {});
+  }, 5 * 60 * 1000);
   setTimeout(() => scan().catch(() => {}), 20000);
 
   return {

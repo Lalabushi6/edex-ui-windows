@@ -16,9 +16,34 @@ const asHwnd = (v) => {
   return n;
 };
 
-function registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame, gameMode }) {
+function registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame, gameMode, onFront }) {
   // hwnd -> { original: { rect, state } | null, target: [x, y, w, h] }
   const docked = new Map();
+  // Windows currently shown in their tab (not minimised away by eDEX).
+  const shown = new Set();
+
+  // While a tabbed window is the one in front, eDEX's tab shortcuts
+  // (Ctrl+Tab) are borrowed for it: onFront(true / false) as that changes.
+  // Watched only while a tabbed window is shown.
+  let front = false;
+  let frontTimer = null;
+  const setFront = (on) => { if (on !== front) { front = on; onFront?.(on); } };
+  const watchFront = async () => {
+    const win = windows.win;
+    const visible = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+    if (!shown.size || !visible) { setFront(false); return; }
+    const fg = await bridge.call("foreground", {}, 2000).catch(() => null);
+    setFront(!!fg && shown.has(Number(fg.hwnd)));
+  };
+  const syncFrontWatch = () => {
+    if (shown.size && !frontTimer) frontTimer = setInterval(watchFront, 400);
+    else if (!shown.size && frontTimer) { clearInterval(frontTimer); frontTimer = null; setFront(false); }
+  };
+  const markShown = (h, on) => {
+    if (on) shown.add(h); else shown.delete(h);
+    syncFrontWatch();
+    if (on) watchFront();
+  };
 
   // "Open apps inside eDEX": windows that appear while it's on become app
   // tabs. Watched here rather than in the interface, whose timers pause
@@ -88,10 +113,12 @@ function registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame, game
     const p = toScreen(r);
     docked.get(h).target = [p.x, p.y, p.width, p.height];
     await bridge.call("placeWindow", { hwnd: h, x: p.x, y: p.y, w: p.width, h: p.height, state: "" });
+    markShown(h, true);
     if (opts?.focus !== false) {
       // An always-on-top overlay would cover the window it just placed.
       if (windows.mode === "overlay") windows.hide();
       await bridge.call("focus", { hwnd: h }).catch(() => {});
+      watchFront();
     }
     return { ok: true, title: w.title, exe: w.exe };
   });
@@ -100,18 +127,19 @@ function registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame, game
   handle("apptab:hide", async (_e, hwnd) => {
     const h = asHwnd(hwnd);
     if (!docked.has(h)) return false;
+    markShown(h, false);
     return bridge.call("minimizeQuiet", { hwnd: h }).catch(() => false);
   });
 
   // Is the window still there, still in the tab, and what's its title?
   handle("apptab:check", async (_e, hwnd) => {
     const h = asHwnd(hwnd);
-    const w = await lookup(h).catch(() => null);
-    if (!w) return { gone: true };
-    const r = await bridge.call("windowRect", { hwnd: h }).catch(() => null);
+    const r = await bridge.call("windowState", { hwnd: h }).catch(() => undefined);
+    if (r === undefined) return null; // the helper didn't answer; try again later
+    if (!r) { markShown(h, false); return { gone: true }; }
     const t = docked.get(h)?.target;
-    const moved = !!(t && r && !r.minimized && (r.maximized || r.rect.some((v, i) => Math.abs(v - t[i]) > 12)));
-    return { gone: false, title: w.title, exe: w.exe, active: w.active, minimized: !!r?.minimized, moved };
+    const moved = !!(t && !r.minimized && (r.maximized || r.rect.some((v, i) => Math.abs(v - t[i]) > 12)));
+    return { gone: false, title: r.title, active: r.active, minimized: !!r.minimized, moved };
   });
 
   handle("apptab:snapshot", async (_e, hwnd) => (aux || bridge).call("windowSnapshot", { hwnd: asHwnd(hwnd), max: 1400 }, 8000).catch(() => null));
@@ -120,6 +148,7 @@ function registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame, game
   async function release(h, { focus = false } = {}) {
     const entry = docked.get(h);
     docked.delete(h);
+    markShown(h, false);
     if (!entry) return false;
     const o = entry.original;
     if (o?.rect) {
@@ -134,7 +163,7 @@ function registerAppTabs({ windows, bridge, aux, ownPids, settings, isGame, game
 
   return {
     get count() { return docked.size; },
-    stop: () => clearInterval(watcher),
+    stop: () => { clearInterval(watcher); clearInterval(frontTimer); },
     // Before quitting: every docked window goes back (bounded).
     releaseAll: () => Promise.race([
       Promise.all([...docked.keys()].map((h) => release(h))),

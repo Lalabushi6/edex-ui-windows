@@ -3,10 +3,10 @@
 import { $ } from "./core/dom.js";
 import * as settings from "./core/settings.js";
 import { applyTheme } from "./core/theme.js";
-import { setWindowVisible, configure, profile, onSchedulingChange, setGameMode } from "./core/poll.js";
+import { setWindowVisible, configure, profile, onSchedulingChange, setGameMode, poll } from "./core/poll.js";
 import { onBattery } from "./core/live.js";
 import { emit, on, markBooted } from "./core/bus.js";
-import { command, initHotkeys } from "./core/commands.js";
+import { command, initHotkeys, setKeys, comboFromAccelerator } from "./core/commands.js";
 import { toast, cleanError, closeMenu } from "./core/ui.js";
 import { mountWidgets, mountFixed } from "./widgets/registry.js";
 import { initBackgroundFx } from "./shell/fx.js";
@@ -82,8 +82,15 @@ async function registerCommands() {
   cmd("files.new", "New file explorer tab", () => workspace.add("files"), { keys: "Ctrl+Shift+E", icon: "folder", keywords: "explorer browse" });
   cmd("processes.open", "Process manager", () => workspace.openProcesses(), { icon: "process", keywords: "task manager kill end process" });
   cmd("tab.close", "Close tab", () => workspace.closeActive(), { keys: "Ctrl+Shift+W", icon: "close" });
-  cmd("tab.next", "Next tab", () => workspace.cycle(1), { keys: "Ctrl+Tab", icon: "forward" });
-  cmd("tab.prev", "Previous tab", () => workspace.cycle(-1), { keys: "Ctrl+Shift+Tab", icon: "back" });
+  cmd("tab.next", "Next tab", () => workspace.cycle(1), { icon: "forward" });
+  cmd("tab.prev", "Previous tab", () => workspace.cycle(-1), { icon: "back" });
+  // Ctrl+Tab / Ctrl+Shift+Tab unless changed in Settings → General.
+  const applyTabKeys = () => {
+    setKeys("tab.next", comboFromAccelerator(settings.get("hotkeyTabNext")));
+    setKeys("tab.prev", comboFromAccelerator(settings.get("hotkeyTabPrev")));
+  };
+  applyTabKeys();
+  settings.watch(["hotkeyTabNext", "hotkeyTabPrev"], applyTabKeys);
   for (let i = 1; i <= 9; i++) cmd(`tab.${i}`, `Go to tab ${i}`, () => workspace.byIndex(i - 1), { keys: `Ctrl+${i}`, hidden: true });
   cmd("files.search", "Find files…", () => {
     const cwd = workspace.active?.type === "files" ? workspace.active.cwd : null;
@@ -243,7 +250,8 @@ async function mainHud() {
     date.textContent = now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).toUpperCase();
   };
   tick();
-  setInterval(tick, 1000);
+  // The shared scheduler pauses it while the HUD is hidden (game mode, eDEX hidden).
+  poll(tick, 1000, { fixed: true });
   mountFixed([
     [$("#col-left-body"), ["system", "cpu", "memory", "gpu", "top"]],
     [center, ["globe"]],
@@ -313,10 +321,12 @@ async function main() {
   });
   api.app.onNotice(({ level, message }) => toast(message, { level, timeout: 6000 }));
   on("open-settings", ({ page } = {}) => openSettings(page));
-  api.app.onCommand(({ name, toggle, id, scheduled }) => {
+  api.app.onCommand(({ name, toggle, id, scheduled, delta }) => {
     if (name === "launcher") toggle ? toggleLauncher() : openLauncher();
     else if (name === "settings") openSettings();
     else if (name === "profile") switchProfile(id, { scheduled });
+    // Ctrl+Tab pressed while an app tab's window was in front.
+    else if (name === "tab-cycle") workspace?.cycle(delta < 0 ? -1 : 1);
   });
   initNotices();
   // Game mode: nothing refreshes or animates while a game is in front.
