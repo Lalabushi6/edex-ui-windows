@@ -7,7 +7,7 @@
 // showIdleScreen with their own options.
 import { h, setText } from "../core/dom.js";
 import * as settings from "../core/settings.js";
-import { poll } from "../core/poll.js";
+import { poll, holdCalm } from "../core/poll.js";
 import { emit } from "../core/bus.js";
 import { startEffect } from "./fx.js";
 import { mountWallpaper } from "./wallpaper.js";
@@ -39,6 +39,8 @@ export function showIdleScreen({ effect = settings.get("idleEffect") || "matrix"
     info && h("div", { class: "idle-info" }, clock, date, extra, h("div", { class: "idle-hint" }, "MOVE THE MOUSE OR PRESS A KEY")));
   document.body.append(overlay);
   requestAnimationFrame(() => overlay?.classList.add("show"));
+  // The idle screen is meant to be watched: it keeps its full frame rate.
+  holdCalm("idle-screen", true);
   const fx = ascii
     ? mountWallpaper(overlay, { clock: false, live: false })
     : startEffect(canvas, effect, { maxFps: 30 });
@@ -63,6 +65,7 @@ export function showIdleScreen({ effect = settings.get("idleEffect") || "matrix"
     for (const t of ["mousemove", "mousedown", "keydown", "wheel", "touchstart"]) window.removeEventListener(t, dismiss, true);
     clearInterval(clockTimer);
     fx.stop();
+    holdCalm("idle-screen", false);
     const el = overlay;
     overlay = null;
     el.classList.remove("show");

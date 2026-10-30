@@ -16,10 +16,15 @@ const MAX_RESTARTS_PER_MINUTE = 3;
 class NativeBridge {
   // waitFor: optional async gate before the first start. A second helper
   // waits for the first so only one of them compiles the interop types.
-  constructor({ workDir, log = console, waitFor = null }) {
+  // idleMs: stop the helper after this long without calls (it starts again
+  // on the next one); hold(reason) keeps it running meanwhile.
+  constructor({ workDir, log = console, waitFor = null, idleMs = 0 }) {
     this.workDir = workDir;
     this.log = log;
     this.waitFor = waitFor;
+    this.idleMs = idleMs;
+    this.idleTimer = null;
+    this.holds = new Set();
     this.proc = null;
     this.ready = null;
     this.pending = new Map();
@@ -27,6 +32,26 @@ class NativeBridge {
     this.restarts = [];
     this.disabledReason = process.platform === "win32" ? null : "Native bridge is Windows-only";
     this.stopping = false;
+  }
+
+  // Keeps the helper running while something lives in it (a disk scan's
+  // results), however long nobody calls it.
+  hold(reason, on) {
+    if (on) this.holds.add(reason); else this.holds.delete(reason);
+    this._armIdle();
+  }
+
+  _armIdle() {
+    clearTimeout(this.idleTimer);
+    if (!this.idleMs || !this.proc) return;
+    this.idleTimer = setTimeout(() => {
+      if (!this.proc || this.pending.size || this.holds.size) { this._armIdle(); return; }
+      // Closing its input ends the helper cleanly; the next call starts it.
+      const proc = this.proc;
+      this.idleStopped = proc;
+      try { proc.stdin.end(); } catch (_) {}
+      setTimeout(() => { try { if (proc.exitCode === null) proc.kill(); } catch (_) {} }, 3000);
+    }, this.idleMs);
   }
 
   // Packaged builds keep the script inside app.asar, which powershell.exe
@@ -74,7 +99,7 @@ class NativeBridge {
       rl.on("line", (line) => {
         let msg;
         try { msg = JSON.parse(line); } catch (_) { return; }
-        if (msg.ready) { clearTimeout(startTimer); resolve(); return; }
+        if (msg.ready) { clearTimeout(startTimer); resolve(); this._armIdle(); return; }
         const entry = this.pending.get(msg.id);
         if (!entry) return;
         this.pending.delete(msg.id);
@@ -95,7 +120,7 @@ class NativeBridge {
           entry.reject(new Error("Native bridge exited"));
         }
         this.pending.clear();
-        if (!this.stopping && code !== 0 && stderr.trim()) {
+        if (!this.stopping && this.idleStopped !== proc && code !== 0 && stderr.trim()) {
           this.log.warn(`[native-bridge] exited with code ${code}: ${stderr.trim().slice(0, 600)}`);
         }
         reject(new Error(`Native bridge exited (${code})`));
@@ -117,7 +142,8 @@ class NativeBridge {
     const proc = this.proc;
     if (!proc) throw new Error("Native bridge is not running");
     const id = this.nextId++;
-    return new Promise((resolve, reject) => {
+    clearTimeout(this.idleTimer);
+    const result = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Native call "${cmd}" timed out`));
@@ -125,6 +151,8 @@ class NativeBridge {
       this.pending.set(id, { resolve, reject, timer });
       proc.stdin.write(`${JSON.stringify({ id, cmd, args })}\n`);
     });
+    result.then(() => this._armIdle(), () => this._armIdle());
+    return result;
   }
 
   warmUp() {

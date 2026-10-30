@@ -11,8 +11,9 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { app, screen } = require("electron");
+const { app, screen, webContents } = require("electron");
 const { handle } = require("./util");
+const { APP_ORIGIN } = require("../lib/protocol");
 
 const SETTINGS_IN_REPORT = [
   "perfProfile", "throttleUnfocused", "termGpu", "theme", "layoutPreset", "uiScale", "showKeyboard", "filesPanel",
@@ -30,7 +31,29 @@ function percentile(values, p) {
   return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
 }
 
-function registerBenchmark({ settings, telemetry, bridge, aux, portable, startup }) {
+// What each renderer process is for (pid -> role): the interface, a browser
+// tab's page, a HUD / screen saver / wallpaper window, DevTools.
+function rendererRoles(browser) {
+  const roles = new Map();
+  for (const wc of webContents.getAllWebContents()) {
+    if (wc.isDestroyed()) continue;
+    let pid;
+    try { pid = wc.getOSProcessId(); } catch (_) { continue; }
+    const url = wc.getURL() || "";
+    let role = "other";
+    if (browser?.isBrowserSession?.(wc.session)) role = "browser-tab";
+    else if (url.startsWith("devtools:")) role = "devtools";
+    else if (url.startsWith(APP_ORIGIN)) {
+      const q = new URL(url).searchParams;
+      role = q.has("hud") ? (q.has("wall") ? "wallpaper" : "hud") : q.has("saver") ? "saver" : q.has("wall") ? "wallpaper" : "interface";
+    }
+    const was = roles.get(pid);
+    roles.set(pid, was && was !== role && !was.split("+").includes(role) ? `${was}+${role}` : role);
+  }
+  return roles;
+}
+
+function registerBenchmark({ settings, telemetry, bridge, aux, portable, startup, browser }) {
   // CPU time per process at the previous sample (pid -> { cpu, at }), so
   // percentages don't depend on who else called getAppMetrics().
   let last = new Map();
@@ -92,6 +115,13 @@ function registerBenchmark({ settings, telemetry, bridge, aux, portable, startup
         battery: battery ? { present: !!battery.hasBattery, onAC: battery.ac ?? null, percent: battery.percent ?? null, saver: battery.saver ?? null } : null
       },
       settings: Object.fromEntries(SETTINGS_IN_REPORT.map((k) => [k, settings.get(k)])),
+      // What's open besides the interface: browser-tab pages (and how many
+      // are unloaded), HUD / screen saver / wallpaper windows, native helpers.
+      open: (() => {
+        const counts = {};
+        for (const role of rendererRoles(browser).values()) for (const r of role.split("+")) counts[r] = (counts[r] || 0) + 1;
+        return { rendererProcesses: counts, browserTabs: browser?.stats?.() || null, helpersRunning: [bridge?.proc, aux?.proc].filter(Boolean).length };
+      })(),
       startup: {
         launchToWindowMs: since("readyToShow"),
         launchToUsableMs: since("uiReady"),
@@ -132,13 +162,17 @@ function registerBenchmark({ settings, telemetry, bridge, aux, portable, startup
   // last sample; memory in MB) plus the native helpers.
   handle("bench:sample", async () => {
     const now = Date.now();
+    const roles = rendererRoles(browser);
     const procs = app.getAppMetrics().map((m) => {
       const prev = last.get(m.pid);
       const cum = m.cpu.cumulativeCPUUsage;
       let cpu = m.cpu.percentCPUUsage;
       if (Number.isFinite(cum) && prev && Number.isFinite(prev.cpu) && now > prev.at) cpu = ((cum - prev.cpu) / ((now - prev.at) / 1000)) * 100;
       last.set(m.pid, { cpu: cum, at: now });
-      return { type: m.type, name: m.name || m.serviceName || null, cpu: round(Math.max(0, cpu), 1), wsMB: round((m.memory.workingSetSize || 0) / 1024, 1), privMB: round((m.memory.privateBytes || 0) / 1024, 1) };
+      return {
+        type: m.type, name: m.name || m.serviceName || null, role: m.type === "Tab" ? roles.get(m.pid) || "other" : undefined,
+        cpu: round(Math.max(0, cpu), 1), wsMB: round((m.memory.workingSetSize || 0) / 1024, 1), privMB: round((m.memory.privateBytes || 0) / 1024, 1)
+      };
     });
     if (now - helpers.at > 3000) refreshHelpers();
     let system = null;

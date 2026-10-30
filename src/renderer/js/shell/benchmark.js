@@ -1,5 +1,5 @@
 // Benchmark: how well this PC runs eDEX, as numbers to compare across
-// machines and versions. About 45 seconds: eDEX idle with your settings and
+// machines and versions. About 50 seconds: eDEX idle with your settings and
 // in the Eco profile, frame pacing, drawing an effect, filling a terminal,
 // and the native helper's round trip, plus startup times and the hardware.
 // The report has no personal data and is saved to Documents\eDEX benchmarks.
@@ -7,7 +7,7 @@ import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { openModal, toast, copyText, cleanError } from "../core/ui.js";
-import { profile, configure, animationFps } from "../core/poll.js";
+import { profile, configure, animationFps, holdCalm, forceCalm } from "../core/poll.js";
 import { terminalTheme, terminalFont } from "../core/theme.js";
 import { effectStepper } from "./fx.js";
 
@@ -25,6 +25,7 @@ const pct = (v, p) => {
 const PHASES = [
   ["info", "Hardware and startup"],
   ["idle", "eDEX idle (your settings)"],
+  ["calm", "eDEX idle (calm animations)"],
   ["eco", "eDEX idle (Eco profile)"],
   ["smooth", "Smoothness (frame pacing)"],
   ["anim", "Drawing an effect"],
@@ -80,25 +81,30 @@ function summarizeSamples(samples, logical) {
   const cpu = samples.map((s) => all(s).reduce((a, p) => a + (p.cpu || 0), 0));
   const mem = samples.map((s) => all(s).reduce((a, p) => a + (p.wsMB || 0), 0));
   const priv = samples.map((s) => s.procs.reduce((a, p) => a + (p.privMB || 0), 0));
-  // Per kind of process (main, interface, GPU, utility, helper): totals per
-  // sample, then averaged.
-  const byType = {};
-  for (const s of samples) {
-    const totals = {};
-    for (const p of all(s)) {
-      const t = (totals[p.type] ||= { cpu: 0, mem: 0, n: 0 });
-      t.cpu += p.cpu || 0;
-      t.mem += p.wsMB || 0;
-      t.n++;
+  // Per process type (main "Browser", "Tab" renderers, GPU, utility,
+  // helpers) and per kind (which renderer: interface, browser-tab page, HUD
+  // …; which utility service): totals per sample, then averaged.
+  const group = (keyOf) => {
+    const acc = {};
+    for (const s of samples) {
+      const totals = {};
+      for (const p of all(s)) {
+        const t = (totals[keyOf(p)] ||= { cpu: 0, mem: 0, n: 0 });
+        t.cpu += p.cpu || 0;
+        t.mem += p.wsMB || 0;
+        t.n++;
+      }
+      for (const [k, t] of Object.entries(totals)) {
+        const b = (acc[k] ||= { cpu: [], mem: [], n: [] });
+        b.cpu.push(t.cpu);
+        b.mem.push(t.mem);
+        b.n.push(t.n);
+      }
     }
-    for (const [k, t] of Object.entries(totals)) {
-      const b = (byType[k] ||= { cpu: [], mem: [], n: [] });
-      b.cpu.push(t.cpu);
-      b.mem.push(t.mem);
-      b.n.push(t.n);
-    }
-  }
-  const types = Object.fromEntries(Object.entries(byType).map(([k, b]) => [k, { cpuPctOfCore: round(avg(b.cpu)), memMB: round(avg(b.mem), 0), processes: Math.round(avg(b.n)) }]));
+    return Object.fromEntries(Object.entries(acc).map(([k, b]) => [k, { cpuPctOfCore: round(avg(b.cpu)), memMB: round(avg(b.mem), 0), processes: Math.round(avg(b.n)) }]));
+  };
+  const types = group((p) => p.type);
+  const kinds = group((p) => (p.type === "Tab" ? `Tab · ${p.role || "other"}` : p.type === "Utility" ? `Utility · ${p.name || "other"}` : p.type));
   const sys = samples.map((s) => s.system?.cpuLoadPct).filter(Number.isFinite);
   return {
     samples: samples.length,
@@ -109,6 +115,7 @@ function summarizeSamples(samples, logical) {
     memMaxMB: round(mem.length ? Math.max(...mem) : null, 0),
     privateAvgMB: round(avg(priv), 0),
     byType: types,
+    byKind: kinds,
     systemCpuAvgPct: round(avg(sys), 0)
   };
 }
@@ -233,8 +240,8 @@ function webglInfo() {
 // The whole run. opts: { quick, label, testArea, onProgress({ id, state }), ctl: { aborted } }
 export async function runBenchmark({ quick = false, label = "", testArea = null, onProgress = () => {}, ctl = { aborted: false } } = {}) {
   const D = quick
-    ? { settle: 800, idle: 3000, eco: 2000, smooth: 1500, anim: 1500, termKB: 200, helper: 5, after: 800 }
-    : { settle: 4000, idle: 15000, eco: 10000, smooth: 5000, anim: 6000, termKB: 1536, helper: 30, after: 2500 };
+    ? { settle: 800, idle: 3000, calm: 2000, eco: 2000, smooth: 1500, anim: 1500, termKB: 200, helper: 5, after: 800 }
+    : { settle: 4000, idle: 12000, calm: 8000, eco: 8000, smooth: 5000, anim: 6000, termKB: 1536, helper: 30, after: 2500 };
   const area = testArea || document.body.appendChild(h("div", { class: "bench-area bench-offscreen" }));
   const notes = [];
   const timings = {};
@@ -252,12 +259,16 @@ export async function runBenchmark({ quick = false, label = "", testArea = null,
       throw e;
     }
   };
-  const report = { kind: "edex-benchmark", schema: 1, createdAt: new Date().toISOString(), quick, label: String(label || "").replace(/[^\w .,()+-]/g, "").trim().slice(0, 40) };
+  // schema 2: idleCalm phase, byKind breakdowns, workload / open.
+  const report = { kind: "edex-benchmark", schema: 2, createdAt: new Date().toISOString(), quick, label: String(label || "").replace(/[^\w .,()+-]/g, "").trim().slice(0, 40) };
   let blurred = false;
   const onBlur = () => { blurred = true; };
   const restoreProfile = () => configure({ profile: settings.get("perfProfile") || "auto" });
   let logical = navigator.hardwareConcurrency || 1;
   window.addEventListener("blur", onBlur);
+  // Leaving the PC alone during the run mustn't calm the animations except
+  // in the phase that measures exactly that.
+  holdCalm("benchmark", true);
   try {
     await phase("info", async () => {
       Object.assign(report, await api.bench.info());
@@ -267,6 +278,17 @@ export async function runBenchmark({ quick = false, label = "", testArea = null,
         devicePixelRatio: window.devicePixelRatio, logicalCores: navigator.hardwareConcurrency || null, deviceMemoryGB: navigator.deviceMemory ?? null,
         webgl: webglInfo(), effectiveProfile: profile().name, animationFps: animationFps(), viewport: `${innerWidth}x${innerHeight}`
       };
+      // What's open in eDEX: tabs by type (this workspace, and all of them).
+      const tabCounts = (only) => {
+        const out = {};
+        for (const t of document.querySelectorAll(".tab")) {
+          if (only && t.hidden) continue;
+          const kind = [...t.classList].find((c) => c.startsWith("tab-"))?.slice(4) || "other";
+          out[kind] = (out[kind] || 0) + 1;
+        }
+        return out;
+      };
+      report.workload = { tabsInWorkspace: tabCounts(true), tabsAllWorkspaces: tabCounts(false), workspaces: (settings.get("profiles") || []).filter((p) => p.id !== "main").length + 1, panels: document.querySelectorAll(".panel:not([hidden])").length };
       if (report.hardware?.battery?.present && report.hardware.battery.onAC === false) notes.push("Ran on battery: the Auto profile switches to Eco there, and Windows may slow the CPU.");
       if (report.startup.startedSecondsAgo > 900) notes.push("eDEX had been running for a while; for startup times, run the benchmark soon after starting eDEX.");
     });
@@ -274,6 +296,13 @@ export async function runBenchmark({ quick = false, label = "", testArea = null,
     report.phases = {};
     await sleep(D.settle);
     report.phases.idle = await phase("idle", () => measure(D.idle, logical, ctl));
+    report.phases.idleCalm = await phase("calm", async () => {
+      forceCalm(true);
+      try {
+        await sleep(600);
+        return await measure(D.calm, logical, ctl);
+      } finally { forceCalm(false); }
+    });
     report.phases.idleEco = await phase("eco", async () => {
       configure({ profile: "eco" });
       try {
@@ -293,6 +322,8 @@ export async function runBenchmark({ quick = false, label = "", testArea = null,
     });
   } finally {
     window.removeEventListener("blur", onBlur);
+    forceCalm(false);
+    holdCalm("benchmark", false);
     restoreProfile();
     report.mainProcess = await api.bench.end().catch(() => null);
     if (!testArea) area.remove();
@@ -305,6 +336,7 @@ export async function runBenchmark({ quick = false, label = "", testArea = null,
     startupToUsableSec: report.startup?.launchToUsableMs != null ? round(report.startup.launchToUsableMs / 1000, 1) : null,
     idleCpuPctOfCore: p.idle?.cpuAvgPctOfCore ?? null,
     idleCpuPctOfAllCores: p.idle?.cpuAvgPctOfAllCores ?? null,
+    calmIdleCpuPctOfCore: p.idleCalm?.cpuAvgPctOfCore ?? null,
     ecoIdleCpuPctOfCore: p.idleEco?.cpuAvgPctOfCore ?? null,
     idleMemoryMB: p.idle?.memAvgMB ?? null,
     idleFrameP95Ms: p.smoothness?.frames?.p95FrameMs ?? null,
@@ -330,8 +362,9 @@ export function summaryText(r) {
     `eDEX-UI ${r.app?.version} benchmark${r.label ? ` — ${r.label}` : ""}${r.quick ? " (quick)" : ""}`,
     `${hw.cpu?.brand || "CPU ?"} (${hw.cpu?.logicalCores || "?"} threads) · ${hw.ramGB ?? "?"} GB RAM · ${hw.gpu?.model || "GPU ?"} · ${disks} · ${r.os?.distro || "Windows"} ${r.os?.build || ""}`.trim(),
     `Startup to usable: ${s.startupToUsableSec ?? "?"} s`,
-    `Idle CPU: ${s.idleCpuPctOfCore ?? "?"}% of one core (${s.idleCpuPctOfAllCores ?? "?"}% of the whole CPU) · in Eco: ${s.ecoIdleCpuPctOfCore ?? "?"}%`,
+    `Idle CPU: ${s.idleCpuPctOfCore ?? "?"}% of one core (${s.idleCpuPctOfAllCores ?? "?"}% of the whole CPU) · calm: ${s.calmIdleCpuPctOfCore ?? "?"}% · Eco: ${s.ecoIdleCpuPctOfCore ?? "?"}%`,
     `Memory: ${s.idleMemoryMB ?? "?"} MB idle, ${s.memoryAfterMB ?? "?"} MB after the tests`,
+    `Biggest: ${Object.entries(r.phases?.idle?.byKind || {}).sort((a, b) => (b[1].memMB || 0) - (a[1].memMB || 0)).slice(0, 4).map(([k, v]) => `${k.replace(/^Tab · /, "").replace(/^Utility · /, "")} ${v.memMB} MB${v.processes > 1 ? ` (${v.processes})` : ""}`).join(", ") || "?"}`,
     `Smoothness: 95% of frames within ${s.idleFrameP95Ms ?? "?"} ms, ${s.idleLongFrames ?? "?"} long frames · interface lag p95 ${s.interfaceLagP95Ms ?? "?"} ms`,
     `Effect drawing: ${s.effectDrawMedianMs ?? "?"} ms a frame · terminal: ${s.terminalMBps ?? "?"} MB/s (${s.terminalRenderer || "?"})`,
     `Native helper: ${s.helperMedianMs ?? "?"} ms median, ${s.helperP95Ms ?? "?"} ms p95`,
@@ -361,7 +394,7 @@ export function openBenchmark() {
       label.disabled = true;
       results.hidden = save.hidden = copy.hidden = true;
       for (const r of rows.values()) r.dataset.state = "";
-      setText(status, "Running — keep eDEX in front and leave the PC alone for about 45 seconds.");
+      setText(status, "Running — keep eDEX in front and leave the PC alone for about 50 seconds.");
       try {
         report = await runBenchmark({ label: label.value, testArea: area, ctl, onProgress: ({ id, state }) => { const r = rows.get(id); if (r) r.dataset.state = state; } });
         setText(results, summaryText(report));
@@ -387,7 +420,7 @@ export function openBenchmark() {
     copy.addEventListener("click", () => { if (report) copyText(summaryText(report)); });
     return h("div", { class: "dialog bench" },
       h("h2", { class: "dialog-title" }, icon("gauge"), "Benchmark this PC"),
-      h("p", { class: "dialog-msg" }, "Measures how eDEX runs here: startup time, CPU and memory while idle (with your settings and in Eco), smoothness, drawing an effect, terminal speed and the native helper. About 45 seconds. The report has no personal data — no PC or user name, paths or network addresses."),
+      h("p", { class: "dialog-msg" }, "Measures how eDEX runs here: startup time, CPU and memory while idle (with your settings and in Eco), smoothness, drawing an effect, terminal speed and the native helper. About 50 seconds. The report has no personal data — no PC or user name, paths or network addresses."),
       h("div", { class: "bench-head" }, label, start),
       h("div", { class: "bench-steps" }, ...rows.values()),
       area, status, results,

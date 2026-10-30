@@ -280,5 +280,9 @@ export class DiskTab {
     clearTimeout(this.pollTimer);
     cancelAnimationFrame(this.resizeFrame);
     this.resize?.disconnect();
+    // The scan's tree lives in the native helper (a whole drive can be a lot
+    // of memory): it's freed ten minutes after the tab closes, unless the
+    // tab comes back.
+    api.disk.release().catch(() => {});
   }
 }

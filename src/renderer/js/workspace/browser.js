@@ -170,6 +170,11 @@ export class BrowserTab {
     }
     const wasUrl = this.page.url;
     Object.assign(this.page, s);
+    // Unloaded in the background to save memory: dimmed until it's back.
+    if (s.unloaded !== undefined) {
+      this.tabEl?.classList.toggle("unloaded", !!s.unloaded);
+      if (this.tabEl) this.tabEl.title = s.unloaded ? `${this.label} — unloaded to save memory; opens again when you switch to it` : this.label;
+    }
     if (s.error) this.problem = { kind: "error", text: s.error, url: s.failedUrl };
     else if (s.crashed) this.problem = { kind: "crashed", text: "This page stopped working." };
     else if (s.loading && this.problem?.kind === "error") this.problem = null;
@@ -217,7 +222,9 @@ export class BrowserTab {
     if (!this.created || !this.host) return;
     const visible = this.active && !this.covered && !this.problem && !!(this.url || this.page.url);
     const r = this.host.getBoundingClientRect();
-    api.browser.layout(this.id, { x: r.left, y: r.top, width: r.width, height: r.height }, visible).catch(() => {});
+    // active: the current tab, even while a menu covers it (it isn't a
+    // background tab to unload).
+    api.browser.layout(this.id, { x: r.left, y: r.top, width: r.width, height: r.height }, visible, !!this.active).catch(() => {});
   }
 
   async setCovered(covered) {

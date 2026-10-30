@@ -134,7 +134,8 @@ contextBridge.exposeInMainWorld("edex", {
     progress: invoke("disk:progress"),
     node: invoke("disk:node"),
     cancel: invoke("disk:cancel"),
-    clear: invoke("disk:clear")
+    clear: invoke("disk:clear"),
+    release: invoke("disk:release")
   },
   tools: {
     runCommandWidget: invoke("cmdw:run"),

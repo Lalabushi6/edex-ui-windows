@@ -333,12 +333,22 @@ locked down.
 - **Performance profiles** (Auto / Performance / Balanced / Eco; Auto switches
   to Eco on battery or battery saver) set refresh rates and animation frame
   rates; Settings → Performance shows eDEX's own CPU and memory use.
+- **Calm when idle**: after a minute without input, animations and panel
+  refreshes slow to the Eco pace (roughly halving idle CPU on the Performance
+  profile) and snap back on the next key press or mouse move; music, video
+  and the idle screen stay smooth.
+- **Memory given back**: browser tabs you haven't looked at for a while
+  unload their pages (each is often 100 MB or more) and reload, with their
+  history, when you return; the helper for slow jobs stops after three
+  minutes unused.
 - **Benchmark** (Settings → Performance, or "Run benchmark" in the launcher):
-  about 45 seconds measuring startup time, idle CPU and memory (with your
-  settings and in Eco), smoothness, effect drawing, terminal speed and the
-  native helper, then saves a report with no personal data to
-  `Documents\eDEX benchmarks`, so different PCs and versions can be compared.
-  The goal is for eDEX to run well on older laptops, not just fast ones.
+  about 50 seconds measuring startup time, idle CPU and memory (with your
+  settings, calmed, and in Eco, split by process: interface, browser-tab
+  pages, GPU, Chromium services, native helpers), smoothness, effect
+  drawing, terminal speed and the native helper, then saves a report with no
+  personal data to `Documents\eDEX benchmarks`, so different PCs and
+  versions can be compared. The goal is for eDEX to run well on older
+  laptops, not just fast ones.
 
 ### Settings, updates and portable use
 - **Settings backup**: export / import every setting, your custom themes and

@@ -166,6 +166,8 @@ const SCHEMA = {
   // Performance
   perfProfile: [oneOf("auto", "performance", "balanced", "eco"), "auto"],
   throttleUnfocused: [bool(), true],
+  calmWhenIdle: [bool(), true],
+  browserUnloadMinutes: [(v, d) => ([0, 5, 10, 30, 60].includes(Number(v)) ? Number(v) : d), 10],
   termGpu: [bool(), true],
 
   // Layout

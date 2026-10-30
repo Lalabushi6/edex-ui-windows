@@ -6,6 +6,11 @@
 // app:// or localfile: access, http(s) only, web permissions (camera,
 // microphone, location, notifications, USB/HID/serial) refused, and
 // downloads saved only where the user picks in a Save dialog.
+//
+// A tab left in the background longer than Settings → Web & apps → "Unload
+// background tabs after" gives its page back (each page is a process of its
+// own, often 100 MB or more). Its address, history and zoom are kept, and it
+// loads again when you return to it. Tabs playing sound or downloading stay.
 "use strict";
 
 const path = require("path");
@@ -21,8 +26,11 @@ const isWeb = (u) => /^https?:\/\//i.test(String(u || ""));
 
 function registerBrowser({ windows, notices, settings }) {
   const ses = session.fromPartition(PARTITION);
-  const views = new Map(); // id -> { view, wc, bounds, visible, full }
+  // id -> { view, wc, bounds, visible, active, full, hiddenAt, downloads,
+  //         unloaded: null | { entries, index, url, title, zoom } }
+  const views = new Map();
   const idOf = (wc) => { for (const [id, v] of views) if (v.wc === wc) return id; return null; };
+  const live = (v) => !!v && !v.unloaded && !!v.wc && !v.wc.isDestroyed();
 
   // Sites see an ordinary Chrome user agent, not "Electron" / "eDEX-UI".
   ses.setUserAgent(ses.getUserAgent().replace(/\s+(eDEX-UI|edex-ui-windows)\/\S+/gi, "").replace(/\s+Electron\/\S+/i, ""));
@@ -32,8 +40,11 @@ function registerBrowser({ windows, notices, settings }) {
   ses.on("will-download", (_event, item, wc) => {
     item.setSaveDialogOptions({ title: "Save download", defaultPath: path.join(app.getPath("downloads"), item.getFilename()) });
     const id = idOf(wc);
+    const owner = views.get(id);
+    if (owner) owner.downloads = (owner.downloads || 0) + 1;
     windows.send("browser:download", { id, state: "started", name: item.getFilename() });
     item.once("done", (_e, state) => {
+      if (owner) owner.downloads = Math.max(0, (owner.downloads || 1) - 1);
       const file = state === "completed" ? item.getSavePath() : null;
       windows.send("browser:download", { id, state, name: item.getFilename(), file });
       if (state === "completed") notices?.add({ level: "ok", kind: "download", title: "Download finished", body: item.getFilename(), action: { type: "reveal", value: file } }, { toast: false, system: "hidden" });
@@ -43,7 +54,12 @@ function registerBrowser({ windows, notices, settings }) {
 
   const send = (id, extra = {}) => {
     const v = views.get(id);
-    if (!v || v.wc.isDestroyed()) return;
+    if (v?.unloaded) {
+      const u = v.unloaded;
+      windows.send("browser:state", { id, url: u.url, title: u.title, loading: false, canBack: u.index > 0, canForward: u.index < u.entries.length - 1, zoom: Math.round(u.zoom * 100), unloaded: true, ...extra });
+      return;
+    }
+    if (!live(v)) return;
     const h = v.wc.navigationHistory;
     windows.send("browser:state", {
       id,
@@ -53,6 +69,7 @@ function registerBrowser({ windows, notices, settings }) {
       canBack: h.canGoBack(),
       canForward: h.canGoForward(),
       zoom: Math.round(v.wc.getZoomFactor() * 100),
+      unloaded: false,
       ...extra
     });
   };
@@ -73,7 +90,7 @@ function registerBrowser({ windows, notices, settings }) {
 
   const applyBounds = (v) => {
     const win = windows.win;
-    if (!win || win.isDestroyed()) return;
+    if (!win || win.isDestroyed() || !v.view) return;
     if (v.full) {
       const [width, height] = win.getContentSize();
       v.view.setBounds({ x: 0, y: 0, width, height });
@@ -184,7 +201,12 @@ function registerBrowser({ windows, notices, settings }) {
 
   function act(id, action) {
     const v = views.get(id);
-    if (!v || v.wc.isDestroyed()) return false;
+    if (v?.unloaded) {
+      if (action === "reload") { reload(id); return true; }
+      if (action === "external" && isWeb(v.unloaded.url)) { windows.yieldFocus(); shell.openExternal(v.unloaded.url).catch(() => {}); return true; }
+      return false;
+    }
+    if (!live(v)) return false;
     const wc = v.wc;
     const h = wc.navigationHistory;
     switch (action) {
@@ -212,10 +234,8 @@ function registerBrowser({ windows, notices, settings }) {
     return u;
   };
 
-  handle("browser:create", (_e, id, url) => {
-    const key = asId(id);
-    if (views.has(key)) return true;
-    if (views.size >= MAX_VIEWS) throw new Error(`At most ${MAX_VIEWS} browser tabs`);
+  // A page for the entry: a new tab, or one coming back after unloading.
+  function makeView(key, entry) {
     const win = windows.win;
     if (!win || win.isDestroyed()) throw new Error("No window");
     const view = new WebContentsView({
@@ -234,16 +254,77 @@ function registerBrowser({ windows, notices, settings }) {
     view.setBackgroundColor("#ffffff");
     view.setVisible(false);
     win.contentView.addChildView(view);
-    const entry = { view, wc: view.webContents, bounds: null, visible: false, full: false };
-    views.set(key, entry);
+    entry.view = view;
+    entry.wc = view.webContents;
     wire(key, entry.wc);
+  }
+
+  handle("browser:create", (_e, id, url) => {
+    const key = asId(id);
+    if (views.has(key)) return true;
+    if (views.size >= MAX_VIEWS) throw new Error(`At most ${MAX_VIEWS} browser tabs`);
+    const entry = { view: null, wc: null, bounds: null, visible: false, active: false, full: false, hiddenAt: Date.now(), downloads: 0, unloaded: null };
+    makeView(key, entry);
+    views.set(key, entry);
     if (url) entry.wc.loadURL(asUrl(url)).catch(() => {});
     return true;
   });
 
+  // Gives a background tab's page back, keeping what's needed to reload it.
+  function unload(key) {
+    const v = views.get(key);
+    if (!live(v)) return false;
+    const h = v.wc.navigationHistory;
+    let entries = [];
+    let index = 0;
+    try { entries = h.getAllEntries(); index = h.getActiveIndex(); } catch (_) {}
+    v.unloaded = { entries, index, url: v.wc.getURL(), title: v.wc.getTitle(), zoom: v.wc.getZoomFactor() };
+    try { windows.win?.contentView.removeChildView(v.view); } catch (_) {}
+    v.wc.close();
+    v.view = null;
+    v.wc = null;
+    send(key);
+    return true;
+  }
+
+  // Brings an unloaded tab's page back: its history (and the page's saved
+  // state, where the site allows), else just its address.
+  function reload(key, url = null) {
+    const v = views.get(key);
+    if (!v?.unloaded) return false;
+    const saved = v.unloaded;
+    v.unloaded = null;
+    makeView(key, v);
+    applyBounds(v);
+    const zoom = () => { if (live(v) && saved.zoom && saved.zoom !== 1) v.wc.setZoomFactor(saved.zoom); };
+    v.wc.once("did-finish-load", zoom);
+    if (url) v.wc.loadURL(url).catch(() => {});
+    else if (saved.entries.length) {
+      v.wc.navigationHistory.restore({ entries: saved.entries, index: saved.index }).catch(() => {
+        if (live(v) && isWeb(saved.url)) v.wc.loadURL(saved.url).catch(() => {});
+      });
+    } else if (isWeb(saved.url)) v.wc.loadURL(saved.url).catch(() => {});
+    send(key);
+    return true;
+  }
+
+  // Once a minute: unload tabs that have been out of sight long enough.
+  const unloadTimer = setInterval(() => {
+    const minutes = Number(settings?.get("browserUnloadMinutes")) || 0;
+    if (!minutes) return;
+    const cutoff = Date.now() - minutes * 60000;
+    for (const [key, v] of views) {
+      if (!live(v) || v.visible || v.active || v.full || !v.hiddenAt || v.hiddenAt > cutoff) continue;
+      if (v.downloads > 0 || v.wc.isCurrentlyAudible() || v.wc.isDevToolsOpened()) continue;
+      unload(key);
+    }
+  }, 60000);
+
   handle("browser:go", (_e, id, url) => {
-    const v = views.get(asId(id));
+    const key = asId(id);
+    const v = views.get(key);
     if (!v) throw new Error("No such browser tab");
+    if (v.unloaded) { reload(key, asUrl(url)); return true; }
     v.wc.loadURL(asUrl(url)).catch(() => {});
     return true;
   });
@@ -253,28 +334,35 @@ function registerBrowser({ windows, notices, settings }) {
     return act(asId(id), action);
   });
 
-  // rect: the tab's area in interface pixels; visible: whether it shows now.
-  handle("browser:layout", (_e, id, rect, visible) => {
-    const v = views.get(asId(id));
+  // rect: the tab's area in interface pixels; visible: whether it shows now;
+  // active: whether it's the workspace's current tab (covered by a menu, say,
+  // it isn't visible but isn't in the background either).
+  handle("browser:layout", (_e, id, rect, visible, active) => {
+    const key = asId(id);
+    const v = views.get(key);
     if (!v) return false;
     if (rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) {
       v.bounds = { x: rect.x, y: rect.y, width: Math.max(0, rect.width), height: Math.max(0, rect.height) };
     }
     v.visible = !!visible && !!v.bounds && v.bounds.width > 8 && v.bounds.height > 8;
+    v.active = active === undefined ? v.visible : !!active;
+    if (v.visible || v.active) v.hiddenAt = null;
+    else if (!v.hiddenAt) v.hiddenAt = Date.now();
+    if (v.visible && v.unloaded) reload(key);
     applyBounds(v);
     return true;
   });
 
   handle("browser:focus", (_e, id) => {
     const v = views.get(asId(id));
-    if (v?.visible) v.wc.focus();
+    if (v?.visible && live(v)) v.wc.focus();
     return !!v;
   });
 
   // A still of the page, shown while an eDEX menu or dialog covers the tab.
   handle("browser:snapshot", async (_e, id) => {
     const v = views.get(asId(id));
-    if (!v || !v.visible) return null;
+    if (!live(v) || !v.visible) return null;
     try {
       const img = await v.wc.capturePage();
       if (img.isEmpty()) return null;
@@ -284,7 +372,7 @@ function registerBrowser({ windows, notices, settings }) {
 
   handle("browser:find", (_e, id, text, opts = {}) => {
     const v = views.get(asId(id));
-    if (!v) return false;
+    if (!live(v)) return false;
     if (!text) { v.wc.stopFindInPage("clearSelection"); return true; }
     v.wc.findInPage(String(text).slice(0, 200), { forward: opts.forward !== false, findNext: !!opts.findNext, matchCase: !!opts.matchCase });
     return true;
@@ -303,8 +391,8 @@ function registerBrowser({ windows, notices, settings }) {
     const v = views.get(id);
     if (!v) return false;
     views.delete(id);
-    try { windows.win?.contentView.removeChildView(v.view); } catch (_) {}
-    if (!v.wc.isDestroyed()) v.wc.close();
+    if (v.view) { try { windows.win?.contentView.removeChildView(v.view); } catch (_) {} }
+    if (live(v)) v.wc.close();
     return true;
   }
 
@@ -318,7 +406,16 @@ function registerBrowser({ windows, notices, settings }) {
     win.on("closed", () => views.clear());
   };
 
-  return { isBrowserSession: (s) => s === ses, attach, closeAll };
+  return {
+    isBrowserSession: (s) => s === ses,
+    attach,
+    closeAll,
+    stop: () => clearInterval(unloadTimer),
+    // For the benchmark: open browser tabs and how many are unloaded.
+    stats: () => ({ tabs: views.size, unloaded: [...views.values()].filter((v) => v.unloaded).length }),
+    // Development probes: unload every background tab now.
+    unloadBackground: () => [...views.keys()].filter((k) => { const v = views.get(k); return !v.visible && !v.active; }).filter(unload)
+  };
 }
 
 module.exports = { registerBrowser, PARTITION };

@@ -153,9 +153,12 @@ function start() {
     // Bluetooth, Windows Search, disk scans) so they never hold up the
     // telemetry the panels refresh every second. Started on first use, after
     // the first helper has compiled the shared interop types.
+    // It stops after three minutes without calls (about 120 MB back, e.g.
+    // while eDEX sits hidden) and starts again on the next one.
     aux = new NativeBridge({
       workDir: path.join(app.getPath("userData"), "native"),
-      waitFor: () => bridge.call("ping", {}, 30000)
+      waitFor: () => bridge.call("ping", {}, 30000),
+      idleMs: 3 * 60 * 1000
     });
     windows = new WindowManager({ settings, bridge });
 
@@ -252,10 +255,10 @@ function start() {
     registerRadio({ windows });
     library = registerLibrary({ settings, windows });
     calfeeds = registerCalendarFeeds({ settings, windows });
-    registerBenchmark({ settings, telemetry, bridge, aux, portable, startup });
+    registerBenchmark({ settings, telemetry, bridge, aux, portable, startup, browser });
     livewall = new LiveWallpaper({ settings, windows, bridge, gameMode });
     // Development runs can poke these from the main-process inspector.
-    if (!app.isPackaged) globalThis.__edex = { livewall, gameMode, notices, games };
+    if (!app.isPackaged) globalThis.__edex = { livewall, gameMode, notices, games, aux, bridge, getBrowser: () => browser };
     handle("saver:start", () => saver.start({ preview: true }));
     handle("saver:dismiss", () => { saver.stop(true); return true; });
 

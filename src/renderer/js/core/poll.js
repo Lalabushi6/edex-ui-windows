@@ -24,6 +24,69 @@ let throttleUnfocused = true;
 let timer = null;
 let nextAt = Infinity;
 
+// Calm when idle: after a minute without keyboard or mouse input in eDEX,
+// animations (globe, effects, visualizer) and panel refreshes slow to the
+// Eco pace until the next input, which brings everything back at once.
+// Something that should stay smooth while you just watch (music playing, the
+// idle screen) holds it off. Only the main window turns this on (initCalm).
+const CALM_AFTER_MS = 60000;
+let calm = false;
+let calmOn = false;
+let calmTimer = null;
+let lastInputAt = 0;
+const calmHolds = new Set();
+
+function armCalm() {
+  clearTimeout(calmTimer);
+  if (!calmOn) return;
+  calmTimer = setTimeout(() => {
+    if (!calmOn || calmHolds.size) return;
+    calm = true;
+    changed();
+  }, CALM_AFTER_MS);
+}
+
+function wake() {
+  const now = Date.now();
+  if (!calm && now - lastInputAt < 1000) return; // pointer moves come fast
+  lastInputAt = now;
+  if (calm) { calm = false; changed(); }
+  armCalm();
+}
+
+export function initCalm(enabled = true) {
+  if (!calmOn && enabled) {
+    for (const t of ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"]) window.addEventListener(t, wake, { capture: true, passive: true });
+  }
+  setCalmEnabled(enabled);
+}
+
+export function setCalmEnabled(on) {
+  calmOn = !!on;
+  if (!calmOn && calm) { calm = false; changed(); }
+  armCalm();
+}
+
+// reason: e.g. "media" while music plays; on: hold calm off, off: release.
+export function holdCalm(reason, on) {
+  if (on) {
+    calmHolds.add(reason);
+    if (calm) { calm = false; changed(); }
+    clearTimeout(calmTimer);
+  } else if (calmHolds.delete(reason) && !calmHolds.size) {
+    armCalm();
+  }
+}
+
+export const isCalm = () => calm;
+
+// The benchmark measures the calm state on purpose.
+export function forceCalm(on) {
+  if (calm === !!on) return;
+  calm = !!on;
+  changed();
+}
+
 // Game mode: while a game is in front (and eDEX isn't focused) nothing
 // refreshes or animates.
 let gameMode = false;
@@ -42,13 +105,16 @@ export function profile() {
 }
 
 function factor() {
-  return profile().interval * (throttleUnfocused && !windowFocused ? 2 : 1);
+  const base = calm ? Math.max(profile().interval, PROFILES.eco.interval) : profile().interval;
+  return base * (throttleUnfocused && !windowFocused ? 2 : 1);
 }
 
 // Frames per second for animations (globe, visualizer) under the current
-// profile; quartered while eDEX is in the background.
+// profile; the Eco rate while calm (idle); a third while eDEX is in the
+// background.
 export function animationFps(max = 30) {
-  const fps = Math.min(max, profile().fps);
+  let fps = Math.min(max, profile().fps);
+  if (calm) fps = Math.min(fps, PROFILES.eco.fps);
   return throttleUnfocused && !windowFocused ? Math.max(4, Math.round(fps / 3)) : fps;
 }
 

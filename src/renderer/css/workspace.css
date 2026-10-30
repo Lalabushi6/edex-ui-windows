@@ -41,6 +41,7 @@
 .tab > .ico-wrap { margin-right: .45rem; opacity: .8; }
 .tab:hover { background: var(--c-12); }
 .tab.active { background: var(--c); color: var(--bg); font-weight: 500; z-index: 1; }
+.tab.unloaded:not(.active) { opacity: .55; }
 .tab .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tab .x { position: absolute; right: .3rem; opacity: 0; width: 1.35rem; height: 1.35rem; color: inherit; }
 .tab:hover .x { opacity: .8; }

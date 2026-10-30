@@ -3,7 +3,7 @@
 import { $ } from "./core/dom.js";
 import * as settings from "./core/settings.js";
 import { applyTheme } from "./core/theme.js";
-import { setWindowVisible, configure, profile, onSchedulingChange, setGameMode, poll } from "./core/poll.js";
+import { setWindowVisible, configure, profile, onSchedulingChange, setGameMode, poll, initCalm, setCalmEnabled } from "./core/poll.js";
 import { onBattery } from "./core/live.js";
 import { emit, on, markBooted } from "./core/bus.js";
 import { command, initHotkeys, setKeys, comboFromAccelerator } from "./core/commands.js";
@@ -316,6 +316,9 @@ async function main() {
   onSchedulingChange(applyProfileClass);
   applyPerformance();
   settings.watch(["perfProfile", "throttleUnfocused"], applyPerformance);
+  // Animations slow to the Eco rate after a minute without input.
+  initCalm(settings.get("calmWhenIdle") !== false);
+  settings.watch("calmWhenIdle", (v) => setCalmEnabled(v !== false));
   // Auto profile: Eco on battery or with Windows battery saver on.
   onBattery((b) => configure({ battery: !!b.hasBattery && (!b.ac || !!b.saver) }));
   api.app.onVisibility(({ visible, focused }) => {

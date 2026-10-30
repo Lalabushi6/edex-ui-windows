@@ -247,6 +247,13 @@ own shortcuts (Ctrl+Shift+…, Ctrl+Tab, Ctrl+1…9, Ctrl+, and F1) keep
 working while a page has focus. An empty tab shows your web quick links.
 Browser tabs and their pages come back the next time eDEX starts.
 
+To save memory, a browser tab you haven't looked at for a while (10 minutes
+by default; Settings → Web & apps → **Unload background tabs after**: never,
+5, 10, 30 or 60 minutes) unloads its page: each page is a process of its
+own, often 100 MB or more. The tab stays, dimmed, and the page loads again —
+with its back / forward history and zoom — when you switch to it. Tabs
+playing sound, downloading or with DevTools open are never unloaded.
+
 Pages run in their own session: sign-ins and cookies are separate from your
 usual browser and kept until you clear them (Settings → Web & apps →
 Browsing data, or the tab's ⋯ menu). Pages can't reach your files or eDEX
@@ -722,6 +729,10 @@ eDEX is built to stay out of the way:
   once and shared by the widgets that show it.
 - While eDEX is hidden, minimised or completely covered by other windows,
   nothing refreshes and nothing animates.
+- A second helper handles slow jobs (media sessions, Bluetooth, search, disk
+  scans); it stops after three minutes without work, for example while eDEX
+  sits hidden, and starts again when needed. A disk scan's results are kept
+  for ten minutes after you close the disk-usage tab, then freed.
 
 Settings → **Performance**:
 
@@ -729,6 +740,7 @@ Settings → **Performance**:
 |---|---|
 | **Performance profile** | *Performance*: fastest refresh, 30 fps globe. *Balanced*: the default on mains power. *Eco*: slower refresh, 10 fps animations, decorative transitions off, globe at 1× resolution. *Auto* (default) uses Balanced on mains power and Eco on battery or when Windows battery saver is on. |
 | **Slow down in the background** | Halves refresh rates and lowers animation frame rates while another app has focus. |
+| **Calm down when idle** | After a minute without keyboard or mouse input, animations and panel refreshes slow to the Eco pace; the next input brings them straight back. It holds off while eDEX's media player plays and on the idle screen. On by default. |
 | **GPU-accelerated terminal** | Draws terminals with WebGL — far faster for heavy output. Turn it off if terminal text renders incorrectly on your graphics driver. |
 
 The page also shows eDEX's own CPU and memory use per process (interface,
@@ -738,21 +750,22 @@ GPU process, native helper …), refreshed every two seconds. The launcher has
 ### Benchmark
 
 Settings → Performance → **Run benchmark…** (or "Run benchmark" in the
-launcher) measures how eDEX runs on this PC, in about 45 seconds. Keep eDEX
+launcher) measures how eDEX runs on this PC, in about 50 seconds. Keep eDEX
 in front and leave the PC alone while it runs; for meaningful startup times,
 run it soon after starting eDEX.
 
 | Measured | What it tells you |
 |---|---|
 | Startup | Seconds from launching eDEX to being usable (and to the end of the boot animation) |
-| Idle CPU and memory | eDEX's processes and native helpers while it sits on screen with your settings, then in the Eco profile, split by process kind (main, interface, GPU, helpers) |
+| Idle CPU and memory | eDEX's processes and native helpers while it sits on screen with your settings, calmed (as after a minute without input), and in the Eco profile, split by process: the interface, browser-tab pages, HUD or wallpaper windows, the GPU process, each Chromium service, the native helpers |
 | Smoothness | Frame pacing (95th-percentile frame time, long frames) and how late timers fire |
 | Effect drawing | Milliseconds to draw one frame of the matrix effect |
 | Terminal | How fast a terminal fills with coloured output (WebGL or the plain renderer) |
 | Native helper | Round-trip time of the helper that reads system information |
 
 It also records the hardware (CPU, cores, RAM, GPU, disk type, display,
-battery), the Windows build and the settings that affect speed. The summary
+battery), the Windows build, the settings that affect speed and what's open
+(tabs by type, browser pages and how many are unloaded, extra windows). The summary
 shows on screen (**Copy summary** copies it); **Save report** writes the full
 results as a `.json` file to `Documents\eDEX benchmarks`, named after the
 eDEX version, the CPU and the RAM. Reports contain no PC or user name, no

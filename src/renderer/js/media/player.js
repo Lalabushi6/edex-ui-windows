@@ -6,6 +6,7 @@ import { debounce } from "../core/dom.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { toast } from "../core/ui.js";
+import { holdCalm } from "../core/poll.js";
 
 const api = window.edex;
 export const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "opus", "flac", "aac", "m4a", "weba"]);
@@ -94,9 +95,12 @@ class Player extends EventTarget {
     el.addEventListener("play", () => {
       clearTimeout(this.suspendTimer);
       if (this.ctx?.state === "suspended") this.ctx.resume().catch(() => {});
+      // The visualizer and video stay smooth while you just listen or watch.
+      holdCalm("media", true);
       emit("state");
       this.updateSession();
     });
+    for (const evt of ["pause", "ended", "emptied"]) el.addEventListener(evt, () => holdCalm("media", false));
     el.addEventListener("pause", () => {
       clearTimeout(this.suspendTimer);
       this.suspendTimer = setTimeout(() => { if (el.paused) this.ctx?.suspend().catch(() => {}); }, 5000);
