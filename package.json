@@ -1,7 +1,7 @@
 {
   "name": "edex-ui-windows",
   "productName": "eDEX-UI",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "A sci-fi desktop shell for Windows: launcher, window dock, terminal, file explorer and live system telemetry in one full-screen surface.",
   "main": "src/main/main.js",
   "homepage": "https://github.com/Lalabushi6/edex-ui-windows",
