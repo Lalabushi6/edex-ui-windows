@@ -3,7 +3,9 @@
 Drafted 30 Oct 2026 from the decision council's verdict (B first: stability,
 speed and low-spec performance; new features only inside a measured budget;
 distribution and money parked). Updated 31 Oct against 2.0.9, after the first
-real benchmark report and the compare script.
+real benchmark report and the compare script. Revised again 31 Oct after a
+decision-council run on new features, which added the Palace and Daily use
+lanes and moved W2 to stretch to make room.
 
 **Goal:** an impeccable, light daily driver that revives older machines,
 without becoming heavy, insecure or unmaintainable.
@@ -33,10 +35,12 @@ compares fine; it just has no "calm" number.
 |---|---|---|---|---|
 | **Measure** | M1 budget · M2 old-laptop baseline | M3 done · M4 per-view and hidden phases | M5 every release compared to the last | |
 | **Safety net** | | S1 smoke blocks tags · S3 beta channel | S2 Windows-integration smoke | S4 copy diagnostics (stretch) |
-| **Weight** | | W1 next rounds, driven by old-laptop data | W2 lazy-load feature modules | |
+| **Weight** | | W1 next rounds, driven by old-laptop data | W2 lazy-load feature modules (stretch) | |
 | **Visible wins** | | V4 pick features (30 Nov) | | V1 low-spec first run · V2 headline speed-up · V3 cost panel (stretch) |
+| **Palace** | | PL1 anchors and rooms (after G2) | PL2 review loop, beta channel · PL3 cost guard | PL4 globe anchors · PL5 later views (stretch) |
+| **Daily use** | | | | F2 quick capture · F1 recall search, F3 due cards on idle, F4 terminal history, F5 study session (stretch) |
 | **Seams** | | | X1 native facade (opportunistic) | |
-| **Gates** | G1 7 Nov · G2 9 Nov | G3 30 Nov | G4 kill check, mid-Dec | G5 release criteria |
+| **Gates** | G1 7 Nov · G2 9 Nov | G3 30 Nov · GP1 30 Nov | G4 kill check, mid-Dec · GP2 after G4 | G5 release criteria |
 
 ## Items
 
@@ -64,7 +68,7 @@ or **gap** (something found in the code while mapping, not in the council text).
 | ID | Item | Size | Source | Notes |
 |---|---|---|---|---|
 | W1 | **Fix the worst things the data shows.** First round shipped in 2.0.9 (calm when idle, unloading background browser tabs, stopping the idle helper). Further rounds follow the old-laptop data. | M more | council | In the first report the GPU process was the largest single piece of CPU (13.8 of 26.4 points of a core, before calm) and the interface renderers the largest memory (450 MB, then 301 MB GPU, 264 MB utility, 234 MB helpers). What drives the GPU number is a guess until measured per view (M4): effects, the globe and the WebGL terminal are the candidates. |
-| W2 | **Lazy-load feature modules** with dynamic `import()`: theme studio, arrangements, games, AI, benchmark, settings, updates, and the Spotify, disk and process views. | M | council | Gated on startup data. About 730 KB of JS may turn out to be a small part of startup next to Chromium itself (the first report: 2.0 s to usable); if so, drop this. |
+| W2 | **Lazy-load feature modules** with dynamic `import()`: theme studio, arrangements, games, AI, benchmark, settings, updates, and the Spotify, disk and process views. | M | council | Moved to stretch on 31 Oct to make room for the Palace. Also gated on startup data. About 730 KB of JS may turn out to be a small part of startup next to Chromium itself (the first report: 2.0 s to usable); if so, drop this. |
 
 ### Visible wins
 | ID | Item | Size | Source | Notes |
@@ -72,7 +76,37 @@ or **gap** (something found in the code while mapping, not in the council text).
 | V1 | **Low-spec first run**: use the hardware facts the benchmark already collects (low RAM, HDD, no usable WebGL, few cores) to start in Eco with heavy effects off, and say what was changed and how to undo it. | M | gap | The most direct way to deliver "revives old laptops" without the user hunting through Settings. |
 | V2 | **Headline speed-up**: whichever number moves most in W1/W2 becomes the 3.0 headline, with before/after in the notes. | S | council | The Chairman's guard against an optimisation-only release feeling dull. 2.0.9's calm-when-idle is a candidate if it holds on the old laptop. |
 | V3 | **Cost panel** in Settings → Performance: each heavy feature with its measured cost and a switch. | M | council (shrunk) | The cheap version of the Expansionist's modular core: no plugin API, just honest numbers on features that exist. |
-| V4 | **Choose 3.0's new features on 30 Nov**, from the data. Each must ship with either a benchmark phase or an "off unless used" guarantee. | S | council | Candidates come from you; none are assumed here. |
+| V4 | **Choose 3.0's new features on 30 Nov**, from the data. Each must ship with either a benchmark phase or an "off unless used" guarantee. | S | council | The Palace is already chosen (PL1 to PL4). The Daily use lane holds the other candidates; more come from you. |
+
+### Palace
+A spatial memory palace for studying, recall and finding your own things,
+and the headline feature of the 2.x line. The best-supported part is spaced
+retrieval (cards you are quizzed on at growing intervals); space is a memory
+cue on top of it. So the plan builds the cards and anchors first and treats
+each view (Explorer, globe, later others) as a skin over one data store. Rules
+from the council: opt-in and off by default, nothing loaded or running when
+closed, data that cannot be silently lost, and no globe work until you have
+used the folder version for 10 days.
+
+| ID | Item | Size | Source | Notes |
+|---|---|---|---|---|
+| PL1 | **Anchors and rooms.** One JSON file in the profile folder (id, kind folder or place, ref, front, back, due, interval), written atomically with a rolling backup, plus repair when an anchored folder is moved or deleted. First view is Explorer: the current folder is the room and "Add card here" pins a card to it. | M | council (31 Oct) | Start after G2 (9 Nov) and only if the oldest laptop leaves room. Before coding, run your own two-week test: 30 real cards, half anchored and half in a plain list, recall tested at day 7 and day 14. |
+| PL2 | **Review loop.** Due cards are counted when eDEX opens (no timer), shown as "3 due" in the launcher, and walked through room by room. Simple spacing (for example 1, 3, 7, 21 days) you can tune. | M | council (31 Oct) | Needs the beta channel (S3) first: it ships there, not to everyone. |
+| PL3 | **Cost guard.** A benchmark phase for the Palace (idle with it off, idle with it open, review with 500 cards) and the rule that off means off: no module loaded, no poller. | S | council (31 Oct) | Must be green before anything reaches Stable (GP2). |
+| PL4 | **Globe anchors.** Pin a card to a place on the globe and plan a journey through places. Same store, new skin. | M | council (31 Oct) | Starts only after 10 days of your own use of PL1 and PL2 and a passing PL3. The globe is the likeliest GPU cost, so measure it per view (M4) first. |
+| PL5 | **After 3.0:** walk mode, a 2D floor plan, exporting and importing a palace as a file, optional card drafting with the existing AI module on your own key (off by default). | M each | council (31 Oct) | Stretch. Each is a separate skin or integration, one per release. |
+
+### Daily use
+Small features that are useful even to a few people. None adds a background
+poller.
+
+| ID | Item | Size | Source | Notes |
+|---|---|---|---|---|
+| F1 | **Recall search.** One box across notes, tasks, calendar and files (the Windows Search helper already exists); a result can be pinned to a Palace room. | M | council (31 Oct) | Stretch. The "finding your own stuff" half of the Palace goal. |
+| F2 | **Quick capture.** A hotkey drops selected text or the current browser tab into a note or the room you are in. | S | council (31 Oct) | Should. Runs only when pressed. |
+| F3 | **Due cards on the idle screen.** The idle screen shows what is due instead of decoration. | S | council (31 Oct) | Stretch. Needs PL2. |
+| F4 | **Terminal history recall.** Search commands across sessions with the folder each ran in. | S | council (31 Oct) | Stretch. The terminal must record history, so it is opt-in and measured. |
+| F5 | **Study session.** A timer, a saved arrangement and muted notices behind one switch. | S | council (31 Oct) | Stretch. Reuses arrangements and notices. |
 
 ### Seams
 | ID | Item | Size | Source | Notes |
@@ -85,7 +119,9 @@ or **gap** (something found in the code while mapping, not in the council text).
 | G1 | Sat 7 Nov | 2.0.9 benchmark JSONs from every test laptop, the oldest included. | Run fewer laptops rather than slip. |
 | G2 | Mon 9 Nov | Top problems identified from the old laptop's data. If it already meets its budget with room to spare, move toward features sooner. | |
 | G3 | Mon 30 Nov | 3.0 feature set chosen from data (V4). | |
+| GP1 | Mon 30 Nov | **Palace use check:** your own log shows you used the Palace on at least 7 of the 14 test days. | Demote the Palace to stretch. |
 | G4 | Mid-Dec | **Kill check:** oldest laptop meets the budget in Eco after the fixes. | Rethink the low-spec promise or the runtime before adding anything else. |
+| GP2 | After G4 | The Palace goes to Stable only if G4 passed, PL3 shows no measurable idle cost with it off, and there has been no card-loss incident. | It stays on the beta channel. |
 | Standing | Any time | Bug reports outnumber fixes for a month. | Freeze features. |
 | G5 | Release | Budget met on the oldest laptop; smoke green; the compare against 2.0.9 shows no regression; at least one beta cycle. | 3.0 slips. It ships when these hold, not on a date. |
 
@@ -93,11 +129,14 @@ or **gap** (something found in the code while mapping, not in the council text).
 
 | Tier | Items | Slots |
 |---|---|---|
-| Must | M1 M2 M4 (rest) W1 (next rounds) S1 S3 S2, beta cycles and laptop re-runs, release | about 8 |
-| Should (if data supports) | W2, V1, V2 | about 2 |
-| Stretch (cut first) | V3, S4, X1 | about 2 |
+| Must | M1 M2 M4 (rest) W1 (next rounds) S1 S3 S2, PL1 PL2 PL3, beta cycles and laptop re-runs, release | about 10 |
+| Should (if data supports) | V1, V2, PL4, F2 | about 2.5 |
+| Stretch (only if something finishes early) | W2, V3, S4, X1, PL5, F1, F3, F4, F5 | about 5 |
 
-About 12 slots against about 13 available. The stretch tier is the buffer.
+Must plus Should come to about 12.5 of about 13 slots, so there is no buffer
+any more and the stretch tier only happens if something finishes early. S2 is
+the biggest single item (2 slots) and can be a manual script instead of CI if
+the Palace needs the room.
 
 ## Parked (C), with what unlocks each
 
@@ -108,6 +147,8 @@ About 12 slots against about 13 available. The stretch tier is the buffer.
 | Charging for builds | After licensing advice | The code is GPL-3.0 through eDEX-UI; talk to someone who knows open-source licensing |
 | Public compatibility table | Several reports from machines that aren't yours | `npm run bench:compare` gives the format |
 | macOS and Linux | The native facade exists and the Windows core is stable | The native layer is Windows-only today |
+| Clipboard history | The budget table exists and a clipboard watcher can be shown to cost close to nothing | It needs a background watcher, which the plan rules out for now |
+| Syncing or sharing palaces between devices | Palace export and import work, and people other than you ask for it | Define the export file format in PL5 |
 
 ## Not planned
 - A plugin API.
