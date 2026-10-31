@@ -391,7 +391,7 @@ function registerThemes({ windows }) {
         const id = f.slice(0, -5);
         if (out.has(id)) continue;
         try {
-          const raw = JSON.parse((await fs.promises.readFile(path.join(dir, f), "utf8")).replace(/^﻿/, ""));
+          const raw = JSON.parse((await fs.promises.readFile(path.join(dir, f), "utf8")).replace(/^\uFEFF/, ""));
           out.set(id, { ...normalizeTheme(id, raw), custom, file: path.join(dir, f) });
         } catch (e) {
           console.warn(`[themes] skipping ${f}: ${e.message}`);
@@ -492,7 +492,7 @@ function registerThemes({ windows }) {
       try {
         const st = await fs.promises.stat(src);
         if (st.size > 512 * 1024) throw new Error("file is larger than 512 KB");
-        const raw = JSON.parse((await fs.promises.readFile(src, "utf8")).replace(/^﻿/, ""));
+        const raw = JSON.parse((await fs.promises.readFile(src, "utf8")).replace(/^\uFEFF/, ""));
         if (!raw || typeof raw !== "object" || (!raw.colors && !raw.styles)) throw new Error("not an eDEX-UI theme (no colors)");
         let id = base.replace(/\.json$/i, "").replace(/[^\w.-]/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60) || "imported";
         const builtIn = existing.get(id) && !existing.get(id).custom;

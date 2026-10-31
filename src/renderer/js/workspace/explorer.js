@@ -754,7 +754,7 @@ export class ExplorerTab {
     const hasClip = !!shared.clipboard.mode;
     const media = items.filter((x) => !x.isDir && isMediaPath(x.path)).map((x) => x.path);
     contextMenu(e, [
-      { label: one?.isDir ? "Open" : "Open", icon: "external", hint: "Enter", run: () => this.openSelection() },
+      { label: "Open", icon: "external", hint: "Enter", run: () => this.openSelection() },
       one && !one.isDir && { label: "Preview", icon: "eye", hint: "Space", run: () => this.preview(one) },
       media.length && { label: "Play in media player", icon: "play", run: () => emit("open-media", { paths: media, play: true }) },
       media.length && { label: "Add to playlist", icon: "plus", run: () => emit("open-media", { paths: media, play: false, focus: false }) },

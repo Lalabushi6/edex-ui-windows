@@ -105,7 +105,7 @@ function collect(inputs) {
 
 function load(file) {
   let r;
-  try { r = JSON.parse(fs.readFileSync(file, "utf8").replace(/^﻿/, "")); } catch (e) { return { skip: `not readable JSON (${e.message.split("\n")[0]})` }; }
+  try { r = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")); } catch (e) { return { skip: `not readable JSON (${e.message.split("\n")[0]})` }; }
   if (!r || r.kind !== "edex-benchmark") return { skip: "not an eDEX benchmark report" };
   return { report: r };
 }
@@ -155,7 +155,7 @@ function buildGroups(reports, perRun) {
 
 function loadBudget(file) {
   let b;
-  try { b = JSON.parse(fs.readFileSync(path.resolve(file), "utf8").replace(/^﻿/, "")); } catch (e) { fail(`Can't read the budget ${file}: ${e.message.split("\n")[0]}`); }
+  try { b = JSON.parse(fs.readFileSync(path.resolve(file), "utf8").replace(/^\uFEFF/, "")); } catch (e) { fail(`Can't read the budget ${file}: ${e.message.split("\n")[0]}`); }
   const known = new Set(METRICS.map((m) => m.key));
   const limits = [];
   for (const kind of ["max", "min"]) {

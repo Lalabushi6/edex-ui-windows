@@ -13,6 +13,7 @@ const { JsonStore } = require("../lib/store");
 const { cached } = require("../lib/cache");
 const paths = require("../lib/paths");
 const { normalizeTheme } = require("./extras");
+const { normalizeLayout, LAYOUT_ID } = require("../lib/kb-layout");
 
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*(\x07|\x1b\\)/g;
 
@@ -154,7 +155,7 @@ function registerTools({ settings, windows }) {
     for (const name of names.filter((n) => n.toLowerCase().endsWith(".json")).slice(0, 200)) {
       try {
         const text = await fs.promises.readFile(path.join(dir, name), "utf8");
-        if (text.length < 512 * 1024) out.push({ file: name, content: JSON.parse(text.replace(/^﻿/, "")) });
+        if (text.length < 512 * 1024) out.push({ file: name, content: JSON.parse(text.replace(/^\uFEFF/, "")) });
       } catch (_) {}
     }
     return out;
@@ -188,7 +189,7 @@ function registerTools({ settings, windows }) {
     const st = await fs.promises.stat(filePaths[0]);
     if (st.size > 20 * 1024 * 1024) throw new Error("That file is too large");
     let bundle;
-    try { bundle = JSON.parse((await fs.promises.readFile(filePaths[0], "utf8")).replace(/^﻿/, "")); } catch (_) { throw new Error("Not a valid settings file"); }
+    try { bundle = JSON.parse((await fs.promises.readFile(filePaths[0], "utf8")).replace(/^\uFEFF/, "")); } catch (_) { throw new Error("Not a valid settings file"); }
     if (!bundle || bundle.format !== "edex-ui-settings" || typeof bundle.settings !== "object") throw new Error("Not an eDEX settings export");
     const safeName = (n) => String(n || "").replace(/[^\w .-]/g, "").replace(/^\.+/, "").slice(0, 64);
     let themes = 0;
@@ -206,10 +207,12 @@ function registerTools({ settings, windows }) {
       } catch (_) {}
     }
     const kbDir = path.join(userData, "keyboards");
+    // Same checks as kb:import: a usable file name and a valid layout.
     for (const k of Array.isArray(bundle.keyboards) ? bundle.keyboards.slice(0, 100) : []) {
       const name = safeName(k.file);
       const c = k.content;
-      if (!name.toLowerCase().endsWith(".json") || !c || typeof c !== "object" || !Array.isArray(c.row_1)) continue;
+      if (!/\.json$/i.test(name) || !LAYOUT_ID.test(name.slice(0, -5)) || !c || typeof c !== "object") continue;
+      try { normalizeLayout(c); } catch (_) { continue; }
       await fs.promises.mkdir(kbDir, { recursive: true });
       await fs.promises.writeFile(path.join(kbDir, name), JSON.stringify(c, null, 2), "utf8");
       keyboards++;

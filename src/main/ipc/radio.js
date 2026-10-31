@@ -14,6 +14,7 @@
 const { app, net, protocol } = require("electron");
 const { handle } = require("./util");
 const { APP_ORIGIN } = require("../lib/protocol");
+const { readCapped } = require("../lib/http");
 
 const DIRECTORY = ["https://de1.api.radio-browser.info", "https://nl1.api.radio-browser.info", "https://at1.api.radio-browser.info"];
 const isWeb = (u) => /^https?:\/\/\S+$/i.test(String(u || ""));
@@ -89,7 +90,9 @@ function registerRadio({ windows }) {
     const res = await net.fetch(url, { headers: { "Icy-MetaData": "1", "User-Agent": ua }, signal });
     const type = (res.headers.get("content-type") || "").toLowerCase();
     if (depth < 2 && (/scpls|mpegurl|x-scpls|audio\/x-mpegurl|text\/plain|text\/html/.test(type) || /\.(pls|m3u8?)(\?|$)/i.test(url)) && !/audio\/(mpeg|aac|aacp|ogg|opus|flac)/.test(type)) {
-      const text = (await res.text()).slice(0, 65536);
+      // A real playlist is a few hundred bytes; a stream mislabelled as text
+      // would otherwise be read (and held in memory) forever.
+      const text = (await readCapped(res, 65536).catch(() => Buffer.alloc(0))).toString("utf8");
       const next = firstStream(text);
       if (!next) throw Object.assign(new Error(/#EXT-X-/i.test(text) ? "HLS streams aren't supported" : "Not a radio stream"), { status: 415 });
       return open(next, signal, depth + 1);
@@ -169,10 +172,8 @@ function registerRadio({ windows }) {
     try {
       const res = await net.fetch(url, { headers: { "User-Agent": ua } });
       const type = (res.headers.get("content-type") || "").split(";")[0];
-      if (res.ok && /^image\//.test(type)) {
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length <= 300 * 1024) data = `data:${type};base64,${buf.toString("base64")}`;
-      }
+      if (res.ok && /^image\//.test(type)) data = `data:${type};base64,${(await readCapped(res, 300 * 1024)).toString("base64")}`;
+      else res.body?.cancel().catch(() => {});
     } catch (_) {}
     icons.set(url, data);
     while (icons.size > 200) icons.delete(icons.keys().next().value);

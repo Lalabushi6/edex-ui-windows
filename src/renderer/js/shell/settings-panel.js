@@ -7,7 +7,7 @@ import { currentTheme } from "../core/theme.js";
 import { openModal, toast, prompt, cleanError, contextMenu } from "../core/ui.js";
 import { profile, onSchedulingChange } from "../core/poll.js";
 import * as fmt from "../core/format.js";
-import { widgetDefs } from "../widgets/registry.js";
+import { widgetDefs, widgetHidden, setWidgetShown } from "../widgets/registry.js";
 import { runCommand } from "../core/commands.js";
 import { autoLayoutId, openLayoutsFolder, importLayouts } from "./keyboard.js";
 import { describeLogo, openBootLogoEditor, previewBootTitle } from "./boot-art.js";
@@ -19,7 +19,6 @@ import { editWallpaperArt, WALLPAPER_EFFECTS, WALLPAPER_BACKDROPS } from "./wall
 import { openUpdates } from "./updates.js";
 import { clearBrowsingData } from "../workspace/browser.js";
 import { emit } from "../core/bus.js";
-import { widgetHidden, setWidgetShown } from "../widgets/registry.js";
 import { loadGames, openGameLibrary } from "./games.js";
 import { profiles, updateProfile, switchProfile, newProfileDialog, renameProfile, deleteProfile, setRemember, captureProfile } from "./profiles.js";
 

@@ -17,6 +17,7 @@ const path = require("path");
 const { app, Menu, WebContentsView, clipboard, session, shell } = require("electron");
 const { handle } = require("./util");
 const { matchesInput } = require("../lib/accel");
+const { readCapped } = require("../lib/http");
 
 const PARTITION = "persist:edex-browser";
 const MAX_VIEWS = 12;
@@ -81,9 +82,8 @@ function registerBrowser({ windows, notices, settings }) {
     try {
       const res = await ses.fetch(url, { headers: { Accept: "image/*" } });
       const type = res.headers.get("content-type") || "";
-      if (!res.ok || !/^image\//i.test(type)) return;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > 200 * 1024) return;
+      if (!res.ok || !/^image\//i.test(type)) { res.body?.cancel().catch(() => {}); return; }
+      const buf = await readCapped(res, 200 * 1024);
       windows.send("browser:state", { id, favicon: `data:${type.split(";")[0]};base64,${buf.toString("base64")}` });
     } catch (_) {}
   }

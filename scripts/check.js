@@ -56,7 +56,7 @@ fs.rmSync(tmp, { recursive: true, force: true });
 
 const themes = walk(path.join(root, "themes"), (f) => f.endsWith(".json"));
 for (const f of themes) {
-  try { JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, "")); }
+  try { JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, "")); }
   catch (e) { failures.push(`Invalid theme JSON ${rel(f)}: ${e.message}`); }
 }
 
@@ -65,7 +65,7 @@ const keyboards = walk(path.join(root, "keyboards"), (f) => f.endsWith(".json"))
 for (const f of keyboards) {
   const id = path.basename(f, ".json");
   if (!LAYOUT_ID.test(id)) failures.push(`Keyboard layout file name not allowed: ${rel(f)}`);
-  try { normalizeLayout(JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, ""))); }
+  try { normalizeLayout(JSON.parse(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, ""))); }
   catch (e) { failures.push(`Invalid keyboard layout ${rel(f)}: ${e.message}`); }
 }
 

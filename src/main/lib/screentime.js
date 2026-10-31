@@ -47,11 +47,13 @@ class ScreenTime {
       const fg = await this.bridge.call("foreground", {}, 3000);
       if (!fg || SKIP_CLASSES.has(fg.cls)) return;
       const name = this.nameFor(fg);
-      if (!name) return;
+      if (!name || name === "__proto__") return;
       const key = dayKey();
       const days = this.store.data.days;
       const day = (days[key] ||= {});
-      day[name] = (day[name] || 0) + SAMPLE_MS / 1000;
+      // Names are window titles for Store apps; one called "constructor" or
+      // "toString" must not pick up Object.prototype's members.
+      day[name] = (Object.hasOwn(day, name) ? day[name] : 0) + SAMPLE_MS / 1000;
       this.checkLimit(key, name, day[name]);
       this.prune();
       // Written at most every 30 s (and on quit), not on every sample.
@@ -81,7 +83,8 @@ class ScreenTime {
 
   // A gentle nudge, once per app per day, when it passes its daily limit.
   checkLimit(day, name, seconds) {
-    const minutes = (this.settings.get("screenTimeLimits") || {})[name];
+    const limits = this.settings.get("screenTimeLimits") || {};
+    const minutes = Object.hasOwn(limits, name) ? limits[name] : 0;
     if (!minutes || seconds < minutes * 60 || !this.notify) return;
     const key = `${day}|${name}`;
     if (this.limitNoticed.has(key)) return;

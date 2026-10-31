@@ -45,7 +45,7 @@ function psQuote(s) {
   return `'${String(s).replace(/'/g, "''")}'`;
 }
 
-function registerDesktop({ windows, bridge, icons }) {
+function registerDesktop({ windows, bridge, icons, ownPids }) {
   const apps = new Map(); // id -> { id, name, kind, target, iconPath, source }
   const listView = () => [...apps.values()]
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -170,7 +170,6 @@ function registerDesktop({ windows, bridge, icons }) {
   });
 
   // ── Running windows ──────────────────────────────────────────────────────
-  const ownPids = () => [process.pid, ...app.getAppMetrics().map((m) => m.pid)];
   const asHwnd = (v) => {
     const n = Number(v);
     if (!Number.isSafeInteger(n) || n <= 0) throw new Error("Invalid window handle");

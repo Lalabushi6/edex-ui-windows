@@ -6,7 +6,7 @@ import { h, setText, debounce } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { toast, contextMenu, prompt, copyText, cleanError } from "../core/ui.js";
-import { player, isStream, streamBase } from "../media/player.js";
+import { player, isStream, streamBase, streamEntry } from "../media/player.js";
 
 const api = window.edex;
 const TAGS = ["lofi", "jazz", "rock", "pop", "electronic", "classical", "ambient", "news", "hiphop", "metal", "chillout", "80s"];
@@ -41,11 +41,17 @@ export class RadioView {
       h("div", { class: "lib-bar" }, this.search,
         h("button", { class: "btn sm", type: "button", title: "Add a station by its stream URL", onclick: () => this.addByUrl() }, icon("plus"), "Add URL…")),
       this.tags, this.now, this.body);
-    const p = player();
-    const update = () => { this.renderNow(); this.markPlaying(); };
-    p.addEventListener("change", update);
-    p.addEventListener("state", update);
-    settings.watch("radioStations", () => this.render());
+    this.update = () => { this.renderNow(); this.markPlaying(); };
+    player().addEventListener("change", this.update);
+    player().addEventListener("state", this.update);
+    this.unwatch = settings.watch("radioStations", () => this.render());
+  }
+
+  // The player tab closed: stop listening (each new tab builds a new view).
+  dispose() {
+    player().removeEventListener("change", this.update);
+    player().removeEventListener("state", this.update);
+    this.unwatch();
   }
 
   activate() {
@@ -108,7 +114,7 @@ export class RadioView {
       oncontextmenu: (e) => contextMenu(e, [
         { label: "Play", icon: "play", run: () => this.play(s) },
         { label: fav ? "Remove from favourites" : "Add to favourites", icon: "star", run: () => this.toggleFav(s) },
-        { label: "Add to playlist", icon: "plus", run: () => player().add([`${s.url}#edex-name=${encodeURIComponent(s.name)}`]) },
+        { label: "Add to playlist", icon: "plus", run: () => player().add([streamEntry(s.url, s.name)]) },
         { label: "Copy stream address", icon: "link", run: () => copyText(s.url) }
       ])
     },

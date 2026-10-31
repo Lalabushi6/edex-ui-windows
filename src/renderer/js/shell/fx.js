@@ -20,12 +20,10 @@ function matrix(ctx, W, H, dpr) {
     ctx.fillStyle = "rgba(0,0,0,0.11)";
     ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = accent(0.95);
     for (let i = 0; i < cols; i++) {
       const y = drops[i] * size;
-      if (y > 0) {
-        ctx.fillStyle = accent(0.95);
-        ctx.fillText(GLYPHS[(Math.random() * GLYPHS.length) | 0], i * size, y);
-      }
+      if (y > 0) ctx.fillText(GLYPHS[(Math.random() * GLYPHS.length) | 0], i * size, y);
       drops[i] += speed[i];
       if (y > H && Math.random() > 0.975) drops[i] = Math.random() * -20;
     }

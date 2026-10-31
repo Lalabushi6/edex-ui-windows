@@ -143,8 +143,11 @@ export function initKeyboard(root, getTerminal) {
     if (pick !== "auto" && ids.includes(pick)) return pick;
     return autoLayoutId(ids) || "en-US";
   }
+  // A request that comes in while a layout is loading (a different layout
+  // picked meanwhile) runs once that load has finished.
+  let queued = null; // { force } of a request made during a load
   async function load(force = false) {
-    if (building) return building;
+    if (building) { queued = { force: force || !!queued?.force }; return building; }
     building = (async () => {
       try {
         const id = await wantedId();
@@ -159,7 +162,8 @@ export function initKeyboard(root, getTerminal) {
         building = null;
       }
     })();
-    return building;
+    await building;
+    if (queued) { const q = queued; queued = null; return load(q.force); }
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────

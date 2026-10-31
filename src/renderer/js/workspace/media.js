@@ -3,15 +3,14 @@
 // ../media/player.js and keeps going when this tab is closed.
 import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
-import { appActive, animationFps } from "../core/poll.js";
+import { appActive, animationFps, onSchedulingChange } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
-import { emit } from "../core/bus.js";
+import { emit, on as onBus } from "../core/bus.js";
 import { toast, contextMenu, confirm, cleanError, popover } from "../core/ui.js";
 import { player, formatTime, isMediaPath, EQ_BANDS, EQ_PRESETS } from "../media/player.js";
 import { createViz, vizOptions, VIZ_STYLES, VIZ_COLORS, VIZ_KEYS } from "../media/visualizer.js";
 import { createLyricsView } from "../media/lyrics.js";
-import { on as onBus } from "../core/bus.js";
 import { SpotifyView } from "./spotify.js";
 import { LibraryView } from "./library.js";
 import { RadioView } from "./radio.js";
@@ -136,6 +135,8 @@ export class MediaTab {
     this.off.push(settings.watch("mediaSource", () => this.applySource()));
     this.off.push(settings.watch("mediaView", () => this.applyView()));
     this.off.push(onBus("lyrics-toggle", () => this.toggleLyrics()));
+    // The visualizer stops while eDEX is hidden; start it again on return.
+    this.off.push(onSchedulingChange(() => this.kickViz()));
     this.lyricsOn = lyricsPref.get();
     this.applySource();
     this.applyView();
@@ -574,6 +575,8 @@ export class MediaTab {
   dispose() {
     this.deactivate();
     this.spotify?.dispose();
+    this.library?.dispose();
+    this.radio?.dispose();
     this.off.forEach((fn) => fn());
   }
 }

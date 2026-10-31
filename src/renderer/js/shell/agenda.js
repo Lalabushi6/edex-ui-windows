@@ -36,7 +36,7 @@ export function loadAgenda() {
 export const tasks = () => data.tasks;
 export const events = () => data.events;
 
-// â”€â”€ Subscribed calendars (read-only, from .ics links) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Subscribed calendars (read-only, from .ics links) ──────────────────────
 // Occurrences for about a month back and half a year ahead, refreshed when
 // the main process downloads a feed and every half hour.
 let feedEvents = []; // { id, date, time, title, feed, color, location, readOnly, start, remind }
@@ -96,7 +96,7 @@ function changed() {
   saveTimer = setTimeout(() => api.tools.saveTasks(data).catch((e) => console.error("tasks save failed", e)), 400);
 }
 
-// â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Tasks ───────────────────────────────────────────────────────────────────
 export function addTask(input) {
   const { text, due } = parseWhen(input);
   if (!text) return null;
@@ -119,7 +119,7 @@ export function clearDone() {
   changed();
 }
 
-// â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Events ──────────────────────────────────────────────────────────────────
 export function addEvent({ date, time = null, title, remind = null }) {
   if (!title || !date) return null;
   const ev = { id: uid(), date, time, title: title.slice(0, 200), remind, reminded: false };
@@ -140,7 +140,7 @@ export function eventTime(ev) {
 }
 const remindAt = (ev) => (ev.remind == null ? null : eventTime(ev) - ev.remind * 60000);
 
-// â”€â”€ Reminders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reminders ───────────────────────────────────────────────────────────────
 function schedule() {
   const now = Date.now();
   for (const t of data.tasks) {
@@ -206,7 +206,7 @@ api.alarm.onFired(({ id, label, quiet }) => {
   }
 });
 
-// â”€â”€ "call mum at 6pm", "report in 2h", "dentist tomorrow 9:30" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── "call mum at 6pm", "report in 2h", "dentist tomorrow 9:30" ─────────────
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 function parseClock(s) {

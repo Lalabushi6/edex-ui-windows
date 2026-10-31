@@ -387,7 +387,9 @@ export class TerminalTab {
     if (data.includes("\x1b]")) {
       const osc = /\x1b\](?:7;file:\/\/[^/\x07\x1b]*(\/[^\x07\x1b]*)|9;9;"?([^"\x07\x1b]+)"?)(?:\x07|\x1b\\)/g;
       for (const m of data.matchAll(osc)) {
-        found = m[1] ? decodeURIComponent(m[1]).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\") : m[2];
+        // Programs can print malformed sequences (a binary file cat'd);
+        // a bad %-escape must not throw out of the data handler.
+        try { found = m[1] ? decodeURIComponent(m[1]).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\") : m[2]; } catch (_) {}
       }
     }
     this.promptTail = ((this.promptTail || "") + data).slice(-600);

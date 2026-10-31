@@ -69,10 +69,16 @@ export class LibraryView {
         albumArt(img.dataset.track).then((url) => { if (url) { img.src = url; img.classList.add("ok"); } });
       }
     }, { root: this.body, rootMargin: "300px" });
-    api.library.onProgress(({ done, total, final }) => {
+    this.offProgress = api.library.onProgress(({ done, total, final }) => {
       if (final) { this.load(); return; }
       setText(this.status, `READING ${done.toLocaleString()} / ${total.toLocaleString()}…`);
     });
+  }
+
+  // The player tab closed: stop listening (each new tab builds a new view).
+  dispose() {
+    this.offProgress?.();
+    this.io.disconnect();
   }
 
   async load() {

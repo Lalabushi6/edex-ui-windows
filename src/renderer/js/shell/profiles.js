@@ -57,7 +57,6 @@ export async function switchProfile(id, { scheduled = false } = {}) {
   if (layout) settings.set(layout);
   if (p.windows) api.win.restoreArrangement(arrangementName(p)).catch(() => {});
   if (moved || scheduled) toast(`${scheduled ? "Scheduled switch — " : ""}Workspace: ${p.name}`, { timeout: 1800 });
-  emit("profile-changed", { id });
 }
 
 // Remembers the current theme / layout / window positions for a workspace

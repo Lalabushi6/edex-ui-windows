@@ -225,7 +225,7 @@ export class Workspace {
   close(tab) {
     const i = this.tabs.indexOf(tab);
     if (i < 0) return;
-    if (this.idle?.tab === tab) this.idle = null;
+    if (this.idle?.tab === tab) { this.idle.unwire(); this.idle = null; }
     const visibleBefore = this.visibleTabs();
     const vi = visibleBefore.indexOf(tab);
     tab.dispose();
@@ -432,7 +432,7 @@ export class Workspace {
     if (temp) tab = await this.add("ascii", { idle: true }, { activate: false });
     if (!tab) return;
     this.activate(tab, { silent: true });
-    this.idle = { tab, prev, temp };
+    const EVENTS = ["mousemove", "mousedown", "keydown", "wheel"];
     const start = { x: null, y: null };
     const back = (e) => {
       if (e.type === "mousemove") {
@@ -441,18 +441,26 @@ export class Workspace {
       }
       // The key or click that wakes eDEX isn't passed on (to the terminal).
       if (e.type === "keydown" || e.type === "mousedown") { e.preventDefault(); e.stopPropagation(); }
-      for (const t of ["mousemove", "mousedown", "keydown", "wheel"]) window.removeEventListener(t, back, true);
       this.hideIdleWallpaper();
     };
-    setTimeout(() => {
-      for (const t of ["mousemove", "mousedown", "keydown", "wheel"]) window.addEventListener(t, back, { capture: true, passive: false });
+    const wireTimer = setTimeout(() => {
+      for (const t of EVENTS) window.addEventListener(t, back, { capture: true, passive: false });
     }, 400);
+    // However the idle pane ends (input, a workspace switch, its tab closing),
+    // the wake-up listeners go too; left behind, they would swallow the next
+    // key press or click.
+    const unwire = () => {
+      clearTimeout(wireTimer);
+      for (const t of EVENTS) window.removeEventListener(t, back, true);
+    };
+    this.idle = { tab, prev, temp, unwire };
   }
 
   hideIdleWallpaper() {
     const idle = this.idle;
     this.idle = null;
     if (!idle) return;
+    idle.unwire();
     if (idle.prev && this.tabs.includes(idle.prev)) this.activate(idle.prev, { silent: true });
     if (idle.temp) this.close(idle.tab);
   }

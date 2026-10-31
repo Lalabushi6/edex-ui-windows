@@ -15,7 +15,7 @@ class JsonStore {
 
   _read(fallback) {
     try {
-      const raw = fs.readFileSync(this.filePath, "utf8").replace(/^﻿/, "");
+      const raw = fs.readFileSync(this.filePath, "utf8").replace(/^\uFEFF/, "");
       const parsed = JSON.parse(raw);
       return parsed && typeof parsed === "object" ? parsed : structuredClone(fallback);
     } catch (e) {
@@ -49,13 +49,18 @@ class JsonStore {
     return this.writing;
   }
 
+  // On quit. Atomic like flush() (a separate temp name, so an async write
+  // still in flight can't collide with it): a crash mid-write leaves the
+  // previous file intact instead of a truncated one.
   flushSync() {
     if (!this.timer) return;
     clearTimeout(this.timer);
     this.timer = null;
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), "utf8");
+      const tmp = `${this.filePath}.sync.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), "utf8");
+      fs.renameSync(tmp, this.filePath);
     } catch (_) {}
   }
 }

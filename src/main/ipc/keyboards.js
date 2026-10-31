@@ -29,7 +29,7 @@ function registerKeyboards({ windows }) {
   const readLayout = async (file) => {
     const st = await fs.promises.stat(file);
     if (st.size > MAX_FILE) throw new Error("file is larger than 256 KB");
-    const text = (await fs.promises.readFile(file, "utf8")).replace(/^﻿/, "");
+    const text = (await fs.promises.readFile(file, "utf8")).replace(/^\uFEFF/, "");
     let raw;
     try { raw = JSON.parse(text); } catch (e) { throw new Error(`invalid JSON (${e.message})`); }
     return { raw, rows: normalizeLayout(raw) };

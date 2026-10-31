@@ -9,7 +9,7 @@ import { emit, on, markBooted } from "./core/bus.js";
 import { command, initHotkeys, setKeys, comboFromAccelerator } from "./core/commands.js";
 import { toast, cleanError, closeMenu } from "./core/ui.js";
 import { mountWidgets, mountFixed } from "./widgets/registry.js";
-import { initBackgroundFx } from "./shell/fx.js";
+import { initBackgroundFx, startEffect } from "./shell/fx.js";
 import { initIdleScreen, showIdleScreen } from "./shell/idle.js";
 import { loadAgenda } from "./shell/agenda.js";
 import { initAi, openAiPanel } from "./shell/ai.js";
@@ -40,7 +40,6 @@ import { initNotices } from "./shell/notices.js";
 import { openGameLibrary, loadGames } from "./shell/games.js";
 import { openBenchmark, markStartup } from "./shell/benchmark.js";
 import { initProfiles, switchProfile, newProfileDialog, captureProfile, activeProfile } from "./shell/profiles.js";
-import { startEffect } from "./shell/fx.js";
 
 const api = window.edex;
 let workspace;
@@ -327,6 +326,7 @@ async function main() {
   });
   api.app.onNotice(({ level, message }) => toast(message, { level, timeout: 6000 }));
   on("open-settings", ({ page } = {}) => openSettings(page));
+  on("file-search", ({ root } = {}) => openFileSearch(root));
   api.app.onCommand(({ name, toggle, id, scheduled, delta }) => {
     if (name === "launcher") toggle ? toggleLauncher() : openLauncher();
     else if (name === "settings") openSettings();

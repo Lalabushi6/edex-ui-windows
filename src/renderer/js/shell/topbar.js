@@ -5,7 +5,6 @@ import { icon, LOGO_SVG } from "../core/icons.js";
 import { poll } from "../core/poll.js";
 import { onLive, onBattery } from "../core/live.js";
 import * as settings from "../core/settings.js";
-import { emit } from "../core/bus.js";
 import { toast, contextMenu, popover, cleanError } from "../core/ui.js";
 import { openLauncher } from "./launcher.js";
 import { buildCalendar } from "./calendar.js";
@@ -95,7 +94,6 @@ export function initTopbar(root) {
     netSig = sig;
     net.replaceChildren(icon(n.online ? "wifi" : "offline"), h("span", null, n.online ? (n.type === "wireless" ? "WI-FI" : "LAN") : "OFFLINE"));
     net.title = n.online ? `${n.iface} · ${n.ip4}` : "Offline";
-    emit("net-state", n);
   });
   // Bluetooth: shown once a radio is found (checked after startup settles).
   const bt = h("button", { class: "icon-btn status-bt", type: "button", title: "Bluetooth", hidden: true }, icon("bluetooth"));

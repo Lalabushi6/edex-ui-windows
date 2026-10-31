@@ -11,6 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const { app, net } = require("electron");
 const { parseIcs, expand } = require("../lib/ics");
+const { readCapped } = require("../lib/http");
 const { handle } = require("./util");
 
 const REFRESH_MS = 30 * 60 * 1000;
@@ -41,12 +42,12 @@ function registerCalendarFeeds({ settings, windows }) {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 20000);
-      let res;
-      try { res = await net.fetch(feed.url, { headers: { Accept: "text/calendar, */*", "User-Agent": `eDEX-UI/${app.getVersion()}` }, signal: ctrl.signal }); }
-      finally { clearTimeout(timer); }
-      if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? "The calendar link was refused (check it's the secret iCal address)" : `The calendar server answered ${res.status}`);
-      const text = await res.text();
-      if (text.length > MAX_BYTES) throw new Error("That calendar is too large");
+      let text;
+      try {
+        const res = await net.fetch(feed.url, { headers: { Accept: "text/calendar, */*", "User-Agent": `eDEX-UI/${app.getVersion()}` }, signal: ctrl.signal });
+        if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? "The calendar link was refused (check it's the secret iCal address)" : `The calendar server answered ${res.status}`);
+        text = (await readCapped(res, MAX_BYTES)).toString("utf8");
+      } finally { clearTimeout(timer); }
       if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("That link isn't an iCalendar (.ics) feed");
       c.events = parseIcs(text);
       c.fetchedAt = Date.now();
@@ -54,7 +55,8 @@ function registerCalendarFeeds({ settings, windows }) {
       await fs.promises.mkdir(dir, { recursive: true });
       await fs.promises.writeFile(fileFor(feed.id), text, "utf8");
     } catch (e) {
-      c.error = e.name === "AbortError" ? "The calendar server didn't answer" : (e.message || "Couldn't download the calendar");
+      c.error = e.name === "AbortError" ? "The calendar server didn't answer"
+        : e.code === "ETOOLARGE" ? "That calendar is too large" : (e.message || "Couldn't download the calendar");
     }
     return c;
   }

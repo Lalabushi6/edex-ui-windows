@@ -22,7 +22,9 @@ function artFor(url) {
   if (!art.has(url)) {
     const p = api.spotify.art(url).catch(() => null);
     art.set(url, p);
-    p.then((v) => art.set(url, v));
+    p.then((v) => { if (art.has(url)) art.set(url, v); });
+    // Covers are data URLs; long playlists would otherwise pile them up.
+    while (art.size > 300) art.delete(art.keys().next().value);
   }
   return Promise.resolve(art.get(url));
 }

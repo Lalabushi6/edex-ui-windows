@@ -210,8 +210,11 @@ defineWidget({
       if (!name) return;
       const target = await prompt({ title: existing ? "Edit link" : "Add link", message: "A web address (https://…) or a file / folder path", value: existing?.target || "" });
       if (!target) return;
-      const links = (settings.get("quickLinks") || []).filter((l) => l !== existing);
-      links.push({ name, target: /^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(target) ? `https://${target}` : target });
+      const next = { name, target: /^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(target) ? `https://${target}` : target };
+      // An edited link keeps its place in the list.
+      const links = [...(settings.get("quickLinks") || [])];
+      const at = links.indexOf(existing);
+      if (at >= 0) links[at] = next; else links.push(next);
       settings.set({ quickLinks: links });
     };
     panel.tools.append(toolButton("plus", "Add link", () => edit(null)));

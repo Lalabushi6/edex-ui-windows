@@ -1,4 +1,4 @@
-/* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Top bar ────────────────────────────────────────────────────────────── */
 #topbar {
   display: flex;
   align-items: center;
@@ -41,7 +41,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .status-clock.open, .icon-btn.open { background: var(--c-12); border-color: var(--c-35); }
 .vol-slider { width: 5.5rem; height: 1rem; }
 
-/* â”€â”€ Wi-Fi panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Wi-Fi panel ────────────────────────────────────────────────────────── */
 .wifi-panel { width: 21rem; display: flex; flex-direction: column; gap: .45rem; }
 .wifi-title { display: flex; align-items: center; gap: .4rem; font-size: .78rem; letter-spacing: .16em; color: var(--c-70); }
 .wifi-title .grow { flex: 1; }
@@ -63,7 +63,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .wifi-bars > i.on { background: var(--c); }
 .status-item.open { background: var(--c-12); border-color: var(--c-35); }
 
-/* â”€â”€ Popovers (brightness, calendar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Popovers (brightness, calendar) ────────────────────────────────────── */
 .popover { position: fixed; z-index: 400; padding: .55rem .65rem; border: 1px solid var(--c-50); background: var(--bg); box-shadow: 0 12px 40px rgb(0 0 0 / .7); }
 .bright-pop { display: flex; align-items: center; gap: .55rem; }
 .bright-pop .ico { width: 1.2rem; height: 1.2rem; color: var(--c-70); }
@@ -83,7 +83,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .cal-day:not(.today):hover { border-color: var(--c-35); }
 .cal-footer { margin-top: .5rem; padding-top: .4rem; border-top: 1px solid var(--c-20); font-size: .74rem; color: var(--c-70); text-align: center; }
 
-/* â”€â”€ Dock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Dock ───────────────────────────────────────────────────────────────── */
 #dock {
   position: relative;
   display: flex;
@@ -140,7 +140,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .dock-empty { font-size: .9rem; color: var(--c-50); padding: 0 .5rem; white-space: nowrap; }
 .dock-tray { display: flex; align-items: center; gap: .15rem; flex: none; }
 
-/* â”€â”€ Widgets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Widgets ────────────────────────────────────────────────────────────── */
 /* Values like eDEX-UI: small dim caption above a larger reading. */
 .kv { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: .45rem .6rem; }
 .kv > div { min-width: 0; }
@@ -250,7 +250,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .clip-item .when { font-size: .7rem; color: var(--c-50); flex: none; }
 .link-item .u { font-size: .7rem; color: var(--c-50); flex: none; max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* â”€â”€ File browser panel (eDEX-UI's filesystem module) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── File browser panel (eDEX-UI's filesystem module) ───────────────────── */
 #filepanel { display: flex; flex-direction: column; gap: .35rem; min-height: 0; padding-top: .25rem; }
 #filepanel[hidden] { display: none; }
 .fp-title { margin: 0; }
@@ -280,8 +280,8 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .fp-bar > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--c); }
 .fp-foot .icon-btn.active { background: var(--c-20); color: var(--c); }
 
-/* â”€â”€ On-screen keyboard (eDEX-UI style: borderless legends, Enter and
-   Space outlined, pressed keys flash in the accent colour) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── On-screen keyboard (eDEX-UI style: borderless legends, Enter and
+   Space outlined, pressed keys flash in the accent colour) ─────────────── */
 /* Key height follows the screen height, as in eDEX-UI (about 5vh a row). */
 #keyboard { display: none; --kb-gap: .32rem; --kb-h: clamp(2.3rem, 4.4vh, 3.6rem); }
 #keyboard.show { display: flex; flex-direction: column; align-items: center; gap: var(--kb-gap); padding: .25rem .3rem .3rem; border-top: 1px solid var(--c-30); }
@@ -326,7 +326,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 #keyboard[data-password="true"] .kb-rows { opacity: .5; }
 #keyboard[data-password="true"] .kb-key:hover { background: transparent; }
 #keyboard[data-password="true"] .icon-btn.active { background: var(--warn); color: var(--bg); }
-/* â”€â”€ Now playing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Now playing ────────────────────────────────────────────────────────── */
 .np-top { display: flex; align-items: center; gap: .6rem; cursor: pointer; min-width: 0; }
 .np-art { width: 3rem; height: 3rem; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--c-35); }
 .np-art img { width: 100%; height: 100%; object-fit: cover; }
@@ -350,7 +350,7 @@ button.status-item:hover { background: var(--c-12); border-color: var(--c-20); }
 .np-pop-title { display: flex; align-items: center; gap: .4rem; font-size: .8rem; letter-spacing: .12em; margin-bottom: .5rem; color: var(--c-70); }
 .np-pop .np-art { width: 4.5rem; height: 4.5rem; }
 
-/* â•â• Added features â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ══ Added features ═════════════════════════════════════════════════════════ */
 /* Shared popover panel bits (mixer, Bluetooth, battery, snap). */
 .mix-panel, .bt-panel, .bat-panel { width: 22rem; display: flex; flex-direction: column; gap: .4rem; }
 .mix-title, .bt-title, .bat-title, .snap-title { display: flex; align-items: center; gap: .4rem; font-size: .78rem; letter-spacing: .16em; color: var(--c-70); }

@@ -289,7 +289,6 @@ select.input option { background: var(--bg); color: var(--c); }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .empty { padding: .8rem; color: var(--c-50); font-size: .9rem; text-align: center; }
 .warn-text { color: var(--warn); }
-.danger-text { color: var(--danger); }
 
 .bar { position: relative; height: .4rem; background: var(--c-20); overflow: hidden; }
 .bar > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--c); transition: width .5s ease; }

@@ -77,7 +77,9 @@ export function openModal(build, { className = "", onClose, dismissible = true, 
   document.addEventListener("keydown", onKey, true);
   document.body.append(backdrop);
   requestAnimationFrame(() => backdrop.classList.add("show"));
-  const focusable = box.querySelector("[data-autofocus], input, textarea, button");
+  // The marked field first; a selector list would pick whichever comes first
+  // in the DOM (often a header's close button).
+  const focusable = box.querySelector("[data-autofocus]") || box.querySelector("input, textarea, button");
   focusable?.focus();
   return { close, box };
 }
@@ -109,7 +111,6 @@ export function confirm({ title, message = "", confirmLabel = "Confirm", danger 
   return new Promise((resolve) => {
     openModal((close) => {
       const ok = h("button", { class: `btn primary${danger ? " danger" : ""}`, type: "button", "data-autofocus": true, onclick: () => close(true) }, confirmLabel);
-      setTimeout(() => ok.focus(), 0);
       return h("div", { class: "dialog" },
         h("h2", { class: "dialog-title" }, title),
         message && h("p", { class: "dialog-msg" }, message),

@@ -34,11 +34,6 @@ export function append(el, children) {
   return el;
 }
 
-export function clear(el) {
-  el.replaceChildren();
-  return el;
-}
-
 export const $ = (selector, root = document) => root.querySelector(selector);
 
 export function isTyping(target = document.activeElement) {

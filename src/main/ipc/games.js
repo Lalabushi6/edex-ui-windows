@@ -16,6 +16,7 @@ const { execFile, spawn } = require("child_process");
 const { app, net, shell } = require("electron");
 const { handle, asString } = require("./util");
 const { JsonStore } = require("../lib/store");
+const { readCapped } = require("../lib/http");
 
 const SKIP_STEAM = /redistributable|steam linux runtime|^proton\b|steamvr performance test|^steamworks/i;
 const RESCAN_MS = 30 * 60 * 1000;
@@ -215,9 +216,8 @@ function registerGames({ settings, windows, bridge, aux }) {
     try {
       const res = await net.fetch(g.remoteArt);
       const type = res.headers.get("content-type") || "";
-      if (!res.ok || !/^image\//.test(type)) return;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > 3 * 1024 * 1024) return;
+      if (!res.ok || !/^image\//.test(type)) { res.body?.cancel().catch(() => {}); return; }
+      const buf = await readCapped(res, 3 * 1024 * 1024);
       await fs.promises.mkdir(artDir, { recursive: true });
       await fs.promises.writeFile(file, buf);
       g.art = file;

@@ -201,10 +201,12 @@ function start() {
     telemetry = new Telemetry({ bridge });
     icons = new IconService({ bridge, cacheFile: path.join(app.getPath("userData"), "icon-cache.json") });
 
+    // eDEX's own processes (left out of window lists, mixers and game checks).
+    const ownPids = () => [process.pid, ...app.getAppMetrics().map((m) => m.pid)];
     terminal = registerTerminal({ settings });
     registerSystem({ windows, telemetry });
     registerFiles({ windows, bridge, icons, aux });
-    const desktop = registerDesktop({ windows, bridge, icons });
+    const desktop = registerDesktop({ windows, bridge, icons, ownPids });
     registerNetwork({ settings });
     clip = registerClipboard({ settings, windows, bridge });
     notes = registerNotes();
@@ -213,7 +215,6 @@ function start() {
     registerMedia({ windows });
     keyboards = registerKeyboards({ windows });
     registerWifi();
-    const ownPids = () => [process.pid, ...app.getAppMetrics().map((m) => m.pid)];
     const alerts = new Alerts({ telemetry, settings, notices });
     alerts.start();
     screenTime = new ScreenTime({
@@ -495,6 +496,7 @@ function start() {
     appTabs?.stop();
     notices?.flush();
     clearInterval(profileTimer);
+    browser?.stop();
     browser?.closeAll();
     hud?.closeAll();
     icons?.flush();

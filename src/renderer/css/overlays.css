@@ -75,7 +75,6 @@
 .result-sub { font-size: .76rem; color: var(--c-50); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result-hint { font-size: .74rem; color: var(--c-50); flex: none; }
 .launcher-foot { display: flex; gap: 1.1rem; padding: .4rem 1rem; border-top: 1px solid var(--c-12); font-size: .74rem; color: var(--c-50); flex-wrap: wrap; }
-.calc-answer { font-family: var(--font-ui); font-size: 1.4rem; }
 
 /* ── Settings ───────────────────────────────────────────────────────────── */
 .settings { width: min(60rem, 94vw); height: min(44rem, 84vh); }
@@ -222,7 +221,6 @@
 .greeting.show { opacity: 1; }
 .greeting em { font-style: normal; font-weight: 500; margin-left: .35em; }
 /* ── Drag ghost ─────────────────────────────────────────────────────────── */
-.drop-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-family: var(--font-ui); letter-spacing: .2em; text-transform: uppercase; color: var(--c); background: rgb(var(--rgb) / .06); border: 2px dashed var(--c-50); }
 
 /* Updates dialog */
 .dialog.upd-dialog { width: min(46rem, 92vw); }

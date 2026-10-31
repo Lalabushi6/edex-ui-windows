@@ -44,7 +44,8 @@ function notFound() {
 }
 
 function resolveAppPath(pathname) {
-  const clean = decodeURIComponent(pathname).replace(/^\/+/, "");
+  let clean;
+  try { clean = decodeURIComponent(pathname).replace(/^\/+/, ""); } catch (_) { return null; }
   const vendor = /^vendor\/([^/]+)\/(.+)$/.exec(clean);
   const base = vendor ? VENDOR_DIRS[vendor[1]] : RENDERER_DIR;
   if (!base) return null;
@@ -104,15 +105,22 @@ async function handleLocalFile(request) {
   }
   if (!stat.isFile()) return notFound();
 
+  const type = mimeFor(filePath);
   const headers = {
-    "Content-Type": mimeFor(filePath),
+    "Content-Type": type,
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-cache",
     // The media player routes audio through a Web Audio analyser, which only
     // receives samples from CORS-enabled media. Page scripts still cannot
     // fetch() these URLs: the CSP's connect-src stays 'self'.
-    "Access-Control-Allow-Origin": APP_ORIGIN
+    "Access-Control-Allow-Origin": APP_ORIGIN,
+    "X-Content-Type-Options": "nosniff"
   };
+  // A file on disk opened as a document (an .html or .svg reached from a
+  // PDF link, say) must never run script: it would share the localfile:
+  // origin and could read other files through it. The PDF viewer is the one
+  // document type previews embed, and it needs plugins, which a sandbox blocks.
+  if (type !== "application/pdf") headers["Content-Security-Policy"] = "sandbox";
   const range = parseRange(request.headers.get("Range"), stat.size);
   if (range === "invalid") {
     return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${stat.size}` } });

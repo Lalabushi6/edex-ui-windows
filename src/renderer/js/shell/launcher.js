@@ -14,15 +14,17 @@ import { loadGames, launchGame, gameArt, gameMenu } from "./games.js";
 import { profiles, switchProfile } from "./profiles.js";
 import { evaluate, looksLikeMath, formatNumber } from "./calc.js";
 import { convert, parseDuration } from "./convert.js";
+import { openViewer } from "./viewer.js";
+
+const api = window.edex;
+// Shown rows; the keyboard selection never goes past them.
+const MAX_SHOWN = 250;
 
 function humanDuration(ms) {
   const s = Math.round(ms / 1000);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   return [h && `${h} h`, m && `${m} min`, sec && `${sec} s`].filter(Boolean).join(" ") || "0 s";
 }
-import { openViewer } from "./viewer.js";
-
-const api = window.edex;
 const cache = { apps: null, appsAt: 0, index: null, indexAt: 0, appIcons: new Map(), exeIcons: new Map() };
 let openInstance = null;
 
@@ -159,6 +161,7 @@ export function openLauncher(opts = {}) {
   // inside files when the query is in quotes).
   let indexHits = { q: "", content: false, items: [] };
   let indexTimer = null;
+  let closed = false;
 
   const input = h("input", { class: "launcher-input", spellcheck: false, placeholder: "Search apps, files, windows — > commands, = calculate, \"text\" inside files, ? ask Claude", "data-autofocus": true });
   input.value = query;
@@ -181,7 +184,15 @@ export function openLauncher(opts = {}) {
     h("div", { class: "launcher-input-row", svg: iconSvg("search") }, input), chips, list, foot), {
     className: "launcher",
     label: "Launcher",
-    onClose: () => { openInstance = null; }
+    // Nothing keeps working for a closed launcher: no pending index query,
+    // no icon loading for rows that are gone.
+    onClose: () => {
+      openInstance = null;
+      closed = true;
+      clearTimeout(indexTimer);
+      clearTimeout(iconTimer);
+      iconObserver.disconnect();
+    }
   });
 
   const close = () => modal.close();
@@ -424,16 +435,18 @@ export function openLauncher(opts = {}) {
   }
 
   function render() {
+    // Late answers (apps, games, windows, the index) after the launcher closed.
+    if (closed) return;
     const token = ++renderToken;
     const { items, q } = buildResults();
     results = items;
-    activeIdx = Math.min(activeIdx, Math.max(0, results.length - 1));
+    activeIdx = Math.min(activeIdx, Math.max(0, Math.min(results.length, MAX_SHOWN) - 1));
     const frag = document.createDocumentFragment();
     let group = null;
     const wantExeIcons = [];
     iconObserver.disconnect();
     iconQueue.clear();
-    results.slice(0, 250).forEach((r, i) => {
+    results.slice(0, MAX_SHOWN).forEach((r, i) => {
       if (r.group !== group) {
         group = r.group;
         frag.append(h("div", { class: "launcher-group" }, group));
@@ -510,7 +523,7 @@ export function openLauncher(opts = {}) {
     const els = list.querySelectorAll(".result");
     els[activeIdx]?.classList.remove("active");
     els[activeIdx]?.querySelector(".result-hint")?.remove();
-    activeIdx = Math.max(0, Math.min(results.length - 1, i));
+    activeIdx = Math.max(0, Math.min(els.length - 1, i));
     const el = els[activeIdx];
     if (!el) return;
     el.classList.add("active");

@@ -18,6 +18,7 @@ const http = require("http");
 const path = require("path");
 const { app, net, safeStorage, shell } = require("electron");
 const { handle } = require("./util");
+const { readCapped } = require("../lib/http");
 
 const REDIRECT_PORT = 43821;
 const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
@@ -320,10 +321,8 @@ function registerSpotify({ settings, windows }) {
     try {
       const res = await net.fetch(url);
       const type = (res.headers.get("content-type") || "image/jpeg").split(";")[0];
-      if (!res.ok || !/^image\//.test(type)) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > 1024 * 1024) return null;
-      const data = `data:${type};base64,${buf.toString("base64")}`;
+      if (!res.ok || !/^image\//.test(type)) { res.body?.cancel().catch(() => {}); return null; }
+      const data = `data:${type};base64,${(await readCapped(res, 1024 * 1024)).toString("base64")}`;
       art.set(url, data);
       while (art.size > 120) art.delete(art.keys().next().value);
       return data;

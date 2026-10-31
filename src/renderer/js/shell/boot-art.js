@@ -135,7 +135,7 @@ function decodeArt(buffer) {
   const sauce = bytes.indexOf(0x1a); // SAUCE metadata / DOS EOF marker
   if (sauce >= 0) bytes = bytes.subarray(0, sauce);
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^﻿/, "");
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
   } catch (_) {
     const table = [...CP437];
     if (table.length !== 128) return new TextDecoder("utf-8").decode(bytes);

@@ -75,6 +75,8 @@ export function initDock(root) {
       list = await api.win.list();
     } catch (e) {
       wins.replaceChildren(h("span", { class: "dock-empty" }, "Window list unavailable"));
+      // The next good list must redraw even if it matches the last one.
+      lastSignature = "";
       return;
     }
     const signature = list.map((w) => `${w.hwnd}|${w.title}|${w.active}|${w.minimized}`).join("\n");

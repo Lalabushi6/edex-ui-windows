@@ -1188,8 +1188,6 @@ public static class EdexAudio {
 public static class EdexWin {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left, top, right, bottom; }
     [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
-    delegate bool MonitorEnumProc(IntPtr hMon, IntPtr hdc, ref RECT rc, IntPtr data);
-    [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc cb, IntPtr data);
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
@@ -1222,24 +1220,6 @@ public static class EdexWin {
     }
 
     static string R(RECT r) { return "[" + r.left + "," + r.top + "," + (r.right - r.left) + "," + (r.bottom - r.top) + "]"; }
-
-    public static string Monitors() {
-        IntPtr old = Aware();
-        try {
-            var sb = new StringBuilder("[");
-            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate (IntPtr hMon, IntPtr hdc, ref RECT rc, IntPtr data) {
-                var mi = new MONITORINFO();
-                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
-                if (GetMonitorInfo(hMon, ref mi)) {
-                    if (sb.Length > 1) sb.Append(',');
-                    sb.Append("{\"bounds\":").Append(R(mi.rcMonitor)).Append(",\"work\":").Append(R(mi.rcWork))
-                      .Append(",\"primary\":").Append((mi.dwFlags & 1) != 0 ? "true" : "false").Append('}');
-                }
-                return true;
-            }, IntPtr.Zero);
-            return sb.Append(']').ToString();
-        } finally { Restore(old); }
-    }
 
     public static string GetRect(long handle) {
         IntPtr hWnd = new IntPtr(handle);
@@ -1432,7 +1412,6 @@ public static class EdexWall {
     [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
     [DllImport("user32.dll")] static extern bool RedrawWindow(IntPtr h, IntPtr rect, IntPtr rgn, uint flags);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
-    [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr h);
     [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
 
     const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
@@ -1508,13 +1487,6 @@ public static class EdexWall {
             else SetWindowPos(hWnd, IntPtr.Zero, p.x, p.y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER | SWP_FRAMECHANGED);
             return "{\"ok\":true,\"mode\":" + EdexNative.Q(mode) + "}";
         } finally { Restore(old); }
-    }
-
-    // Is the window still behind the icons (Explorer restarts destroy that)?
-    public static string Check(long handle) {
-        IntPtr hWnd = new IntPtr(handle);
-        bool ok = IsWindow(hWnd) && (GetParent(hWnd) == progman || GetParent(hWnd) == workerW) && IsWindow(progman);
-        return ok ? "true" : "false";
     }
 
     // After the windows close: let Explorer repaint the normal wallpaper.
@@ -2017,7 +1989,6 @@ while ($true) {
             'volume'    { $data = [EdexNative]::GetVolume() }
             'setVolume' { $data = [EdexNative]::SetVolume([double]$a.level) }
             'setMute'   { $data = [EdexNative]::SetMute([bool]$a.muted) }
-            'perf'      { $data = [EdexNative]::Perf() }
             'live'      { $data = [EdexSys]::Live() }
             'processes' { $data = [EdexSys]::Processes([bool]$a.paths) }
             'drives'    { $data = [EdexSys]::Drives() }
@@ -2037,7 +2008,6 @@ while ($true) {
             'audioSetSession' { $data = [EdexAudio]::SetSession([long]$a.pid, [double]$a.level, [int]$a.mute) }
             'audioDevices'   { $data = [EdexAudio]::Devices() }
             'audioSetDefault' { $data = [EdexAudio]::SetDefault([string]$a.id) }
-            'monitors'     { $data = [EdexWin]::Monitors() }
             'windowRect'   { $data = [EdexWin]::GetRect([long]$a.hwnd) }
             'windowState'  { $data = [EdexWin]::WindowState([long]$a.hwnd) }
             'placeWindow'  { $data = [EdexWin]::Place([long]$a.hwnd, [int]$a.x, [int]$a.y, [int]$a.w, [int]$a.h, [string]$a.state) }
@@ -2048,7 +2018,6 @@ while ($true) {
             'windowSnapshot' { $data = [EdexWin]::Snapshot([long]$a.hwnd, [int]$a.max) }
             'wallLocate'   { $data = [EdexWall]::Locate() }
             'wallAttach'   { $data = [EdexWall]::Attach([long]$a.hwnd, [int]$a.x, [int]$a.y, [int]$a.w, [int]$a.h) }
-            'wallCheck'    { $data = [EdexWall]::Check([long]$a.hwnd) }
             'wallRefresh'  { $data = [EdexWall]::Refresh() }
             'wallCovered'  { $data = [EdexWall]::Covered() }
             'diskScan'     { $data = [EdexDisk]::Start([string]$a.path) }

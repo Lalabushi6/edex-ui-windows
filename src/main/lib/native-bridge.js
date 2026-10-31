@@ -24,6 +24,7 @@ class NativeBridge {
     this.waitFor = waitFor;
     this.idleMs = idleMs;
     this.idleTimer = null;
+    this.idleStopped = null;
     this.holds = new Set();
     this.proc = null;
     this.ready = null;
@@ -46,8 +47,12 @@ class NativeBridge {
     if (!this.idleMs || !this.proc) return;
     this.idleTimer = setTimeout(() => {
       if (!this.proc || this.pending.size || this.holds.size) { this._armIdle(); return; }
-      // Closing its input ends the helper cleanly; the next call starts it.
+      // Closing its input ends the helper cleanly. It is detached first, so a
+      // call arriving while it shuts down starts a fresh one instead of
+      // writing to the closed pipe.
       const proc = this.proc;
+      this.proc = null;
+      this.ready = null;
       this.idleStopped = proc;
       try { proc.stdin.end(); } catch (_) {}
       setTimeout(() => { try { if (proc.exitCode === null) proc.kill(); } catch (_) {} }, 3000);
@@ -60,7 +65,7 @@ class NativeBridge {
   _materializeScript() {
     fs.mkdirSync(this.workDir, { recursive: true });
     const target = path.join(this.workDir, "edex-bridge.ps1");
-    const source = `﻿${fs.readFileSync(SCRIPT_SOURCE, "utf8").replace(/^﻿/, "")}`;
+    const source = `\uFEFF${fs.readFileSync(SCRIPT_SOURCE, "utf8").replace(/^\uFEFF/, "")}`;
     let current = null;
     try { current = fs.readFileSync(target, "utf8"); } catch (_) {}
     if (current !== source) fs.writeFileSync(target, source, "utf8");
@@ -93,8 +98,14 @@ class NativeBridge {
         "-File", script, "-CacheDir", this.workDir
       ], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
       this.proc = proc;
+      // A helper that dies mid-write raises EPIPE on its input; without a
+      // listener that would be an uncaught exception in the main process.
+      proc.stdin.on("error", () => {});
 
-      const startTimer = setTimeout(() => reject(new Error("Native bridge start timed out")), 20000);
+      const startTimer = setTimeout(() => {
+        reject(new Error("Native bridge start timed out"));
+        try { proc.kill(); } catch (_) {}
+      }, 20000);
       const rl = readline.createInterface({ input: proc.stdout });
       rl.on("line", (line) => {
         let msg;
@@ -114,12 +125,17 @@ class NativeBridge {
       proc.on("exit", (code) => {
         clearTimeout(startTimer);
         rl.close();
-        if (this.proc === proc) { this.proc = null; this.ready = null; }
-        for (const entry of this.pending.values()) {
-          clearTimeout(entry.timer);
-          entry.reject(new Error("Native bridge exited"));
+        // Only the current helper's calls are failed; a detached (idle-stopped)
+        // one has none, and the replacement's must be left alone.
+        if (this.proc === proc) {
+          this.proc = null;
+          this.ready = null;
+          for (const entry of this.pending.values()) {
+            clearTimeout(entry.timer);
+            entry.reject(new Error("Native bridge exited"));
+          }
+          this.pending.clear();
         }
-        this.pending.clear();
         if (!this.stopping && this.idleStopped !== proc && code !== 0 && stderr.trim()) {
           this.log.warn(`[native-bridge] exited with code ${code}: ${stderr.trim().slice(0, 600)}`);
         }

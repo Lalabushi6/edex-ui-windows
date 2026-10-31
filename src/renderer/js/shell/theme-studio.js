@@ -63,6 +63,7 @@ export async function openThemeEditor() {
   const themes = await api.themes.list().catch(() => []);
   const savedId = settings.get("theme");
   let saved = false;
+  let cancelPreview = () => {};
 
   openModal((close) => {
     const live = () => schedulePreview();
@@ -143,6 +144,7 @@ export async function openThemeEditor() {
     };
 
     let timer = null;
+    cancelPreview = () => clearTimeout(timer);
     function schedulePreview() {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -165,7 +167,6 @@ export async function openThemeEditor() {
         saved = true;
         if (settings.get("theme") === id) await applyTheme(id);
         else settings.set({ theme: id });
-        emit("themes-changed");
         toast(`Saved theme "${name}"`, { level: "ok" });
         close(true);
       } catch (e) { toast(cleanError(e), { level: "warn" }); }
@@ -200,8 +201,12 @@ export async function openThemeEditor() {
   }, {
     className: "ts-modal",
     label: "Theme editor",
-    // Leaving without saving puts the real theme back.
-    onClose: () => { if (!saved) applyTheme(settings.get("theme")).catch(() => {}); }
+    // Leaving without saving puts the real theme back (and a preview still
+    // waiting on its debounce must not re-apply the edits afterwards).
+    onClose: () => {
+      cancelPreview();
+      if (!saved) applyTheme(settings.get("theme")).catch(() => {});
+    }
   });
 }
 
@@ -209,7 +214,6 @@ export async function importThemes() {
   try {
     const { imported, errors } = await api.themes.import();
     if (imported.length) {
-      emit("themes-changed");
       toast(`Imported ${imported.length} theme${imported.length === 1 ? "" : "s"}`, { level: "ok", action: { label: "Use", run: () => settings.set({ theme: imported[0] }) } });
     }
     for (const err of errors.slice(0, 3)) toast(`${err.file}: ${err.message}`, { level: "warn", timeout: 6000 });
@@ -228,7 +232,6 @@ export async function deleteTheme(t) {
   try {
     await api.themes.remove(t.id);
     if (settings.get("theme") === t.id) settings.set({ theme: "tron" });
-    emit("themes-changed");
     return true;
   } catch (e) { toast(cleanError(e), { level: "warn" }); return false; }
 }
@@ -270,11 +273,11 @@ const CSS_HOOKS = [
 export function openCssEditor() {
   const before = settings.get("customCss") || "";
   let saved = false;
+  let timer = null;
   openModal((close) => {
     const area = h("textarea", { class: "input ts-css big", spellcheck: false, wrap: "off", placeholder: "/* Applied on top of every theme. Example: */\n.panel-title { font-size: 1rem; }\n#keyboard .kb-key { border-color: var(--c-20); }\n#app[data-side=left] #work { margin-left: 1rem; }" });
     area.value = before;
     const status = h("span", { class: "muted", style: { fontSize: ".78rem" } });
-    let timer = null;
     area.addEventListener("input", () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -311,6 +314,9 @@ export function openCssEditor() {
   }, {
     className: "ts-modal",
     label: "Custom CSS",
-    onClose: () => { if (!saved) userStyle().textContent = cleanCss(before); }
+    onClose: () => {
+      clearTimeout(timer);
+      if (!saved) userStyle().textContent = cleanCss(before);
+    }
   });
 }

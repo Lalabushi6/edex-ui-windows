@@ -2,7 +2,8 @@ export function bytes(n, digits = 1) {
   const v = Number(n);
   if (!Number.isFinite(v) || v <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const i = Math.min(units.length - 1, Math.floor(Math.log(v) / Math.log(1024)));
+  // Rates are fractional (0.4 B/s): below 1 the log is negative.
+  const i = Math.max(0, Math.min(units.length - 1, Math.floor(Math.log(v) / Math.log(1024))));
   return `${(v / 1024 ** i).toFixed(i === 0 ? 0 : digits)} ${units[i]}`;
 }
 
@@ -16,11 +17,6 @@ export function bits(bytesPerSec) {
   if (v < 1e6) return `${(v / 1e3).toFixed(1)} Kb/s`;
   if (v < 1e9) return `${(v / 1e6).toFixed(1)} Mb/s`;
   return `${(v / 1e9).toFixed(2)} Gb/s`;
-}
-
-export function pct(n, digits = 0) {
-  const v = Number(n);
-  return Number.isFinite(v) ? `${v.toFixed(digits)}%` : "--";
 }
 
 export function duration(seconds) {
@@ -105,7 +101,7 @@ export function pathSegments(p) {
   let acc = "";
   parts.forEach((part, i) => {
     acc = i === 0 ? (/^[A-Za-z]:$/.test(part) ? `${part}\\` : part) : joinPath(acc, part);
-    out.push({ label: i === 0 && /^[A-Za-z]:$/.test(part) ? part : part, path: acc });
+    out.push({ label: part, path: acc });
   });
   return out;
 }

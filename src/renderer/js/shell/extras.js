@@ -1,4 +1,4 @@
-// Help sheet, file search, on-screen keyboard and boot screen.
+// Help sheet, file search, boot screen and the welcome greeting.
 import { h, setText } from "../core/dom.js";
 import { icon, fileKind } from "../core/icons.js";
 import * as settings from "../core/settings.js";
@@ -59,7 +59,8 @@ export function openFileSearch(root) {
   const status = h("div", { class: "muted", style: { fontSize: ".8rem" } }, "Searches file and folder names below the chosen folder.");
   const results = h("div", { class: "launcher-results", style: { maxHeight: "50vh" } });
   const go = h("button", { class: "btn primary", type: "button" }, "Search");
-  api.fs.home().then((home) => { rootInput.value = root || home; });
+  if (root) rootInput.value = root;
+  else api.fs.home().then((home) => { if (!rootInput.value) rootInput.value = home; });
 
   const search = async () => {
     if (running || !query.value.trim()) return;

@@ -76,7 +76,6 @@
 .term-host .xterm-viewport::-webkit-scrollbar-track { background: transparent; border: 0; }
 .term-host .xterm-viewport::-webkit-scrollbar-thumb { background: transparent; }
 .term-host:hover .xterm-viewport::-webkit-scrollbar-thumb { background: var(--c-35); }
-.term-notice { margin: auto; text-align: center; color: var(--c-70); display: flex; flex-direction: column; gap: .7rem; align-items: center; }
 
 /* ── Explorer ───────────────────────────────────────────────────────────── */
 .fx { display: grid; grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }

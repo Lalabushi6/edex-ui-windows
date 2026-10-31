@@ -78,8 +78,6 @@ export function holdCalm(reason, on) {
   }
 }
 
-export const isCalm = () => calm;
-
 // The benchmark measures the calm state on purpose.
 export function forceCalm(on) {
   if (calm === !!on) return;

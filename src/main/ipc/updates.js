@@ -128,7 +128,9 @@ function registerUpdates({ settings, windows, notices }) {
     busy = (async () => {
       const dir = path.join(app.getPath("temp"), "eDEX-UI-update");
       await fs.promises.mkdir(dir, { recursive: true });
-      const file = path.join(dir, `${r.version}-${asset.name}`);
+      // The tag name is free text on GitHub (it may contain "/" or ".."); only
+      // safe characters reach the file name.
+      const file = path.join(dir, `${r.version.replace(/[^\w.-]/g, "_")}-${asset.name}`);
       const part = `${file}.part`;
       const res = await net.fetch(asset.url, { headers: { "User-Agent": `eDEX-UI/${app.getVersion()}` } });
       if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);

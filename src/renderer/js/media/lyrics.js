@@ -28,6 +28,7 @@ export function createLyricsView({ className = "" } = {}) {
   const render = (r) => {
     lines.replaceChildren();
     lines.style.transform = "";
+    el.classList.remove("synced");
     cur = -1;
     data = null;
     setText(source, "");
@@ -43,7 +44,6 @@ export function createLyricsView({ className = "" } = {}) {
       el.classList.add("synced");
     } else if (r.plain) {
       lines.append(...r.plain.split(/\r?\n/).map((l) => h("div", { class: "ly-line plain" }, l || " ")));
-      el.classList.remove("synced");
     } else return show("No lyrics found for this song");
     setText(source, r.source === "file" ? "LYRICS · .LRC FILE" : "LYRICS · LRCLIB.NET");
   };
@@ -57,6 +57,8 @@ export function createLyricsView({ className = "" } = {}) {
       key = k;
       token++;
       lines.replaceChildren();
+      lines.style.transform = "";
+      el.classList.remove("synced");
       data = null;
       setText(source, "");
       if (!k) { show("Nothing playing"); return; }
