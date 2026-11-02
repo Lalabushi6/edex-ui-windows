@@ -116,7 +116,8 @@ function registerLibrary({ settings, windows }) {
   handle("library:addFolder", async () => {
     const { canceled, filePaths } = await windows.withDialog((win) => dialog.showOpenDialog(win, { title: "Add a music folder", properties: ["openDirectory"] }));
     if (canceled || !filePaths[0]) return folders();
-    const dir = await paths.forRead(filePaths[0]);
+    const dir = paths.isUncPath(filePaths[0]) ? filePaths[0] : await paths.forRead(filePaths[0]);
+    if (paths.isUncPath(dir)) throw new Error("Music on a network folder can't be played, so it can't join the library");
     const current = (settings.get("musicFolders") || []).filter(Boolean);
     const base = current.length ? current : [app.getPath("music")];
     if (!base.some((f) => path.resolve(f).toLowerCase() === dir.toLowerCase())) settings.set({ musicFolders: [...base, dir].slice(0, 12) });

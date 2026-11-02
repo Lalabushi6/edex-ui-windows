@@ -4,6 +4,8 @@
 //    alias cannot redirect an operation somewhere the policy forbids.
 //  - Credential stores are never readable or listable.
 //  - Writes are refused in OS-owned locations and on network (UNC) paths.
+//  - Network paths aren't touched at all until the user has opened that share
+//    themselves: looking at one sends this PC's sign-in hash to the server.
 "use strict";
 
 const fs = require("fs");
@@ -25,8 +27,61 @@ function isPathInside(parentPath, childPath) {
   return child === parent || child.startsWith(parent + path.sep);
 }
 
+// Windows reads any two leading slashes, in either direction, as a network path.
 function isUncPath(p) {
-  return /^\\\\/.test(p) || /^\/\//.test(p);
+  return /^[\\/]{2}/.test(p);
+}
+
+// Shares opened this session: by hand (see allowNetworkShare), or a mapped
+// drive that resolved to one.
+const openShares = new Set();
+
+function shareOf(p) {
+  // Not \\?\ or \\.\, which are local device paths under another name.
+  const m = /^\\\\([^\\?.][^\\]*)\\([^\\]+)/.exec(path.resolve(p));
+  return m ? `\\\\${m[1]}\\${m[2]}`.toLowerCase() : null;
+}
+
+function isShareOpen(p) {
+  return openShares.has(shareOf(p));
+}
+
+// For a network path the user asked for themselves (typed it, or confirmed
+// it). Never call this for a path that came from a file or from settings.
+function allowNetworkShare(p) {
+  const share = shareOf(p);
+  // "C$" and the like are whole drives under a network name, which the
+  // credential-store checks below can't see through.
+  if (!share || /\\(?:[a-z]\$|admin\$|ipc\$)$/.test(share)) return false;
+  openShares.add(share);
+  return true;
+}
+
+function networkRefused() {
+  return Object.assign(new Error("Network paths have to be opened by typing them in the file explorer's address bar"), { code: "ENETWORK" });
+}
+
+// Whether following the links along a path reaches a share that isn't open.
+// Walked one step at a time, because realpath() would already contact it.
+async function linksToNetwork(target, depth = 0) {
+  if (depth > 32) return true;
+  const { root } = path.parse(target);
+  const parts = target.slice(root.length).split(path.sep).filter(Boolean);
+  let current = root;
+  for (let i = 0; i < parts.length; i++) {
+    current = path.join(current, parts[i]);
+    let link = null;
+    try {
+      if ((await fs.promises.lstat(current)).isSymbolicLink()) link = await fs.promises.readlink(current);
+    } catch (_) {
+      return false; // missing or unreadable: there's nothing further to follow
+    }
+    if (link === null) continue;
+    const next = path.resolve(path.dirname(current), link);
+    if (isUncPath(next)) return !isShareOpen(next);
+    return linksToNetwork(path.join(next, ...parts.slice(i + 1)), depth + 1);
+  }
+  return false;
 }
 
 function isDriveRoot(p) {
@@ -85,16 +140,24 @@ async function canonicalize(target) {
   let input = target.trim();
   if (/^[A-Za-z]:$/.test(input)) input += "\\";
   const absolute = path.resolve(input);
+  // Decided here, before anything below touches the path.
+  const network = isUncPath(input) || isUncPath(absolute);
+  if (network && !isShareOpen(absolute)) throw networkRefused();
   if (/[<>"|?*\u0000-\u001F]/.test(absolute.slice(path.parse(absolute).root.length))) {
     throw new Error("Path contains invalid characters");
   }
+  if (!network && await linksToNetwork(absolute)) throw networkRefused();
 
   let probe = absolute;
   for (;;) {
     try {
       const real = await fs.promises.realpath(probe);
       const tail = path.relative(probe, absolute);
-      return tail ? path.join(real, tail) : real;
+      const result = tail ? path.join(real, tail) : real;
+      // Links were ruled out above, so this is a mapped drive reporting its
+      // address. The user set that up, and the listing's paths will use it.
+      if (!network && isUncPath(result) && shareOf(result)) openShares.add(shareOf(result));
+      return result;
     } catch (e) {
       if (e.code !== "ENOENT" && e.code !== "ENOTDIR") throw e;
       const parent = path.dirname(probe);
@@ -154,6 +217,9 @@ module.exports = {
   canonicalHomePromise,
   isPathInside,
   isUncPath,
+  isShareOpen,
+  allowNetworkShare,
+  linksToNetwork,
   isSensitive,
   addSensitive,
   forRead,

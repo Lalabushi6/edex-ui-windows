@@ -121,6 +121,20 @@ export function confirm({ title, message = "", confirmLabel = "Confirm", danger 
   });
 }
 
+// A saved link (a pin, a quick link) can name a network path, and a settings
+// file can plant one under a harmless label. Opening it contacts that server,
+// so the full address is shown first the time it's opened each session.
+export async function confirmNetworkPath(path) {
+  if (!/^[\\/]{2}/.test(path || "") || await window.edex.fs.networkOpen(path)) return true;
+  const ok = await confirm({
+    title: "Open a network location?",
+    message: `eDEX will connect to ${path}, and Windows may send that computer your sign-in details. Only continue if you trust it.`,
+    confirmLabel: "Open"
+  });
+  if (!ok) return false;
+  try { return await window.edex.fs.allowNetwork(path); } catch (e) { toast(cleanError(e), { level: "warn" }); return false; }
+}
+
 // ── Context menu ────────────────────────────────────────────────────────────
 let activeMenu = null;
 

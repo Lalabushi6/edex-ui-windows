@@ -352,8 +352,9 @@ locked down.
 
 ### Settings, updates and portable use
 - **Settings backup**: export / import every setting, your custom themes and
-  keyboard layouts as one file, to keep or move to another PC. Importing a
-  file that contains command widgets asks before allowing them.
+  keyboard layouts as one file, to keep or move to another PC. Command widgets
+  and calendars in an imported file stay off until you turn them on, and a
+  widget shows you its full command first.
 - **Updates from GitHub**: eDEX checks this repository's releases (once a
   day, or on demand), shows the release notes, and downloads and installs the
   new version — the installer for an installed copy, the new `.exe` for the
@@ -757,22 +758,30 @@ docs/                PUBLISHING.md (GitHub and releases)
 - **Programs** Windows itself provides are started by their full path, and eDEX
   runs from System32, so a program planted in the folder it was started from
   (Downloads, a USB drive) can't run in their place.
-- **Network paths named by a file or by program output** aren't followed: a
-  shortcut's icon, or a folder a command prints for the terminal to "follow".
-  Just looking at one would send your Windows sign-in hash to that server.
+- **Network paths** aren't touched until you open that share yourself, by typing
+  it in the file explorer or launcher or confirming a saved link, and that lasts
+  for the session. Ones named by a file, by program output or by settings aren't
+  followed: a shortcut's icon, a link to a share, a folder a command prints for
+  the terminal to "follow", a restored tab. Just looking at one would send your
+  Windows sign-in hash to that server. Mapped drives work as usual.
 - **Deleting** moves items to the Recycle Bin.
 - **Confirmations the UI can't fake**: running an executable from the explorer
   outside the Start menu / Desktop, ending a process and power actions are
   confirmed by the main process; critical system processes are refused
-  outright. Importing a settings file that contains command widgets lists
-  their commands and asks first.
+  outright.
+- **Settings files** can't start anything by themselves. Their command widgets
+  and calendars arrive switched off, and a widget turns on only after you've
+  reviewed its full command, with long blank stretches and invisible characters
+  marked. Keyboard layouts can't type commands: a key may only send a single key
+  press.
 - **Local files** reach the UI only through the read-only `localfile:`
   protocol (images and media), which refuses credential stores and anything
   that resolves to a network share; page scripts can't `fetch` them.
 - **The Git widget** won't inspect a repository whose own config could make Git
-  start programs (filters, signature checks, lazy fetches, includes). Git itself
-  reads the config for this check, including a linked worktree's main
-  repository, and submodules are left out.
+  start programs (filters, signature checks, lazy fetches, includes) or that
+  points Git at a network path. Those files are read before Git runs in the
+  folder, Git itself reads the config for this check, including a linked
+  worktree's main repository, and submodules are left out.
 - **Browser tabs** are separate sandboxed views in their own session
   (`persist:edex-browser`) with no preload bridge, so pages can't call eDEX
   or reach `app://` / `localfile:`. Only `http(s)` loads, pop-ups become tabs

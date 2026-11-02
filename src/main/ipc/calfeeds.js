@@ -19,26 +19,30 @@ const MAX_BYTES = 5 * 1024 * 1024;
 
 function registerCalendarFeeds({ settings, windows }) {
   const dir = path.join(app.getPath("userData"), "calendars");
-  const cache = new Map(); // feed id -> { events, fetchedAt, error }
+  const cache = new Map(); // feed id -> promise of { events, fetchedAt, error, partial }
+  const PARTIAL = "This calendar is too large or complicated to show in full";
 
   const feeds = () => (settings.get("calendarFeeds") || []).filter((f) => f.enabled !== false);
   const fileFor = (id) => path.join(dir, `${id.replace(/[^\w-]/g, "_")}.ics`);
 
   function load(feed) {
-    let c = cache.get(feed.id);
-    if (c) return c;
-    c = { events: [], fetchedAt: 0, error: null };
-    try {
-      const text = fs.readFileSync(fileFor(feed.id), "utf8");
-      c.events = parseIcs(text);
-      c.fetchedAt = fs.statSync(fileFor(feed.id)).mtimeMs;
-    } catch (_) {}
-    cache.set(feed.id, c);
-    return c;
+    let pending = cache.get(feed.id);
+    if (pending) return pending;
+    pending = (async () => {
+      const c = { events: [], fetchedAt: 0, error: null, partial: false };
+      try {
+        const file = fileFor(feed.id);
+        Object.assign(c, await parseIcs(await fs.promises.readFile(file, "utf8")));
+        c.fetchedAt = (await fs.promises.stat(file)).mtimeMs;
+      } catch (_) {}
+      return c;
+    })();
+    cache.set(feed.id, pending);
+    return pending;
   }
 
   async function refresh(feed) {
-    const c = load(feed);
+    const c = await load(feed);
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 20000);
@@ -49,7 +53,7 @@ function registerCalendarFeeds({ settings, windows }) {
         text = (await readCapped(res, MAX_BYTES)).toString("utf8");
       } finally { clearTimeout(timer); }
       if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("That link isn't an iCalendar (.ics) feed");
-      c.events = parseIcs(text);
+      Object.assign(c, await parseIcs(text));
       c.fetchedAt = Date.now();
       c.error = null;
       await fs.promises.mkdir(dir, { recursive: true });
@@ -66,7 +70,7 @@ function registerCalendarFeeds({ settings, windows }) {
     if (!force && settings.get("allowNetworkGeolocation") === false) return [];
     const results = [];
     for (const f of list) {
-      const c = load(f);
+      const c = await load(f);
       if (force || Date.now() - c.fetchedAt > REFRESH_MS) await refresh(f);
       results.push({ id: f.id, name: f.name, ok: !c.error, error: c.error, count: c.events.length, fetchedAt: c.fetchedAt });
     }
@@ -75,14 +79,16 @@ function registerCalendarFeeds({ settings, windows }) {
   }
 
   // Occurrences in [from, to] for every enabled feed.
-  handle("calfeeds:events", (_e, range = {}) => {
+  handle("calfeeds:events", async (_e, range = {}) => {
     const now = Date.now();
     const from = Number(range.from) || now - 35 * 86400000;
     const to = Math.min(Number(range.to) || now + 180 * 86400000, from + 400 * 86400000);
     const out = [];
     for (const f of feeds()) {
-      const c = load(f);
-      for (const o of expand(c.events, from, to)) {
+      const c = await load(f);
+      const { occurrences, partial } = await expand(c.events, from, to);
+      c.partial = c.partial || partial;
+      for (const o of occurrences) {
         out.push({
           id: crypto.createHash("sha1").update(`${f.id}|${o.uid}|${o.start}`).digest("hex").slice(0, 16),
           feedId: f.id, feed: f.name, color: f.color, remind: f.remind,
@@ -94,17 +100,18 @@ function registerCalendarFeeds({ settings, windows }) {
     return out;
   });
 
-  handle("calfeeds:status", () => feeds().map((f) => {
-    const c = load(f);
-    return { id: f.id, ok: !c.error, error: c.error, count: c.events.length, fetchedAt: c.fetchedAt };
-  }));
+  handle("calfeeds:status", () => Promise.all(feeds().map(async (f) => {
+    const c = await load(f);
+    return { id: f.id, ok: !c.error && !c.partial, error: c.error || (c.partial ? PARTIAL : null), count: c.events.length, fetchedAt: c.fetchedAt };
+  })));
 
   // Refresh pressed: downloads even with outbound lookups off.
   handle("calfeeds:refresh", () => refreshAll({ force: true }));
 
-  // Removed feeds' copies are deleted; new (or re-pointed) ones download
-  // right away; a colour or name change just redraws.
+  // Removed feeds' copies are deleted; new (or re-pointed) ones and ones just
+  // switched on download right away; a colour or name change just redraws.
   const urls = new Map((settings.get("calendarFeeds") || []).map((f) => [f.id, f.url]));
+  const wereOn = new Map((settings.get("calendarFeeds") || []).map((f) => [f.id, f.enabled !== false]));
   settings.on("change", (changed) => {
     if (!("calendarFeeds" in changed)) return;
     const all = settings.get("calendarFeeds") || [];
@@ -112,6 +119,7 @@ function registerCalendarFeeds({ settings, windows }) {
     for (const id of [...urls.keys()]) {
       if (ids.has(id)) continue;
       urls.delete(id);
+      wereOn.delete(id);
       cache.delete(id);
       fs.promises.rm(fileFor(id), { force: true }).catch(() => {});
     }
@@ -121,7 +129,9 @@ function registerCalendarFeeds({ settings, windows }) {
       urls.set(f.id, f.url);
       cache.delete(f.id);
     }
-    Promise.all(fresh.filter((f) => f.enabled !== false).map(refresh))
+    const download = all.filter((f) => f.enabled !== false && (fresh.includes(f) || wereOn.get(f.id) === false));
+    for (const f of all) wereOn.set(f.id, f.enabled !== false);
+    Promise.all(download.map(refresh))
       .catch(() => {})
       .finally(() => windows.send("calfeeds:changed", {}));
   });

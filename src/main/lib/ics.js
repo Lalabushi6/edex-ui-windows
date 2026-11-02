@@ -30,16 +30,49 @@ const WIN_TZ = {
 };
 const DAY_NAMES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 const DAY = 86400000;
+const MAX_EVENTS = 20000;
+const MAX_OCCURRENCES = 25000;
+const MAX_EXCEPTIONS = 5000; // per event
+const MAX_RULE_LENGTH = 1024;
+
+// This runs in the main process on files from the internet, so a large or
+// hostile feed must not hold it up. The work is done in short slices with the
+// event loop free between them, and stops once it has used its share of time.
+const SLICE_MS = 8;
+const PARSE_BUDGET_MS = 3000;
+const EXPAND_BUDGET_MS = 1500;
+function pacer(budgetMs) {
+  let sliceStart = Date.now();
+  let spent = 0;
+  return {
+    due: () => Date.now() - sliceStart >= SLICE_MS,
+    // Resolves to false once the budget is gone.
+    async rest() {
+      spent += Date.now() - sliceStart;
+      await new Promise((resolve) => setImmediate(resolve));
+      sliceStart = Date.now();
+      return spent < budgetMs;
+    }
+  };
+}
 
 const formatters = new Map();
 function zoneOk(tz) {
   try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return true; } catch (_) { return false; }
 }
+// Checking a name builds a formatter, which is slow, and every line of a feed
+// can carry one.
+const zoneNames = new Map();
 function normalizeZone(tzid) {
   if (!tzid) return null;
-  const t = String(tzid).replace(/^"|"$/g, "").replace(/^\/+/, "").trim();
-  const mapped = WIN_TZ[t] || t;
-  return zoneOk(mapped) ? mapped : null;
+  const key = String(tzid);
+  if (zoneNames.has(key)) return zoneNames.get(key);
+  const t = key.replace(/^"|"$/g, "").replace(/^\/+/, "").trim();
+  const mapped = Object.hasOwn(WIN_TZ, t) ? WIN_TZ[t] : t;
+  const zone = zoneOk(mapped) ? mapped : null;
+  if (zoneNames.size >= 1024) zoneNames.delete(zoneNames.keys().next().value);
+  zoneNames.set(key, zone);
+  return zone;
 }
 function offsetAt(ts, tz) {
   let f = formatters.get(tz);
@@ -101,12 +134,17 @@ function parseDuration(v) {
   return m[1] === "-" ? -ms : ms;
 }
 
-function parseIcs(text) {
+// -> { events, partial }; partial when the feed was too much to read in full.
+async function parseIcs(text) {
   const lines = String(text || "").replace(/\r?\n[ \t]/g, "").split(/\r?\n/);
   const events = [];
+  const pace = pacer(PARSE_BUDGET_MS);
+  let partial = false;
   let cur = null;
   let depth = 0;
   for (const raw of lines) {
+    if (pace.due() && !(await pace.rest())) { partial = true; break; }
+    if (events.length >= MAX_EVENTS) { partial = true; break; }
     if (!raw) continue;
     const line = parseLine(raw);
     if (!line) continue;
@@ -129,15 +167,15 @@ function parseIcs(text) {
       case "DTSTART": cur.start = parseDate(line.value, line.params); break;
       case "DTEND": cur.end = parseDate(line.value, line.params); break;
       case "DURATION": cur.duration = parseDuration(line.value); break;
-      case "RRULE": cur.rrule = line.value.trim(); break;
+      case "RRULE": cur.rrule = line.value.trim().slice(0, MAX_RULE_LENGTH); break;
       case "RECURRENCE-ID": cur.recurrenceId = parseDate(line.value, line.params); break;
       case "EXDATE":
-        for (const v of line.value.split(",")) { const d = parseDate(v, line.params); if (d) cur.exdates.push(d); }
+        for (const v of line.value.split(",", MAX_EXCEPTIONS - cur.exdates.length)) { const d = parseDate(v, line.params); if (d) cur.exdates.push(d); }
         break;
       default: break;
     }
   }
-  return events.filter((e) => e.start && e.status !== "CANCELLED");
+  return { events: events.filter((e) => e.start && e.status !== "CANCELLED"), partial };
 }
 
 // ── Recurrence ──────────────────────────────────────────────────────────────
@@ -152,9 +190,9 @@ function parseRule(rule) {
     interval: Math.max(1, parseInt(r.INTERVAL, 10) || 1),
     count: r.COUNT ? parseInt(r.COUNT, 10) : null,
     until: r.UNTIL ? parseDate(r.UNTIL, {}) : null,
-    byday: r.BYDAY ? r.BYDAY.split(",").map((s) => { const m = /^([+-]?\d+)?(SU|MO|TU|WE|TH|FR|SA)$/i.exec(s.trim()); return m ? { n: m[1] ? +m[1] : 0, wd: DAY_NAMES.indexOf(m[2].toUpperCase()) } : null; }).filter(Boolean) : null,
-    bymonthday: r.BYMONTHDAY ? r.BYMONTHDAY.split(",").map(Number).filter((n) => n && Math.abs(n) <= 31) : null,
-    bymonth: r.BYMONTH ? r.BYMONTH.split(",").map(Number).filter((n) => n >= 1 && n <= 12) : null
+    byday: r.BYDAY ? r.BYDAY.split(",").map((s) => { const m = /^([+-]?\d+)?(SU|MO|TU|WE|TH|FR|SA)$/i.exec(s.trim()); return m ? { n: m[1] ? +m[1] : 0, wd: DAY_NAMES.indexOf(m[2].toUpperCase()) } : null; }).filter(Boolean).slice(0, 62) : null,
+    bymonthday: r.BYMONTHDAY ? r.BYMONTHDAY.split(",").map(Number).filter((n) => n && Math.abs(n) <= 31).slice(0, 62) : null,
+    bymonth: r.BYMONTH ? [...new Set(r.BYMONTH.split(",").map(Number).filter((n) => n >= 1 && n <= 12))] : null
   };
 }
 
@@ -169,9 +207,10 @@ function monthDays(y, m, rule, startDay) {
   const dim = daysInMonth(y, m);
   if (rule.bymonthday) for (const md of rule.bymonthday) { const d = md > 0 ? md : dim + md + 1; if (d >= 1 && d <= dim) out.push(dnum(y, m, d)); }
   if (rule.byday) {
+    const firstWd = fromDnum(dnum(y, m, 1)).wd;
     for (const { n, wd } of rule.byday) {
       const matches = [];
-      for (let d = 1; d <= dim; d++) if (fromDnum(dnum(y, m, d)).wd === wd) matches.push(dnum(y, m, d));
+      for (let d = 1 + ((wd - firstWd + 7) % 7); d <= dim; d += 7) matches.push(dnum(y, m, d));
       if (!n) out.push(...matches);
       else { const pick = n > 0 ? matches[n - 1] : matches[matches.length + n]; if (pick !== undefined) out.push(pick); }
     }
@@ -180,24 +219,29 @@ function monthDays(y, m, rule, startDay) {
   return [...new Set(out)].sort((a, b) => a - b);
 }
 
-// Occurrence dates (day numbers) of a rule from its first date, ascending.
-function* occurrenceDays(rule, first, lastDay) {
+// Occurrence dates (day numbers) of a rule, ascending. Starts from the period
+// holding minDay rather than walking there from the first date, which for an
+// event begun years ago would be most of the work. (A COUNT rule has to be
+// walked, to count: pass its first date.)
+function* occurrenceDays(rule, first, lastDay, minDay = first) {
   const s = fromDnum(first);
+  const from = fromDnum(Math.max(first, minDay));
+  const periods = (span, size) => Math.max(0, Math.floor(span / size)) * size;
   const freq = rule.freq;
   let guard = 0;
   if (freq === "DAILY") {
-    for (let n = first; n <= lastDay && guard++ < 40000; n += rule.interval) yield n;
+    for (let n = first + periods(minDay - first, rule.interval); n <= lastDay && guard++ < 40000; n += rule.interval) yield n;
   } else if (freq === "WEEKLY") {
     const days = rule.byday?.length ? [...new Set(rule.byday.map((b) => b.wd))] : [s.wd];
     const weekStart = first - ((s.wd + 6) % 7); // Monday of the first week
-    for (let w = weekStart; w <= lastDay && guard++ < 2000; w += 7 * rule.interval) {
+    for (let w = weekStart + periods(minDay - weekStart, 7 * rule.interval); w <= lastDay && guard++ < 2000; w += 7 * rule.interval) {
       for (const wd of days.map((x) => (x + 6) % 7).sort((a, b) => a - b)) {
         const n = w + wd;
         if (n >= first && n <= lastDay) yield n;
       }
     }
   } else if (freq === "MONTHLY") {
-    for (let i = 0; guard++ < 600; i += rule.interval) {
+    for (let i = periods((from.y - s.y) * 12 + from.m - s.m, rule.interval); guard++ < 600; i += rule.interval) {
       const y = s.y + Math.floor((s.m - 1 + i) / 12);
       const m = ((s.m - 1 + i) % 12) + 1;
       if (dnum(y, m, 1) > lastDay) break;
@@ -205,7 +249,7 @@ function* occurrenceDays(rule, first, lastDay) {
       for (const n of monthDays(y, m, rule, s.d)) if (n >= first && n <= lastDay) yield n;
     }
   } else if (freq === "YEARLY") {
-    for (let y = s.y; guard++ < 200; y += rule.interval) {
+    for (let y = s.y + periods(from.y - s.y, rule.interval); guard++ < 200; y += rule.interval) {
       if (dnum(y, 1, 1) > lastDay) break;
       const months = rule.bymonth || [s.m];
       for (const m of months) {
@@ -217,15 +261,33 @@ function* occurrenceDays(rule, first, lastDay) {
 }
 
 // Concrete occurrences between from and to (epoch ms).
-// Returns [{ uid, title, location, start, end, allDay, days? }].
-function expand(events, from, to) {
+// Returns { occurrences: [{ uid, title, location, start, end, allDay, days? }], partial },
+// partial when the feed was too much to work through in full.
+async function expand(events, from, to) {
   const out = [];
-  const moved = new Set();
-  for (const e of events) if (e.recurrenceId && e.uid) moved.add(`${e.uid}|${occKey(e.recurrenceId, e.recurrenceId.tz ?? e.start.tz)}`);
+  const pace = pacer(EXPAND_BUDGET_MS);
+  let partial = false;
+  // Time-zone arithmetic is the slow part, so anything that day numbers alone
+  // can place outside the range (with a margin for zones) is skipped first.
+  const firstDay = Math.floor(from / DAY) - 2;
   const lastDay = Math.floor(to / DAY) + 2;
+  const dayOf = (d) => dnum(d.y, d.m, d.d);
 
+  const moved = new Set();
   for (const e of events) {
+    if (pace.due() && !(await pace.rest())) return { occurrences: [], partial: true };
+    if (e.recurrenceId && e.uid && dayOf(e.recurrenceId) <= lastDay && dayOf(e.recurrenceId) >= firstDay - 368) {
+      moved.add(`${e.uid}|${occKey(e.recurrenceId, e.recurrenceId.tz ?? e.start.tz)}`);
+    }
+  }
+
+  events: for (const e of events) {
+    if (out.length >= MAX_OCCURRENCES || (pace.due() && !(await pace.rest()))) { partial = true; break; }
     const st = e.start;
+    const startDay = dayOf(st);
+    if (startDay > lastDay) continue;
+    const single = !e.rrule || e.recurrenceId;
+    if (single && Math.max(startDay, e.end ? dayOf(e.end) : startDay + Math.ceil(Math.max(e.duration ?? 0, DAY) / DAY)) < firstDay) continue;
     const tz = st.tz;
     const firstEpoch = wallToEpoch(st, tz);
     let dur = 0;
@@ -239,26 +301,35 @@ function expand(events, from, to) {
       if (end < from || start > to) return;
       out.push({ uid: e.uid || "", title: e.title || "(no title)", location: e.location || "", start, end, allDay: !!st.allDay, wall: st.allDay ? { y: wall.y, m: wall.m, d: wall.d } : null, durDays: st.allDay ? Math.max(1, Math.round(dur / DAY)) : 0 });
     };
-    if (!e.rrule || e.recurrenceId) { push(st); continue; }
+    if (single) { push(st); continue; }
     const rule = parseRule(e.rrule);
     if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(rule.freq)) { push(st); continue; }
-    const ex = new Set(e.exdates.map((d) => occKey(d, d.tz ?? tz)));
     const untilEpoch = rule.until ? wallToEpoch(rule.until, rule.until.tz ?? (rule.until.allDay ? tz : "UTC")) + (rule.until.allDay ? DAY - 1 : 0) : Infinity;
+    if (untilEpoch + dur < from) continue;
+    // An occurrence starting before this day has ended by the time the range starts.
+    const reach = Math.floor((from - dur) / DAY) - 2;
+    const ex = new Set();
+    for (const d of e.exdates) {
+      if (pace.due() && !(await pace.rest())) { partial = true; break events; }
+      if (dayOf(d) >= reach && dayOf(d) <= lastDay) ex.add(occKey(d, d.tz ?? tz));
+    }
     let count = 0;
-    for (const n of occurrenceDays(rule, dnum(st.y, st.m, st.d), lastDay)) {
+    for (const n of occurrenceDays(rule, startDay, lastDay, rule.count === null ? reach : startDay)) {
+      if (out.length >= MAX_OCCURRENCES || (pace.due() && !(await pace.rest()))) { partial = true; break events; }
+      if (rule.count !== null && count >= rule.count) break;
+      count++;
+      if (n < reach) continue;
       const dd = fromDnum(n);
       const wall = { ...st, y: dd.y, m: dd.m, d: dd.d };
       const epoch = wallToEpoch(wall, tz);
       if (epoch > untilEpoch) break;
-      if (rule.count !== null && count >= rule.count) break;
-      count++;
       const key = occKey(wall, tz);
       if (ex.has(key) || (e.uid && moved.has(`${e.uid}|${key}`))) continue;
       if (epoch > to) break;
       push(wall);
     }
   }
-  return out.sort((a, b) => a.start - b.start);
+  return { occurrences: out.sort((a, b) => a.start - b.start), partial };
 }
 
 // One key per occurrence: the day for all-day events, else the minute.

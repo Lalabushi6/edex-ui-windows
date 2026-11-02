@@ -259,7 +259,7 @@ function start() {
     spotify = registerSpotify({ settings, windows });
     saver = new Screensaver({ settings, windows, bridge, ownPids, windowed: DEV_WINDOWED, gameMode });
     lyrics = registerLyrics({ settings });
-    registerRadio({ windows });
+    registerRadio({ windows, settings });
     library = registerLibrary({ settings, windows });
     calfeeds = registerCalendarFeeds({ settings, windows });
     registerBenchmark({ settings, telemetry, bridge, aux, portable, startup, browser });

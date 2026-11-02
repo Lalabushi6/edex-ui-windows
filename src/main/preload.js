@@ -65,6 +65,8 @@ contextBridge.exposeInMainWorld("edex", {
     home: invoke("fs:home"),
     places: invoke("fs:places"),
     list: invoke("fs:list"),
+    allowNetwork: invoke("fs:allowNetwork"),
+    networkOpen: invoke("fs:networkOpen"),
     stat: invoke("fs:stat"),
     peek: invoke("fs:peek"),
     read: invoke("fs:read"),

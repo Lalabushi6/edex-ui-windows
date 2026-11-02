@@ -14,22 +14,40 @@
 const { app, net, protocol } = require("electron");
 const { handle } = require("./util");
 const { APP_ORIGIN } = require("../lib/protocol");
-const { readCapped } = require("../lib/http");
+const { readCapped, requestOnce } = require("../lib/http");
 
 const DIRECTORY = ["https://de1.api.radio-browser.info", "https://nl1.api.radio-browser.info", "https://at1.api.radio-browser.info"];
+const MAX_REDIRECTS = 5;
 const isWeb = (u) => /^https?:\/\/\S+$/i.test(String(u || ""));
 // Addresses on this PC or the local network. A station you add yourself may
 // live there; one named by a directory listing or a playlist file may not, or
 // a stranger's listing could make eDEX send requests to your router.
+const LOCAL_V4 = /^(127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|192\.0\.0\.|198\.1[89]\.|22[4-9]\.|2[3-5]\d\.)/;
+const LOCAL_NAME = /\.(localhost|local|lan|home|internal|intranet|corp|home\.arpa)$/;
 const isLocalHost = (u) => {
   let host;
-  try { host = new URL(u).hostname.toLowerCase().replace(/^\[|\]$/g, ""); } catch (_) { return true; }
+  // (The trailing dot of a fully written name doesn't change where it leads.)
+  try { host = new URL(u).hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, ""); } catch (_) { return true; }
   // No dot: a single-label name, or an IPv6 address (rare for stations, and
   // the local ones are many and varied).
-  return !host.includes(".") || host.endsWith(".localhost") || host.endsWith(".local") ||
-    /^(127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+  return !host.includes(".") || LOCAL_NAME.test(host) || (/^[\d.]+$/.test(host) && LOCAL_V4.test(host));
 };
 const isPublicWeb = (u) => isWeb(u) && !isLocalHost(String(u));
+// What a name resolved to, as Chromium reports it.
+const isLocalAddress = (ip) => {
+  const a = ip.toLowerCase();
+  if (a.includes(".")) return LOCAL_V4.test(a.replace(/^::ffff:/, ""));
+  return a === "::" || a === "::1" || /^(fe[89ab]|fc|fd|ff|::ffff:)/.test(a);
+};
+// By how the address is written, then by where the name really leads. (A name
+// can still change its answer between this check and the connection, so this
+// raises the bar rather than ruling that out.)
+async function leadsLocal(u) {
+  if (isLocalHost(u)) return true;
+  const host = new URL(u).hostname.replace(/\.+$/, "");
+  if (/^[\d.]+$/.test(host)) return false;
+  try { return (await net.resolveHost(host)).endpoints.some((e) => isLocalAddress(e.address)); } catch (_) { return false; } // the request will report it
+}
 
 // Strips ICY metadata blocks out of the audio and reports StreamTitle.
 function icyStream(body, metaint, onTitle) {
@@ -94,12 +112,30 @@ function firstStream(text) {
   return m3u || null;
 }
 
-function registerRadio({ windows }) {
+function registerRadio({ windows, settings }) {
   const ua = `eDEX-UI/${app.getVersion()}`;
   const icons = new Map();
 
-  async function open(url, signal, depth = 0) {
-    const res = await net.fetch(url, { headers: { "Icy-MetaData": "1", "User-Agent": ua }, signal });
+  // A request that checks every address it's sent to, redirects included. Only
+  // a local address (or a first one the caller vouches for) may lead to a local
+  // one, so a public page can't point eDEX at the local network.
+  async function guardedFetch(start, { localOk = false, ...options }) {
+    let url = start;
+    let allowed = localOk;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const local = await leadsLocal(url);
+      if (local && !allowed) throw Object.assign(new Error("That address leads to this PC or the local network"), { status: 403 });
+      const { res, redirect } = await requestOnce(url, options);
+      if (res) return { res, url, local };
+      url = new URL(redirect, url).href;
+      if (!isWeb(url)) throw Object.assign(new Error("Only http(s) streams"), { status: 400 });
+      allowed = local;
+    }
+    throw Object.assign(new Error("Too many redirects"), { status: 502 });
+  }
+
+  async function open(target, signal, localOk, depth = 0) {
+    const { res, url, local } = await guardedFetch(target, { localOk, headers: { "Icy-MetaData": "1", "User-Agent": ua }, signal });
     const type = (res.headers.get("content-type") || "").toLowerCase();
     if (depth < 2 && (/scpls|mpegurl|x-scpls|audio\/x-mpegurl|text\/plain|text\/html/.test(type) || /\.(pls|m3u8?)(\?|$)/i.test(url)) && !/audio\/(mpeg|aac|aacp|ogg|opus|flac)/.test(type)) {
       // A real playlist is a few hundred bytes; a stream mislabelled as text
@@ -107,11 +143,13 @@ function registerRadio({ windows }) {
       const text = (await readCapped(res, 65536).catch(() => Buffer.alloc(0))).toString("utf8");
       const next = firstStream(text);
       if (!next) throw Object.assign(new Error(/#EXT-X-/i.test(text) ? "HLS streams aren't supported" : "Not a radio stream"), { status: 415 });
-      if (isLocalHost(next) && !isLocalHost(url)) throw Object.assign(new Error("That playlist points at a local address"), { status: 403 });
-      return open(next, signal, depth + 1);
+      return open(next, signal, local, depth + 1);
     }
     return { res, url };
   }
+
+  // Written as a local address, or added by hand under a name that resolves to one.
+  const vouchedFor = (u) => isLocalHost(u) || (settings.get("radioStations") || []).some((s) => s.byHand && s.url === u);
 
   // edexradio://stream/<encoded URL>
   protocol.handle("edexradio", async (request) => {
@@ -124,7 +162,7 @@ function registerRadio({ windows }) {
     const ctrl = new AbortController();
     request.signal?.addEventListener?.("abort", () => ctrl.abort());
     try {
-      const { res, url } = await open(target, ctrl.signal);
+      const { res, url } = await open(target, ctrl.signal, vouchedFor(target));
       if (!res.ok || !res.body) { ctrl.abort(); return new Response("Station unavailable", { status: 502 }); }
       const metaint = Number(res.headers.get("icy-metaint")) || 0;
       const station = res.headers.get("icy-name") || "";
@@ -184,7 +222,7 @@ function registerRadio({ windows }) {
     if (icons.has(url)) return icons.get(url);
     let data = null;
     try {
-      const res = await net.fetch(url, { headers: { "User-Agent": ua }, signal: AbortSignal.timeout(10000) });
+      const { res } = await guardedFetch(url, { headers: { "User-Agent": ua }, signal: AbortSignal.timeout(10000) });
       const type = (res.headers.get("content-type") || "").split(";")[0];
       if (res.ok && /^image\//.test(type)) data = `data:${type};base64,${(await readCapped(res, 300 * 1024)).toString("base64")}`;
       else res.body?.cancel().catch(() => {});

@@ -92,11 +92,9 @@ export class RadioView {
 
   toggleFav(s) {
     const list = favs();
-    if (isFav(s.url)) settings.set({ radioStations: list.filter((x) => x.url !== s.url) });
-    else {
-      settings.set({ radioStations: [...list, { name: s.name, url: s.url, favicon: s.favicon || "", tags: s.tags || "", country: s.country || "" }].slice(0, 100) });
-      toast(`${s.name} added to favourites`, { level: "ok", timeout: 1400 });
-    }
+    if (isFav(s.url)) return settings.set({ radioStations: list.filter((x) => x.url !== s.url) });
+    toast(`${s.name} added to favourites`, { level: "ok", timeout: 1400 });
+    return settings.set({ radioStations: [...list, { name: s.name, url: s.url, favicon: s.favicon || "", tags: s.tags || "", country: s.country || "", byHand: s.byHand === true }].slice(0, 100) });
   }
 
   play(s) {
@@ -160,7 +158,8 @@ export class RadioView {
     if (!url) return;
     if (!isStream(url)) { toast("That isn't an http(s) address", { level: "warn" }); return; }
     const name = (await prompt({ title: "Station name", value: url.replace(/^https?:\/\//, "").split("/")[0] })) || url;
-    this.toggleFav({ name: name.slice(0, 80), url: url.split("#")[0] });
+    // Saved first: a name that leads to the local network is only played once it's known to be yours.
+    await this.toggleFav({ name: name.slice(0, 80), url: url.split("#")[0], byHand: true });
     this.play({ name, url: url.split("#")[0] });
   }
 }

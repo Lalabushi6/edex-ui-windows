@@ -6,7 +6,7 @@ import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { emit } from "../core/bus.js";
-import { toast, contextMenu, prompt, confirm, copyText, cleanError } from "../core/ui.js";
+import { toast, contextMenu, prompt, confirm, copyText, cleanError, confirmNetworkPath } from "../core/ui.js";
 import { openUrl } from "../core/links.js";
 import { openViewer } from "../shell/viewer.js";
 import { isMediaPath } from "../media/player.js";
@@ -209,7 +209,7 @@ export class ExplorerTab {
     const item = (ico, label, path, extra) => h("button", {
       class: `fx-side-item${this.cwd !== null && path !== null && (path === "" ? this.cwd === "" : fmt.pathsEqual(this.cwd, path)) ? " active" : ""}`,
       type: "button", title: path || label,
-      onclick: () => this.navigate(path),
+      onclick: async () => { if (await confirmNetworkPath(path)) this.navigate(path); },
       oncontextmenu: (e) => path && contextMenu(e, [
         { label: "Open in new tab", icon: "plus", run: () => emit("open-path", { path, newTab: true }) },
         { label: "Open terminal here", icon: "terminal", run: () => emit("open-terminal", { cwd: path }) },
@@ -355,13 +355,15 @@ export class ExplorerTab {
     if (/^this pc$/i.test(value)) { this.closeAddress(); this.navigate(""); return; }
     if (/^https?:\/\//i.test(value)) { openUrl(value); this.closeAddress(); return; }
     try {
+      // Typed here, so a network path is what the user asked for.
+      if (/^[\\/]{2}/.test(value)) await api.fs.allowNetwork(value);
       const st = await api.fs.stat(value);
       this.closeAddress();
       if (st.isDir) await this.navigate(st.path);
       else await this.navigate(fmt.dirname(st.path), { select: st.path });
       this.main.focus();
     } catch (e) {
-      toast(`Cannot find "${value}"`, { level: "warn" });
+      toast(/^[\\/]{2}/.test(value) ? `Cannot open "${value}": ${cleanError(e)}` : `Cannot find "${value}"`, { level: "warn" });
     }
   }
 

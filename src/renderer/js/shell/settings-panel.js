@@ -12,7 +12,7 @@ import { autoLayoutId, openLayoutsFolder, importLayouts } from "./keyboard.js";
 import { describeLogo, openBootLogoEditor, previewBootTitle } from "./boot-art.js";
 import { openThemeEditor, openCssEditor, importThemes, exportTheme, deleteTheme, openThemesFolder } from "./theme-studio.js";
 import { PRESETS, computeGrid, applyPreset } from "../core/layout.js";
-import { editCommandWidget } from "../widgets/extra.js";
+import { editCommandWidget, reviewCommandWidget } from "../widgets/extra.js";
 import { VIZ_STYLES, VIZ_COLORS } from "../media/visualizer.js";
 import { editWallpaperArt, WALLPAPER_EFFECTS, WALLPAPER_BACKDROPS } from "./wallpaper.js";
 import { openUpdates } from "./updates.js";
@@ -598,9 +598,11 @@ async function buildPage(id) {
       row("Reset widget layout", null, h("button", { class: "btn", type: "button", onclick: () => settings.set({ widgetOrder: { left: [], right: [] }, hiddenWidgets: [], shownWidgets: [] }) }, "Reset")),
       h("h3", null, "Command widgets"),
       h("div", { class: "setting-desc", style: { marginBottom: ".4rem" } }, "Panels that show a command's output, refreshed on a schedule (disk space, a status API, git log …). Right-click one to edit it."),
-      ...(settings.get("commandWidgets") || []).map((c) => row(c.title, `${c.shell === "cmd" ? "cmd" : "PowerShell"} · every ${c.interval} s · ${c.command.slice(0, 80)}`,
+      ...(settings.get("commandWidgets") || []).map((c) => row(c.title, `${c.enabled === false ? "Off until reviewed · " : ""}${c.shell === "cmd" ? "cmd" : "PowerShell"} · every ${c.interval} s · ${c.command.slice(0, 80)}`,
         h("span", { style: { display: "flex", gap: ".4rem" } },
-          h("button", { class: "btn sm", type: "button", onclick: () => editCommandWidget(c) }, "Edit"),
+          c.enabled === false
+            ? h("button", { class: "btn sm primary", type: "button", onclick: () => reviewCommandWidget(c, rerender) }, "Review…")
+            : h("button", { class: "btn sm", type: "button", onclick: () => editCommandWidget(c) }, "Edit"),
           h("button", { class: "btn sm", type: "button", onclick: () => { settings.set({ commandWidgets: (settings.get("commandWidgets") || []).filter((x) => x.id !== c.id) }); rerender(); } }, "Remove")))),
       row("New command widget", null, h("button", { class: "btn", type: "button", onclick: () => runCommand("widgets.command") }, icon("plus"), "Add…")));
   }
@@ -740,7 +742,9 @@ async function buildPage(id) {
           try {
             const r = await api.tools.importSettings();
             if (r) {
-              toast(`Imported ${r.settings} settings, ${r.themes} themes, ${r.keyboards} layouts${r.skippedCommands ? ` (${r.skippedCommands} command widgets left out)` : ""}`, { level: "ok", timeout: 5000 });
+              const off = [r.commandsOff && `${r.commandsOff} command widget${r.commandsOff === 1 ? "" : "s"}`, r.calendarsOff && `${r.calendarsOff} calendar${r.calendarsOff === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
+              toast(`Imported ${r.settings} settings, ${r.themes} themes, ${r.keyboards} layouts${r.refusedKeyboards ? ` (${r.refusedKeyboards} layouts refused: keys may only send single key presses)` : ""}${off ? `. ${off} stay off until you turn them on` : ""}`,
+                { level: "ok", timeout: off ? 10000 : 5000, action: r.commandsOff ? { label: "Review", run: () => openPanel?.show("layout") } : r.calendarsOff ? { label: "Review", run: () => openPanel?.show("calendar") } : undefined });
               openPanel?.show("about");
             }
           } catch (e) { toast(cleanError(e), { level: "warn" }); }

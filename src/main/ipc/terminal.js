@@ -6,7 +6,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const pty = require("node-pty");
-const { isUncPath } = require("../lib/paths");
+const { isUncPath, linksToNetwork } = require("../lib/paths");
 const { handle, on } = require("./util");
 
 const MAX_SESSIONS = 24;
@@ -80,14 +80,14 @@ function registerTerminal({ settings }) {
 
   handle("term:shells", () => shells.map(({ id, name }) => ({ id, name })));
 
-  handle("term:spawn", (event, opts = {}) => {
-    if (sessions.size >= MAX_SESSIONS) throw new Error(`Session limit reached (${MAX_SESSIONS})`);
+  handle("term:spawn", async (event, opts = {}) => {
     const shell = shells.find((s) => s.id === opts.shell) ||
       shells.find((s) => s.id === settings.get("defaultShell")) || shells[0];
     let cwd = os.homedir();
-    if (typeof opts.cwd === "string" && opts.cwd && !isUncPath(opts.cwd)) {
+    if (typeof opts.cwd === "string" && opts.cwd && !isUncPath(opts.cwd) && !(await linksToNetwork(path.resolve(opts.cwd)))) {
       try { if (fs.statSync(opts.cwd).isDirectory()) cwd = opts.cwd; } catch (_) {}
     }
+    if (sessions.size >= MAX_SESSIONS) throw new Error(`Session limit reached (${MAX_SESSIONS})`);
     const cols = Math.max(2, Math.min(1000, Number(opts.cols) || 80));
     const rows = Math.max(2, Math.min(500, Number(opts.rows) || 24));
 

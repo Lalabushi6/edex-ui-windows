@@ -632,6 +632,8 @@ async function openPathLike(q) {
   let p = q;
   if (p.startsWith("~")) p = (await api.fs.home()) + p.slice(1);
   try {
+    // Typed here and chosen, so a network path is what the user asked for.
+    if (/^[\\/]{2}/.test(p)) await api.fs.allowNetwork(p);
     const st = await api.fs.stat(p);
     if (st.isDir) emit("open-path", { path: st.path });
     else {

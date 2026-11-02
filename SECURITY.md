@@ -39,13 +39,17 @@ reproduce it, and the eDEX version.
   interface, whose CSP stays closed to the internet. Station logos are
   fetched by the main process (images only, size-capped) and handed over as
   data URLs; game cover art is cached as local files. Addresses from a
-  directory listing or a playlist file can't point at the local network.
+  directory listing or a playlist file can't point at the local network: each
+  one is checked as written and by what its name resolves to, on every
+  redirect. A name could still change its answer between the check and the
+  connection, so treat this as a strong filter rather than a hard boundary.
 - **Lyrics, game art, the radio directory and calendar feeds** are plain
   HTTPS GETs from the main process; responses are parsed as data (JSON,
   iCalendar, images) and size-limited, never run. Calendar subscription
   links are secrets that grant read access to a calendar: they're stored in
   settings in plain text, and exporting settings asks whether to leave them
-  out.
+  out. Reading a feed runs in short slices with limits on its size and time,
+  so a hostile one can't hold up the app.
 - **The game library** reads the Steam, Epic and Xbox launchers' own
   manifest files and launches games only through the launchers' documented
   URIs (`steam://rungameid/…`, `com.epicgames.launcher://apps/…`) or the
@@ -56,18 +60,31 @@ reproduce it, and the eDEX version.
   never readable, system folders and network paths are never written. eDEX's
   own encrypted AI key, Spotify sign-in and browser-tab cookies are on that
   list too.
-- Network paths named by a file or by program output aren't followed (a
-  shortcut's icon, a folder a command prints for the terminal to "follow"):
-  just looking at one would send the Windows sign-in hash to that server.
+- Network paths aren't touched until you open that share yourself, by typing
+  it in the file explorer or launcher or confirming a saved link, and that
+  lasts for the session. Ones named by a file, by program output or by settings
+  aren't followed (a shortcut's icon, a link to a share, a folder a command
+  prints for the terminal to "follow", a restored tab): just looking at one
+  would send the Windows sign-in hash to that server. Administrative shares
+  like `C$` can't be opened this way.
 - Windows' own programs are started by their full path and eDEX runs from
   System32, so a program planted in the folder it was started from can't run
   in their place.
-- Running a program from the file explorer, ending a process and importing
-  command widgets from a settings file all ask first.
+- Running a program from the file explorer and ending a process both ask
+  first.
+- A settings file can't start anything by itself: its command widgets and
+  calendar links arrive switched off. A widget turns on only after you've
+  reviewed its full command, with long blank stretches and invisible characters
+  marked.
+- Keyboard layouts can't type commands: a key may only send a single key press,
+  and a layout that does more is refused.
 - The Git widget won't inspect a repository whose own config could make Git
-  start programs (filters, signature checks, lazy fetches, includes). Git
-  itself reads the config for this check, including a linked worktree's main
-  repository, and submodules are left out.
+  start programs (filters, signature checks, lazy fetches, includes) or that
+  points Git at a network path (a `.git` file, a worktree's `commondir`, any
+  config value except remote addresses, object alternates). eDEX reads those
+  files before it runs Git in the folder, and Git itself reads the config for
+  this check, including a linked worktree's main repository. Submodules are
+  left out.
 - Clipboard history skips what password managers mark as private. System
   snapshots leave out the PC name, user name and network addresses.
 - Network use is limited to the documented lookups (Settings → Privacy can

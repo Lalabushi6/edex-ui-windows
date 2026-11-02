@@ -34,7 +34,7 @@ defineWidget({
       if (s?.unsafe) {
         for (const el of [head, counts, last, files]) el.hidden = true;
         empty.hidden = false;
-        setText(empty, "This repository's own settings can run external programs, so eDEX doesn't inspect it. Use git in the terminal.");
+        setText(empty, "This repository's own settings can run external programs or reach other computers, so eDEX doesn't inspect it. Use git in the terminal.");
         panel.setSub(fmt.basename(s.root).toUpperCase());
         return;
       }
@@ -102,6 +102,17 @@ function defineCommandWidget(cfg) {
     title: cfg.title,
     column: cfg.column,
     create(panel) {
+      if (cfg.enabled === false) {
+        panel.setSub("OFF");
+        panel.body.append(h("div", { class: "empty" }, "Imported from a settings file. This command doesn't run until you've reviewed it."),
+          h("button", { class: "btn sm", type: "button", onclick: () => reviewCommandWidget(cfg) }, "Review…"));
+        panel.el.addEventListener("contextmenu", (e) => contextMenu(e, [
+          { label: "Review command…", icon: "edit", run: () => reviewCommandWidget(cfg) },
+          { separator: true },
+          { label: "Remove widget", icon: "trash", danger: true, run: () => removeCommandWidget(cfg) }
+        ]));
+        return { destroy() {} };
+      }
       const out = h("pre", { class: "cmdw-out" }, "…");
       const meta = h("div", { class: "cmdw-meta muted" });
       panel.body.append(out, meta);
@@ -157,6 +168,35 @@ async function removeCommandWidget(cfg) {
   settings.set({ commandWidgets: (settings.get("commandWidgets") || []).filter((c) => c.id !== cfg.id) });
 }
 
+// A command exactly as it would run: blank space that could push the rest out
+// of sight is counted, and characters that don't show are named.
+function revealCommand(text) {
+  return text
+    .replace(/(?:[\t\p{Zs}]*\n){2,}/gu, (m) => `\n⟦${m.split("\n").length - 1} line breaks⟧\n`)
+    .replace(/[\t\p{Zs}]{4,}/gu, (m) => ` ⟦${m.length} blanks⟧ `)
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => (c === "\n" || c === "\t" ? c : `⟦U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}⟧`));
+}
+
+export function reviewCommandWidget(cfg, onTurnedOn) {
+  const shown = revealCommand(cfg.command);
+  openModal((close) => {
+    const turnOn = () => {
+      settings.set({ commandWidgets: (settings.get("commandWidgets") || []).map((c) => (c.id === cfg.id && c.command === cfg.command ? { ...c, enabled: true } : c)) });
+      close();
+      toast(`“${cfg.title}” is on`, { level: "ok", timeout: 1600 });
+      onTurnedOn?.();
+    };
+    return h("div", { class: "dialog cmdw-dialog" },
+      h("h2", { class: "dialog-title" }, `Review “${cfg.title}”`),
+      h("p", { class: "dialog-msg" }, `This command came from a settings file. Once on, it runs as you, in ${cfg.shell === "cmd" ? "Command Prompt" : "PowerShell"}, every ${cfg.interval} seconds while eDEX is on screen. Only turn it on if you understand all of it.`),
+      h("pre", { class: "cmdw-out cmdw-review" }, shown),
+      shown !== cfg.command && h("p", { class: "dialog-msg warn-text" }, "This command has long blank stretches or invisible characters, marked ⟦like this⟧. That's unusual, and can be a way of hiding part of a command."),
+      h("div", { class: "dialog-actions" },
+        h("button", { class: "btn", type: "button", "data-autofocus": true, onclick: () => close() }, "Keep it off"),
+        h("button", { class: "btn primary", type: "button", onclick: turnOn }, "Turn on")));
+  }, { label: "Review command widget" });
+}
+
 const EXAMPLES = [
   ["Disk free", "Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='Free GB';e={[math]::Round($_.Free/1GB,1)}}, @{n='Used GB';e={[math]::Round($_.Used/1GB,1)}} -AutoSize | Out-String -Width 60"],
   ["Uptime", "$u = (Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; '{0}d {1}h {2}m' -f $u.Days, $u.Hours, $u.Minutes"],
@@ -184,7 +224,8 @@ export function editCommandWidget(existing = null) {
         title: title.value.trim() || "Command",
         command: cmd, shell: shell.value,
         interval: Math.max(5, Math.min(86400, Math.round(Number(interval.value) || 60))),
-        column: column.value
+        column: column.value,
+        enabled: existing?.enabled !== false
       };
       const list = (settings.get("commandWidgets") || []).filter((c) => c.id !== cfg.id);
       if (!existing && list.length >= 12) { toast("At most 12 command widgets", { level: "warn" }); return; }

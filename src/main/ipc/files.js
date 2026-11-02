@@ -91,6 +91,8 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
       let isDir = d.isDirectory();
       let isFile = d.isFile();
       const isLink = d.isSymbolicLink();
+      // stat() follows links, and a downloaded folder can hold one to a share.
+      if (isLink && await paths.linksToNetwork(full)) return null;
       let stat = null;
       try {
         stat = await fs.promises.stat(full);
@@ -136,6 +138,14 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
   // `fresh` skips the short listing cache (the file panel re-reads a folder
   // right after a shell command that may have changed it).
   handle("fs:list", (_e, dir, opts) => listDir(asString(dir, "path"), !!opts?.fresh));
+
+  // The user asked for this network path themselves; the rest of that share
+  // then works for the session. Tabs and settings never get here on their own.
+  handle("fs:allowNetwork", (_e, target) => {
+    if (!paths.allowNetworkShare(asString(target, "path"))) throw new Error("That can't be opened here (it needs a server and a share, and administrative shares like C$ aren't allowed)");
+    return true;
+  });
+  handle("fs:networkOpen", (_e, target) => paths.isShareOpen(asString(target, "path")));
 
   handle("fs:stat", async (_e, target) => {
     const p = await paths.forRead(asString(target, "path"));
@@ -287,7 +297,7 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
   // just from showing a downloaded folder, so those are left without one.
   const shortcutIsLocal = async (p) => {
     try {
-      if (/\.url$/i.test(p)) return !/^IconFile=\s*(\\\\|\/\/|file:)/im.test((await fs.promises.readFile(p, "utf8")).slice(0, 8192).replace(/\0/g, ""));
+      if (/\.url$/i.test(p)) return !/^IconFile=\s*([\\/]{2}|file:)/im.test((await fs.promises.readFile(p, "utf8")).slice(0, 8192).replace(/\0/g, ""));
       const link = shell.readShortcutLink(p);
       return !paths.isUncPath(link.target || "") && !paths.isUncPath(link.icon || "");
     } catch (_) { return false; }

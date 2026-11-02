@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 const { EventEmitter } = require("events");
 const { JsonStore } = require("./lib/store");
+const { isUncPath } = require("./lib/paths");
 
 const str = (max = 256) => (v, d) => (typeof v === "string" ? v.slice(0, max) : d);
 const bool = () => (v, d) => (typeof v === "boolean" ? v : d);
@@ -37,7 +38,8 @@ const workspace = () => (v, d) => {
   const tabs = v.tabs.slice(0, 40).map((t) => ({
     type: ["terminal", "files", "processes", "media", "disk", "browser", "ascii", "app"].includes(t?.type) ? t.type : "terminal",
     shell: typeof t?.shell === "string" ? t.shell.slice(0, 32) : undefined,
-    cwd: typeof t?.cwd === "string" ? t.cwd.slice(0, 1024) : undefined,
+    // Tabs reopen by themselves, so a network folder is never one to come back to.
+    cwd: typeof t?.cwd === "string" && !isUncPath(t.cwd) ? t.cwd.slice(0, 1024) : undefined,
     label: typeof t?.label === "string" ? t.label.slice(0, 32) : undefined,
     url: t?.type === "browser" && typeof t.url === "string" && /^https?:\/\//i.test(t.url) ? t.url.slice(0, 4096) : undefined,
     exe: t?.type === "app" && typeof t.exe === "string" ? t.exe.slice(0, 1024) : undefined,
@@ -61,7 +63,9 @@ const commandWidgets = () => (v, d) => {
       command: w.command.slice(0, 2000),
       shell: w.shell === "cmd" ? "cmd" : "powershell",
       interval: int(5, 86400)(w.interval, 60),
-      column: w.column === "left" ? "left" : "right"
+      column: w.column === "left" ? "left" : "right",
+      // Imported widgets stay off until the user has reviewed the command.
+      enabled: w.enabled !== false
     }));
 };
 // Internet radio favourites.
@@ -72,7 +76,9 @@ const stations = () => (v, d) => {
     url: s.url,
     favicon: typeof s.favicon === "string" && /^https?:\/\//i.test(s.favicon) ? s.favicon.slice(0, 1024) : "",
     tags: typeof s.tags === "string" ? s.tags.slice(0, 120) : "",
-    country: typeof s.country === "string" ? s.country.slice(0, 8) : ""
+    country: typeof s.country === "string" ? s.country.slice(0, 8) : "",
+    // Added with "Add URL…": this one may live on the local network.
+    byHand: s.byHand === true
   }));
 };
 // Calendar subscriptions (.ics / webcal links).
@@ -228,7 +234,8 @@ const SCHEMA = {
   mediaEq: [(v, d) => (Array.isArray(v) && v.length === 10 ? v.map((x) => Math.max(-12, Math.min(12, Math.round(Number(x) * 2) / 2 || 0))) : d), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
   mediaSource: [oneOf("local", "spotify"), "local"],
   mediaView: [oneOf("player", "library", "radio"), "player"],
-  musicFolders: [strList(12, 1024), []],
+  // Scanned without asking; the player can't play network files anyway.
+  musicFolders: [(v, d) => (Array.isArray(v) ? strList(12, 1024)(v.filter((x) => typeof x === "string" && !isUncPath(x)), d) : d), []],
   radioStations: [stations(), []],
   lyrics: [bool(), true],
 

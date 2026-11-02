@@ -14,7 +14,7 @@ const path = require("path");
 const { Readable } = require("stream");
 const { protocol } = require("electron");
 const { mimeFor } = require("./mime");
-const { isPathInside, isSensitive, isUncPath } = require("./paths");
+const { isPathInside, isSensitive, isUncPath, linksToNetwork } = require("./paths");
 
 const APP_ORIGIN = "app://edex";
 const RENDERER_DIR = path.join(__dirname, "..", "..", "renderer");
@@ -95,8 +95,9 @@ async function handleLocalFile(request) {
 
   let stat;
   try {
-    const real = await fs.promises.realpath(filePath);
     // A link can point at a network share; refuse those like UNC paths.
+    if (await linksToNetwork(filePath)) return new Response("Forbidden", { status: 403 });
+    const real = await fs.promises.realpath(filePath);
     if (isSensitive(real) || isUncPath(real)) return new Response("Forbidden", { status: 403 });
     filePath = real;
     stat = await fs.promises.stat(filePath);

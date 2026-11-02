@@ -7,7 +7,7 @@ import { Sparkline } from "../core/sparkline.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { emit, on } from "../core/bus.js";
-import { toast, contextMenu, prompt, confirm, copyText, cleanError } from "../core/ui.js";
+import { toast, contextMenu, prompt, confirm, copyText, cleanError, confirmNetworkPath } from "../core/ui.js";
 import { openUrl } from "../core/links.js";
 import { defineWidget } from "./registry.js";
 
@@ -189,6 +189,7 @@ defineWidget({
 async function openTarget(target) {
   if (/^(https?|mailto):/i.test(target)) return openUrl(target);
   try {
+    if (!(await confirmNetworkPath(target))) return;
     const st = await api.fs.stat(target);
     if (st.isDir) emit("open-path", { path: st.path });
     else await api.fs.open(st.path);

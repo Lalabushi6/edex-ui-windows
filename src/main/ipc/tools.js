@@ -36,6 +36,7 @@ function registerTools({ settings, windows }) {
   handle("cmdw:run", async (_e, id) => {
     const def = (settings.get("commandWidgets") || []).find((w) => w.id === id);
     if (!def) throw new Error("Unknown command widget");
+    if (def.enabled === false) throw new Error("This widget is off until you review its command");
     const prev = lastRun.get(id);
     if (prev && Date.now() - prev.at < 3000) return prev.result;
     const r = def.shell === "cmd"
@@ -56,9 +57,11 @@ function registerTools({ settings, windows }) {
   // repository whose own config could make git start programs (filters,
   // signature checks, lazy fetches, includes that could add any of them) is
   // not inspected: a downloaded folder must never be able to run code just
-  // by being opened. Git itself reads the config, so no way of spelling it
-  // gets past the check, and one it can't read counts as unsafe. Its file
-  // monitor is off for every call, so that key doesn't matter here.
+  // by being opened. Nor can it send Git to a network path, which would hand
+  // that server this PC's sign-in hash. Git itself reads the config, so no way
+  // of spelling it gets past the check, and one it can't read counts as
+  // unsafe. Its file monitor is off for every call, so that key doesn't matter
+  // here.
   const UNSAFE_GIT_KEY = new RegExp([
     "^(include|includeif|pager|credential)\\.",
     "\\.(clean|smudge|process|textconv|command|driver|cmd|program|defaultkeycommand)$",
@@ -68,26 +71,89 @@ function registerTools({ settings, windows }) {
     "^extensions\\.partialclone$",
     "^remote\\..*\\.(uploadpack|receivepack|vcs|proxy|promisor|partialclonefilter)$"
   ].join("|"), "i");
+  // Addresses of other repositories: status never contacts them, and a repo
+  // cloned from a file server would otherwise always count as unsafe.
+  const REMOTE_ADDRESS_KEY = /^(remote\..*\.(url|pushurl)|submodule\..*\.url|url\..*\.(insteadof|pushinsteadof))$/i;
+  const namesNetwork = (value) => {
+    const v = String(value).trim().replace(/^%\(prefix\)[\\/]/, "");
+    return paths.isUncPath(v) || (/^file:/i.test(v) && !/^file:[\\/]*[a-z]:/i.test(v));
+  };
   const gitEnv = { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" };
   // "file|modified|size" -> unsafe?; these are read on every status check.
   const configVerdicts = new Map();
   const configUnsafe = async (file) => {
     let st;
-    try { st = await fs.promises.stat(file); } catch (_) { return false; }
+    try { st = await fs.promises.stat(await paths.forRead(file)); } catch (e) { return e.code === "ENETWORK"; }
     const key = `${file}|${st.mtimeMs}|${st.size}`;
     if (configVerdicts.has(key)) return configVerdicts.get(key);
-    const r = await run("git", ["config", "--file", file, "--name-only", "--list"], { timeout: 8000, env: gitEnv });
-    const unsafe = r.code !== 0 || r.stdout.split(/\r?\n/).some((name) => UNSAFE_GIT_KEY.test(name.trim()));
+    const r = await run("git", ["config", "--file", file, "--list", "-z"], { timeout: 8000, env: gitEnv });
+    const unsafe = r.code !== 0 || r.stdout.split("\0").some((entry) => {
+      const [name, ...value] = entry.split("\n");
+      return UNSAFE_GIT_KEY.test(name.trim()) || (!REMOTE_ADDRESS_KEY.test(name.trim()) && namesNetwork(value.join("\n")));
+    });
     if (configVerdicts.size >= 32) configVerdicts.delete(configVerdicts.keys().next().value);
     configVerdicts.set(key, unsafe);
     return unsafe;
   };
+  // The start of a small file a repository uses to point elsewhere, or "".
+  const readPointer = async (file) => {
+    const fd = await fs.promises.open(await paths.forRead(file), "r");
+    try {
+      const buf = Buffer.alloc(16384);
+      const { bytesRead } = await fd.read(buf, 0, buf.length, 0);
+      return buf.toString("utf8", 0, bytesRead);
+    } finally { await fd.close(); }
+  };
+  const pointerOr = (file) => readPointer(file).catch((e) => { if (e.code === "ENETWORK") throw e; return ""; });
+  const gitDirUnsafe = async (gitDir) => {
+    const common = (await pointerOr(path.join(gitDir, "commondir"))).trim();
+    const dirs = [gitDir];
+    if (common) {
+      if (namesNetwork(common) || paths.isUncPath(path.resolve(gitDir, common))) return true;
+      dirs.push(path.resolve(gitDir, common));
+    }
+    for (const d of dirs) {
+      if (await configUnsafe(path.join(d, "config")) || await configUnsafe(path.join(d, "config.worktree"))) return true;
+      if ((await pointerOr(path.join(d, "objects", "info", "alternates"))).split(/\r?\n/).some(namesNetwork)) return true;
+    }
+    return false;
+  };
+  // Git acts on what these files say as soon as it starts (a ".git" file's
+  // gitdir, a worktree's commondir, core.worktree), before it can be asked
+  // anything. So every repository this folder could count as part of is read
+  // here first, up to the drive root, without running Git on it.
+  const exists = (p) => fs.promises.lstat(p).then(() => true, () => false);
+  const levelUnsafe = async (level) => {
+    const dotGit = path.join(level, ".git");
+    let gitDir = null;
+    if (await exists(dotGit)) {
+      const real = await paths.forRead(dotGit);
+      const st = await fs.promises.stat(real).catch(() => null);
+      if (st?.isDirectory()) gitDir = real;
+      else if (st) {
+        const named = /^gitdir:\s*(.+?)\s*$/im.exec(await pointerOr(real))?.[1];
+        if (named && (namesNetwork(named) || paths.isUncPath(path.resolve(level, named)))) return true;
+        if (named) gitDir = path.resolve(level, named);
+      }
+    } else if (await exists(path.join(level, "HEAD")) && await exists(path.join(level, "objects")) && await exists(path.join(level, "refs"))) {
+      gitDir = level; // a bare repository
+    }
+    return !!gitDir && gitDirUnsafe(gitDir);
+  };
+  const repoUnsafe = async (dir) => {
+    for (let level = dir; ; level = path.dirname(level)) {
+      // A level that can't be read is one Git can't use either; it moves on up.
+      try { if (await levelUnsafe(level)) return true; } catch (e) { if (e.code === "ENETWORK") return true; }
+      if (path.dirname(level) === level) return false;
+    }
+  };
   handle("git:status", async (_e, cwd) => {
-    // Looking at a network path at all would send this PC's sign-in hash there.
-    if (paths.isUncPath(asString(cwd, "folder"))) return { repo: false };
+    asString(cwd, "folder");
     let dir;
+    // forRead refuses network paths before looking at them.
     try { dir = await paths.forRead(cwd); } catch (_) { return { repo: false }; }
     if (paths.isUncPath(dir)) return { repo: false };
+    if (await repoUnsafe(dir)) return { repo: true, unsafe: true, root: dir };
     const git = (args) => run("git", ["-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "-C", dir, ...args], { timeout: 8000, env: gitEnv });
     const where = await git(["rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"]);
     if (where.err && where.err.code === "ENOENT") return { repo: false, error: "nogit" };
@@ -243,6 +309,7 @@ function registerTools({ settings, windows }) {
     };
     let themes = 0;
     let keyboards = 0;
+    let refusedKeyboards = 0;
     const themeDir = path.join(userData, "themes");
     for (const t of Array.isArray(bundle.themes) ? bundle.themes.slice(0, 200) : []) {
       const name = safeName(t.file);
@@ -261,31 +328,24 @@ function registerTools({ settings, windows }) {
       const name = safeName(k.file);
       const c = k.content;
       if (!/\.json$/i.test(name) || !LAYOUT_ID.test(name.slice(0, -5)) || !c || typeof c !== "object") continue;
-      try { normalizeLayout(c); } catch (_) { continue; }
+      try { normalizeLayout(c); } catch (_) { refusedKeyboards++; continue; }
       await fs.promises.mkdir(kbDir, { recursive: true });
       await fs.promises.writeFile(path.join(kbDir, name), JSON.stringify(c, null, 2), "utf8");
       keyboards++;
     }
-    // Command widgets run commands on a schedule; a shared settings file must
-    // not be able to start them without the user seeing what they are.
+    // A shared settings file must not start anything by itself. Command widgets
+    // and calendar links arrive switched off, and the user turns each one on
+    // after seeing it. No prompt here: a dialog can't show a whole command, and
+    // long blank space could push the rest of one out of sight.
     const incoming = { ...bundle.settings };
-    const cmds = Array.isArray(incoming.commandWidgets) ? incoming.commandWidgets.filter((w) => w && typeof w.command === "string" && w.command.trim()) : [];
-    let skippedCommands = 0;
-    if (cmds.length) {
-      const list = cmds.slice(0, 8).map((w) => `• ${String(w.title || "Command").slice(0, 40)}: ${w.command.slice(0, 160)}`).join("\n");
-      const { response } = await windows.withDialog((win) => dialog.showMessageBox(win, {
-        type: "warning",
-        buttons: ["Import without them", "Import and allow them"],
-        defaultId: 0,
-        cancelId: 0,
-        title: "Command widgets in this file",
-        message: `This settings file contains ${cmds.length} command widget${cmds.length === 1 ? "" : "s"}, which run commands on your PC automatically.`,
-        detail: `${list}${cmds.length > 8 ? `\n… and ${cmds.length - 8} more` : ""}\n\nOnly allow them if you trust where this file came from.`
-      }));
-      if (response !== 1) { delete incoming.commandWidgets; skippedCommands = cmds.length; }
-    }
+    const withAll = (list, patch) => (Array.isArray(list) ? list.map((x) => (x && typeof x === "object" ? { ...x, ...patch } : x)) : list);
+    incoming.commandWidgets = withAll(incoming.commandWidgets, { enabled: false });
+    incoming.calendarFeeds = withAll(incoming.calendarFeeds, { enabled: false });
+    incoming.radioStations = withAll(incoming.radioStations, { byHand: false });
+    for (const key of ["commandWidgets", "calendarFeeds", "radioStations"]) if (incoming[key] === undefined) delete incoming[key];
     const applied = settings.set(incoming);
-    return { settings: Object.keys(applied || {}).length, themes, keyboards, skippedCommands };
+    const off = (key) => (key in incoming ? (settings.get(key) || []).filter((x) => x.enabled === false).length : 0);
+    return { settings: Object.keys(applied || {}).length, themes, keyboards, refusedKeyboards, commandsOff: off("commandWidgets"), calendarsOff: off("calendarFeeds") };
   });
 
   return { flush: () => tasks.flushSync() };
