@@ -205,7 +205,7 @@ function brightnessControl(btn) {
   return { stop: () => p.stop() };
 }
 
-export function powerMenu(e) {
+function powerMenu(e) {
   const act = (action) => api.power.action(action).catch((err) => toast(cleanError(err), { level: "warn" }));
   const r = e.currentTarget?.getBoundingClientRect?.();
   const anchor = r ? { clientX: r.right - 200, clientY: r.bottom + 4, preventDefault() {}, stopPropagation() {} } : e;

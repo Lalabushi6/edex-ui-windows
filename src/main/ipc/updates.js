@@ -10,13 +10,15 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
 const { app, dialog, net, shell } = require("electron");
 const { handle } = require("./util");
 const portable = require("../lib/portable");
+const { readCapped } = require("../lib/http");
+const { POWERSHELL, spawnDetached } = require("../lib/sysexe");
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_BYTES = 400 * 1024 * 1024;
+const STALL_MS = 60000;
 const ASSET = { installer: "eDEX-UI-Setup.exe", portable: "eDEX-UI-Portable.exe" };
 
 // "owner/repo" from package.json's repository field.
@@ -46,8 +48,9 @@ function registerUpdates({ settings, windows, notices }) {
   const apiBase = (!app.isPackaged && process.env.EDEX_UPDATE_API) || "https://api.github.com";
   const devKind = !app.isPackaged && ["installer", "portable"].includes(process.env.EDEX_UPDATE_KIND) ? process.env.EDEX_UPDATE_KIND : null;
   const kind = portable.state().portable ? "portable" : app.isPackaged ? "installer" : devKind;
+  const downloadDir = path.join(app.getPath("temp"), "eDEX-UI-update");
   let latest = null;   // last successful check
-  let download = null; // { version, file, verified }
+  let download = null; // { version, file, verified, sha256 }
   let busy = null;
 
   async function check() {
@@ -66,7 +69,7 @@ function registerUpdates({ settings, windows, notices }) {
     if (res.status === 404) throw new Error("No published release found (a private repository can't be checked)");
     if (res.status === 403 || res.status === 429) throw new Error("GitHub rate limit reached — try again in an hour");
     if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-    const r = await res.json();
+    const r = JSON.parse((await readCapped(res, 4 * 1024 * 1024)).toString("utf8"));
     if (r.draft || r.prerelease) throw new Error("The latest release is a pre-release");
     const assets = Array.isArray(r.assets) ? r.assets : [];
     const wanted = kind ? assets.find((a) => a?.name === ASSET[kind]) : null;
@@ -111,7 +114,11 @@ function registerUpdates({ settings, windows, notices }) {
       }
     } catch (_) {}
   }
-  const startTimer = setTimeout(autoCheck, 45000);
+  // The installer can't tidy up after itself, so its file goes on a later start.
+  const startTimer = setTimeout(() => {
+    if (!busy && !download) fs.promises.rm(downloadDir, { recursive: true, force: true }).catch(() => {});
+    autoCheck();
+  }, 45000);
   const dailyTimer = setInterval(autoCheck, 6 * 60 * 60 * 1000);
 
   handle("updates:info", () => ({ repo: slug, kind, current: app.getVersion(), latest: view(latest), downloaded: download?.version || null }));
@@ -126,14 +133,16 @@ function registerUpdates({ settings, windows, notices }) {
     if (asset.size > MAX_BYTES) throw new Error("The update file is unexpectedly large");
     const send = (p) => { if (!event.sender.isDestroyed()) event.sender.send("updates:progress", p); };
     busy = (async () => {
-      const dir = path.join(app.getPath("temp"), "eDEX-UI-update");
-      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.mkdir(downloadDir, { recursive: true });
       // The tag name is free text on GitHub (it may contain "/" or ".."); only
       // safe characters reach the file name.
-      const file = path.join(dir, `${r.version.replace(/[^\w.-]/g, "_")}-${asset.name}`);
+      const file = path.join(downloadDir, `${r.version.replace(/[^\w.-]/g, "_")}-${asset.name}`);
       const part = `${file}.part`;
-      const res = await net.fetch(asset.url, { headers: { "User-Agent": `eDEX-UI/${app.getVersion()}` } });
-      if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
+      // A connection that goes quiet fails rather than hanging for good.
+      const ctrl = new AbortController();
+      let stall = setTimeout(() => ctrl.abort(), STALL_MS);
+      const res = await net.fetch(asset.url, { headers: { "User-Agent": `eDEX-UI/${app.getVersion()}` }, signal: ctrl.signal });
+      if (!res.ok || !res.body) { clearTimeout(stall); throw new Error(`Download failed (${res.status})`); }
       const total = asset.size || Number(res.headers.get("content-length")) || 0;
       const hash = crypto.createHash("sha256");
       const out = fs.createWriteStream(part);
@@ -141,6 +150,8 @@ function registerUpdates({ settings, windows, notices }) {
       let lastSent = 0;
       try {
         for await (const chunk of res.body) {
+          clearTimeout(stall);
+          stall = setTimeout(() => ctrl.abort(), STALL_MS);
           got += chunk.length;
           if (got > MAX_BYTES) throw new Error("The update file is unexpectedly large");
           hash.update(chunk);
@@ -151,7 +162,9 @@ function registerUpdates({ settings, windows, notices }) {
       } catch (e) {
         out.destroy();
         await fs.promises.rm(part, { force: true });
-        throw e;
+        throw e.name === "AbortError" ? new Error("The download stalled — check your connection and try again") : e;
+      } finally {
+        clearTimeout(stall);
       }
       const digest = hash.digest("hex");
       if ((asset.size && got !== asset.size) || (asset.sha256 && digest !== asset.sha256)) {
@@ -160,7 +173,7 @@ function registerUpdates({ settings, windows, notices }) {
       }
       await fs.promises.rename(part, file);
       send({ got, total: got, done: true });
-      download = { version: r.version, file, verified: !!asset.sha256 };
+      download = { version: r.version, file, verified: !!asset.sha256, sha256: digest };
       return { version: r.version, verified: download.verified };
     })().finally(() => { busy = null; });
     return busy;
@@ -179,6 +192,13 @@ function registerUpdates({ settings, windows, notices }) {
         : "eDEX closes and the installer starts. Your settings are kept."
     }));
     if (response !== 1) return false;
+    // The file sat in the temp folder since it was checked.
+    const now = crypto.createHash("sha256");
+    for await (const chunk of fs.createReadStream(download.file)) now.update(chunk);
+    if (now.digest("hex") !== download.sha256) {
+      download = null;
+      throw new Error("The downloaded update has changed since it was checked — download it again");
+    }
     if (kind === "portable") {
       const target = portable.state().exe;
       if (!target) throw new Error("Can't find the portable .exe to replace");
@@ -190,12 +210,12 @@ function registerUpdates({ settings, windows, notices }) {
         "if ($ok) { Remove-Item -LiteralPath $src -ErrorAction SilentlyContinue }",
         "Start-Process -FilePath $dst"
       ].join("\n");
-      spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script], {
-        detached: true, stdio: "ignore", windowsHide: true,
+      spawnDetached(POWERSHELL, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script], {
+        windowsHide: true,
         env: { ...process.env, EDEX_UPDATE_SRC: download.file, EDEX_UPDATE_DST: target }
-      }).unref();
+      });
     } else {
-      spawn(download.file, [], { detached: true, stdio: "ignore" }).unref();
+      spawnDetached(download.file);
     }
     setTimeout(() => app.quit(), 300);
     return true;
@@ -215,4 +235,4 @@ function registerUpdates({ settings, windows, notices }) {
   return { stop: () => { clearTimeout(startTimer); clearInterval(dailyTimer); } };
 }
 
-module.exports = { registerUpdates, newer, parseVersion };
+module.exports = { registerUpdates, newer };

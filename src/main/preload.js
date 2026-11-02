@@ -23,7 +23,6 @@ contextBridge.exposeInMainWorld("edex", {
     idle: invoke("app:idle"),
     openData: invoke("app:openData"),
     onVisibility: subscribe("app:visibility"),
-    onMode: subscribe("app:mode"),
     onCommand: subscribe("app:command"),
     onNotice: subscribe("app:notice")
   },
@@ -54,15 +53,9 @@ contextBridge.exposeInMainWorld("edex", {
     static: invoke("sys:static"),
     live: invoke("sys:live"),
     appUsage: invoke("sys:appUsage"),
-    cpu: invoke("sys:cpu"),
-    mem: invoke("sys:mem"),
     battery: invoke("sys:battery"),
     temp: invoke("sys:temp"),
     drives: invoke("sys:drives"),
-    net: invoke("sys:net"),
-    netStats: invoke("sys:netStats"),
-    gpu: invoke("sys:gpu"),
-    diskIO: invoke("sys:diskIO"),
     processes: invoke("sys:processes"),
     uptime: invoke("sys:uptime"),
     kill: invoke("sys:kill"),
@@ -134,7 +127,6 @@ contextBridge.exposeInMainWorld("edex", {
     progress: invoke("disk:progress"),
     node: invoke("disk:node"),
     cancel: invoke("disk:cancel"),
-    clear: invoke("disk:clear"),
     release: invoke("disk:release")
   },
   tools: {

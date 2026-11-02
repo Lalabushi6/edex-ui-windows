@@ -8,6 +8,7 @@ const { app, dialog, globalShortcut, Menu, powerMonitor, session, shell } = requ
 const portable = require("./lib/portable");
 portable.apply();
 const paths = require("./lib/paths");
+const { SYSTEM32 } = require("./lib/sysexe");
 const accel = require("./lib/accel");
 const { registerSchemes, registerHandlers, APP_ORIGIN } = require("./lib/protocol");
 const { NativeBridge } = require("./lib/native-bridge");
@@ -58,6 +59,10 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 function start() {
+  // Windows looks for a program named without a path in the current folder
+  // first. Started from Downloads, that folder could hold anything; git and
+  // anything else found through PATH is safe from here.
+  try { process.chdir(SYSTEM32); } catch (_) {}
   registerSchemes();
   app.setAppUserModelId("com.edex-ui.windows");
   Menu.setApplicationMenu(null);
@@ -143,10 +148,11 @@ function start() {
     ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
     ses.setDevicePermissionHandler(() => false);
     ses.on("will-download", (event) => event.preventDefault());
-    // The encrypted AI key and Spotify sign-in never become readable through
-    // file previews.
+    // The encrypted AI key, Spotify sign-in and the browser tabs' cookies and
+    // saved sign-ins never become readable through file previews.
     paths.addSensitive(path.join(app.getPath("userData"), "ai-key.bin"));
     paths.addSensitive(path.join(app.getPath("userData"), "spotify-token.bin"));
+    paths.addSensitive(path.join(app.getPath("userData"), "Partitions"));
     settings = new Settings(app.getPath("userData"));
     bridge = new NativeBridge({ workDir: path.join(app.getPath("userData"), "native") });
     // A second helper for slow or long-running calls (media sessions,
@@ -235,7 +241,7 @@ function start() {
     hud = new Hud({ settings, windows, bridge });
 
     // Game library, and game mode while one runs.
-    games = registerGames({ settings, windows, bridge, aux });
+    games = registerGames({ settings, windows, aux });
     gameMode = new GameMode({ settings, bridge, games, ownPids });
     const applyGame = () => {
       const st = { active: gameMode.active, name: gameMode.name };

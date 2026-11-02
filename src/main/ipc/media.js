@@ -69,4 +69,4 @@ function registerMedia({ windows }) {
   });
 }
 
-module.exports = { registerMedia, MEDIA_EXTS };
+module.exports = { registerMedia };

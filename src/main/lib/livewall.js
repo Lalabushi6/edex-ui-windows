@@ -22,7 +22,6 @@ class LiveWallpaper {
     this.gameMode = gameMode;
     this.mode = "none";
     this.wins = []; // { win, display, hwnd, attached, paused }
-    this.forced = false; // development: run even while eDEX is visible
     this.queue = Promise.resolve();
     settings.on("change", (c) => {
       if ("liveWallpaper" in c || "liveWallpaperDisplays" in c) this.restart();
@@ -41,8 +40,7 @@ class LiveWallpaper {
   wanted() {
     if (this.settings.get("liveWallpaper") === "off") return false;
     const main = this.windows.win;
-    const hidden = !main || main.isDestroyed() || !main.isVisible() || main.isMinimized();
-    return this.forced || hidden;
+    return !main || main.isDestroyed() || !main.isVisible() || main.isMinimized();
   }
 
   sync() {

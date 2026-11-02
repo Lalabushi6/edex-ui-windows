@@ -34,7 +34,7 @@ defineWidget({
       if (s?.unsafe) {
         for (const el of [head, counts, last, files]) el.hidden = true;
         empty.hidden = false;
-        setText(empty, "This repository's own settings run external programs (filters or fsmonitor), so eDEX doesn't inspect it. Use git in the terminal.");
+        setText(empty, "This repository's own settings can run external programs, so eDEX doesn't inspect it. Use git in the terminal.");
         panel.setSub(fmt.basename(s.root).toUpperCase());
         return;
       }

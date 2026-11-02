@@ -2,14 +2,16 @@
 
 const fs = require("fs");
 const { app, shell, nativeImage } = require("electron");
-const { isSensitive } = require("./paths");
+const { isSensitive, isUncPath } = require("./paths");
 
 const cache = new Map();
 const MAX = 1200;
 const SIZE = 48;
 
 const expandEnv = (p) => String(p || "").replace(/%([^%]+)%/g, (m, name) => process.env[name] ?? m);
-const usable = (p) => p && !/\.dll$/i.test(p) && !isSensitive(p) && fs.existsSync(p);
+// A shortcut's icon path comes from the file: looking at a network path would
+// send this PC's sign-in hash to whatever server it names.
+const usable = (p) => p && !/\.dll$/i.test(p) && !isUncPath(p) && !isSensitive(p) && fs.existsSync(p);
 
 // Where Windows would take this file's icon from, best guess first.
 function iconSources(file) {

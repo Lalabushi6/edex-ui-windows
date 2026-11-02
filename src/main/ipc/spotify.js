@@ -29,6 +29,8 @@ const SCOPES = [
 const ART_HOST = /^https:\/\/([\w-]+\.)*(scdn\.co|spotifycdn\.com)\//i;
 const URI = /^spotify:(track|episode|album|playlist|artist|show|collection):[\w:]{1,120}$/;
 
+const REQUEST_MS = 15000;
+
 const b64url = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const fail = (message, code) => Object.assign(new Error(message), { code });
 
@@ -81,11 +83,17 @@ function registerSpotify({ settings, windows }) {
   };
 
   async function tokenRequest(params) {
-    const res = await net.fetch(`${accountsBase}/api/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(params).toString()
-    });
+    let res;
+    try {
+      res = await net.fetch(`${accountsBase}/api/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(params).toString(),
+        signal: AbortSignal.timeout(REQUEST_MS)
+      });
+    } catch (_) {
+      throw fail("Couldn't reach Spotify — check your connection", "offline");
+    }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw fail(body.error_description || body.error || `Spotify sign-in failed (${res.status})`, body.error);
     return body;
@@ -118,15 +126,16 @@ function registerSpotify({ settings, windows }) {
     const url = new URL(`${apiBase}${endpoint}`);
     for (const [k, v] of Object.entries(query || {})) if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
     for (let attempt = 0; attempt < 2; attempt++) {
+      const bearer = await token();
       let res;
       try {
         res = await net.fetch(url.href, {
           method,
-          headers: { Authorization: `Bearer ${await token()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-          body: body ? JSON.stringify(body) : undefined
+          headers: { Authorization: `Bearer ${bearer}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: AbortSignal.timeout(REQUEST_MS)
         });
-      } catch (e) {
-        if (e.code) throw e;
+      } catch (_) {
         throw fail("Couldn't reach Spotify — check your connection", "offline");
       }
       if (res.status === 401 && attempt === 0) { access = null; continue; }
@@ -174,9 +183,12 @@ function registerSpotify({ settings, windows }) {
     const code = await new Promise((resolve, reject) => {
       let done = false;
       const server = http.createServer((req, res) => {
-        const u = new URL(req.url || "/", REDIRECT_URI);
-        if (u.pathname !== "/callback") { res.writeHead(404); res.end(); return; }
-        const got = u.searchParams.get("state") === state ? u.searchParams.get("code") : null;
+        let u;
+        try { u = new URL(req.url || "/", REDIRECT_URI); } catch (_) { res.writeHead(400); res.end(); return; }
+        // Anything on this PC can reach this port, web pages included, but only
+        // Spotify's answer carries the state: other requests don't end the wait.
+        if (u.pathname !== "/callback" || u.searchParams.get("state") !== state) { res.writeHead(404); res.end(); return; }
+        const got = u.searchParams.get("code");
         const err = u.searchParams.get("error");
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'" });
         res.end(got ? page("Connected to eDEX-UI", "You can close this tab and go back to eDEX.")
@@ -319,7 +331,7 @@ function registerSpotify({ settings, windows }) {
     if (typeof url !== "string" || !ART_HOST.test(url) || url.length > 512) return null;
     if (art.has(url)) return art.get(url);
     try {
-      const res = await net.fetch(url);
+      const res = await net.fetch(url, { signal: AbortSignal.timeout(REQUEST_MS) });
       const type = (res.headers.get("content-type") || "image/jpeg").split(";")[0];
       if (!res.ok || !/^image\//.test(type)) { res.body?.cancel().catch(() => {}); return null; }
       const data = `data:${type};base64,${(await readCapped(res, 1024 * 1024)).toString("base64")}`;
@@ -329,7 +341,7 @@ function registerSpotify({ settings, windows }) {
     } catch (_) { return null; }
   });
 
-  return { stop: () => pending?.cancel(), tokenFile };
+  return { stop: () => pending?.cancel() };
 }
 
-module.exports = { registerSpotify, REDIRECT_URI };
+module.exports = { registerSpotify };

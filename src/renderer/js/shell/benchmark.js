@@ -354,7 +354,7 @@ export async function runBenchmark({ quick = false, label = "", testArea = null,
 }
 
 // A few lines to paste anywhere.
-export function summaryText(r) {
+function summaryText(r) {
   const s = r.summary || {};
   const hw = r.hardware || {};
   const disks = (hw.disks || []).map((d) => d.type).filter(Boolean).join("/") || "?";

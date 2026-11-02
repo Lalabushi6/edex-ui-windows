@@ -3,8 +3,7 @@
 import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
-import { currentTheme } from "../core/theme.js";
-import { openModal, toast, prompt, cleanError, contextMenu } from "../core/ui.js";
+import { openModal, toast, cleanError, contextMenu } from "../core/ui.js";
 import { profile, onSchedulingChange } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import { widgetDefs, widgetHidden, setWidgetShown } from "../widgets/registry.js";
@@ -168,11 +167,14 @@ async function spotifyRows() {
     settings.set({ spotifyClientId: v });
   });
   const connect = h("button", { class: "btn primary", type: "button" }, icon("spotify"), s.connected ? "Reconnect" : "Connect");
+  let waiting = false;
   connect.addEventListener("click", async () => {
+    if (waiting) { api.spotify.cancel().catch(() => {}); return; }
     const v = id.value.trim().toLowerCase();
     if (!/^[0-9a-f]{32}$/.test(v)) { toast("Paste your Spotify Client ID first", { level: "warn" }); return; }
     await settings.set({ spotifyClientId: v });
-    connect.disabled = true;
+    waiting = true;
+    connect.replaceChildren("Cancel");
     setText(state, "Waiting for you to sign in to Spotify in your browser…");
     try {
       const me = await api.spotify.connect();
@@ -180,7 +182,10 @@ async function spotifyRows() {
       toast("Spotify connected", { level: "ok" });
     } catch (e) {
       setText(state, cleanError(e));
-    } finally { connect.disabled = false; }
+    } finally {
+      waiting = false;
+      connect.replaceChildren(icon("spotify"), "Connect");
+    }
   });
   const redirect = s.redirectUri || "http://127.0.0.1:43821/callback";
   return [

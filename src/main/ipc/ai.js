@@ -34,13 +34,16 @@ function registerAi({ settings }) {
 
   // A key saved on another PC or Windows account (a portable drive) exists
   // but can't be decrypted here.
-  handle("ai:status", () => ({
-    configured: !!readKey(),
-    unreadable: fs.existsSync(keyFile) && !readKey(),
-    encryption: safeStorage.isEncryptionAvailable(),
-    enabled: !!settings.get("aiEnabled"),
-    model: settings.get("aiModel")
-  }));
+  handle("ai:status", () => {
+    const key = readKey();
+    return {
+      configured: !!key,
+      unreadable: !key && fs.existsSync(keyFile),
+      encryption: safeStorage.isEncryptionAvailable(),
+      enabled: !!settings.get("aiEnabled"),
+      model: settings.get("aiModel")
+    };
+  });
 
   handle("ai:setKey", async (_e, key) => {
     if (key === "" || key === null) {
@@ -87,6 +90,10 @@ function registerAi({ settings }) {
     (async () => {
       const stream = client.beta.messages.stream(params);
       active.set(id, stream);
+      // Nobody is reading once the page closes or reloads; stop paying for it.
+      const stop = () => stream.abort();
+      event.sender.once("destroyed", stop);
+      event.sender.once("did-navigate", stop);
       try {
         for await (const ev of stream) {
           if (ev.type === "content_block_start" && ev.content_block?.type === "fallback") {
@@ -109,6 +116,8 @@ function registerAi({ settings }) {
         send("ai:done", msg ? { error: msg } : { stop: "cancelled" });
       } finally {
         active.delete(id);
+        event.sender.removeListener("destroyed", stop);
+        event.sender.removeListener("did-navigate", stop);
       }
     })();
     return true;

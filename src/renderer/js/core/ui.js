@@ -168,13 +168,15 @@ export function contextMenu(event, items) {
     }
   };
   const onBlur = () => closeMenu();
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     document.addEventListener("mousedown", onDown, true);
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("blur", onBlur);
     window.addEventListener("resize", onBlur);
   }, 0);
   activeMenu = () => {
+    // Closed before those went on: left on, they'd swallow every Esc from now on.
+    clearTimeout(timer);
     document.removeEventListener("mousedown", onDown, true);
     document.removeEventListener("keydown", onKey, true);
     window.removeEventListener("blur", onBlur);

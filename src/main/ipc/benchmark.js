@@ -211,4 +211,4 @@ function registerBenchmark({ settings, telemetry, bridge, aux, portable, startup
   });
 }
 
-module.exports = { registerBenchmark, percentile };
+module.exports = { registerBenchmark };

@@ -47,7 +47,7 @@ function codeBlock(lang, code) {
     h("pre", null, code));
 }
 
-export function renderMarkdown(src) {
+function renderMarkdown(src) {
   const root = h("div", { class: "ai-md" });
   const parts = src.split(/^```/m);
   parts.forEach((part, i) => {
@@ -164,7 +164,7 @@ export async function openAiPanel({ prompt = "", context = "" } = {}) {
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
     });
-    panel = { ask: (p, c) => { if (p) ask(p, c); else input.focus(); } };
+    panel = { ask: (p, c) => { if (p) ask(p, c); else input.focus(); }, stop: () => { if (busy) api.ai.cancel(busy).catch(() => {}); } };
     setText(model, settings.get("aiModel") || "");
     renderLog();
     setTimeout(() => { input.focus(); if (prompt && ready) ask(prompt, context); }, 0);
@@ -174,5 +174,10 @@ export async function openAiPanel({ prompt = "", context = "" } = {}) {
         h("button", { class: "icon-btn sm", type: "button", title: "Close (Esc)", onclick: () => close() }, icon("close"))),
       ready ? log : setup,
       ready ? h("div", { class: "ai-compose" }, input, sendBtn, stopBtn) : null);
-  }, { className: "ai-modal", label: "Claude", onClose: () => { panel = null; } });
+  }, {
+    className: "ai-modal",
+    label: "Claude",
+    // Closing mid-answer stops it: nobody is reading, and it costs tokens.
+    onClose: () => { panel?.stop(); panel = null; }
+  });
 }

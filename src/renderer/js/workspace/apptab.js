@@ -54,7 +54,7 @@ export class AppTab {
       const list = await api.win.list().catch(() => []);
       const w = list.find((x) => x.exe === this.exe && x.title === this.title) || list.find((x) => this.exe && x.exe === this.exe);
       if (!w || this.ws.tabs.some((t) => t !== this && t.type === "app" && t.hwnd === w.hwnd)) {
-        setTimeout(() => this.ws.close(this, { quiet: true }), 0);
+        setTimeout(() => this.ws.close(this), 0);
         return;
       }
       this.hwnd = w.hwnd;
@@ -172,7 +172,7 @@ export class AppTab {
     this.stopChecks();
     this.hwnd = null;
     toast(`${this.title || this.appName} closed`, { timeout: 1800 });
-    this.ws.close(this, { quiet: true });
+    this.ws.close(this);
   }
 
   async closeWindow() {

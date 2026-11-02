@@ -9,6 +9,7 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
+const { POWERSHELL } = require("./sysexe");
 
 const SCRIPT_SOURCE = path.join(__dirname, "..", "native", "bridge.ps1");
 const MAX_RESTARTS_PER_MINUTE = 3;
@@ -74,6 +75,8 @@ class NativeBridge {
 
   _start() {
     if (this.disabledReason) return Promise.reject(new Error(this.disabledReason));
+    // A late call while quitting must not start a helper nothing will stop.
+    if (this.stopping) return Promise.reject(new Error("Native bridge has stopped"));
     if (this.ready) return this.ready;
 
     const now = Date.now();
@@ -93,7 +96,7 @@ class NativeBridge {
       // once. Ctrl+C in eDEX's console is ignored inside the helper instead
       // (see GuardConsole in bridge.ps1), so it outlives eDEX long enough to
       // put the taskbar back when its input closes.
-      const proc = spawn("powershell.exe", [
+      const proc = spawn(POWERSHELL, [
         "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
         "-File", script, "-CacheDir", this.workDir
       ], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });

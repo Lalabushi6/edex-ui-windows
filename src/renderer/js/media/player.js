@@ -9,8 +9,8 @@ import { toast } from "../core/ui.js";
 import { holdCalm } from "../core/poll.js";
 
 const api = window.edex;
-export const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "opus", "flac", "aac", "m4a", "weba"]);
-export const VIDEO_EXTS = new Set(["mp4", "m4v", "webm", "mkv", "mov", "ogv"]);
+const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "opus", "flac", "aac", "m4a", "weba"]);
+const VIDEO_EXTS = new Set(["mp4", "m4v", "webm", "mkv", "mov", "ogv"]);
 
 // 10-band graphic equaliser (Hz) and its presets (dB per band).
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -41,7 +41,7 @@ export function isMediaPath(p) {
   return AUDIO_EXTS.has(ext) || VIDEO_EXTS.has(ext);
 }
 
-export function isVideoPath(p) {
+function isVideoPath(p) {
   return !isStream(p) && VIDEO_EXTS.has(fmt.extname(fmt.basename(p)));
 }
 
@@ -254,7 +254,8 @@ class Player extends EventTarget {
     if (!item) return;
     this.index = index;
     this.el.src = item.stream ? `edexradio://stream/${encodeURIComponent(streamBase(item.path))}` : fmt.fileUrl(item.path);
-    if (at > 0 && !item.stream) this.el.addEventListener("loadedmetadata", () => { if (at < this.el.duration - 2) this.el.currentTime = at; }, { once: true });
+    // Another track may have been picked by the time this one's details arrive.
+    if (at > 0 && !item.stream) this.el.addEventListener("loadedmetadata", () => { if (this.current === item && at < this.el.duration - 2) this.el.currentTime = at; }, { once: true });
     if (autoplay) this.play();
     this.dispatchEvent(new Event("change"));
     this.updateSession();

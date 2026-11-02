@@ -6,17 +6,20 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { app, shell, dialog, nativeImage } = require("electron");
-const { spawn } = require("child_process");
 const paths = require("../lib/paths");
 const { cached } = require("../lib/cache");
+const { system32, spawnDetached } = require("../lib/sysexe");
 const { handle, on, asString, asStringList } = require("./util");
 
 const MAX_TEXT_BYTES = 16 * 1024 * 1024;
 const PEEK_BYTES = 256 * 1024;
 
 const EXECUTABLE_EXTS = new Set([
-  ".exe", ".msi", ".bat", ".cmd", ".com", ".scr", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse",
-  ".wsf", ".wsh", ".jar", ".hta", ".cpl", ".msc", ".reg", ".lnk", ".url", ".pif", ".application", ".appref-ms"
+  ".exe", ".msi", ".msp", ".mst", ".bat", ".cmd", ".com", ".scr", ".ps1", ".psm1", ".psd1", ".ps1xml", ".psc1",
+  ".vbs", ".vbe", ".vb", ".js", ".jse", ".ws", ".wsc", ".wsf", ".wsh", ".sct", ".jar", ".hta", ".cpl", ".msc",
+  ".reg", ".inf", ".scf", ".shb", ".shs", ".lnk", ".url", ".pif", ".gadget", ".xll", ".application", ".appref-ms",
+  ".appx", ".appxbundle", ".msix", ".msixbundle", ".appinstaller", ".diagcab", ".library-ms", ".search-ms",
+  ".searchconnector-ms", ".settingcontent-ms", ".theme", ".themepack"
 ]);
 const ICON_EXTS = new Set([".exe", ".lnk", ".url", ".msi", ".appref-ms", ".ico", ".cpl", ".msc"]);
 const HIDDEN_NAMES = new Set([
@@ -24,6 +27,20 @@ const HIDDEN_NAMES = new Set([
   "swapfile.sys", "dumpstack.log", "dumpstack.log.tmp", "system volume information", "config.msi",
   "recovery", "$recycle.bin", "$windows.~bt", "$windows.~ws", "$winreagent", "msocache", "bootmgr", "bootnxt"
 ]);
+
+// "*" and "?" matching in time proportional to name and pattern (a regular
+// expression built from the query could freeze eDEX on a long file name).
+function wildcardMatch(pattern, name) {
+  let p = 0, n = 0, star = -1, mark = 0;
+  while (n < name.length) {
+    if (p < pattern.length && (pattern[p] === "?" || pattern[p] === name[n])) { p++; n++; }
+    else if (p < pattern.length && pattern[p] === "*") { star = p++; mark = n; }
+    else if (star >= 0) { p = star + 1; n = ++mark; }
+    else return false;
+  }
+  while (pattern[p] === "*") p++;
+  return p === pattern.length;
+}
 
 function isHiddenName(name) {
   const lower = name.toLowerCase();
@@ -254,7 +271,7 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
     const p = await paths.forRead(asString(target, "path"));
     if (paths.isUncPath(p)) throw new Error("Refusing to open items from network paths");
     windows.yieldFocus();
-    spawn("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", p], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+    spawnDetached(system32("rundll32.exe"), ["shell32.dll,OpenAs_RunDLL", p], { windowsHide: false });
     return true;
   });
 
@@ -265,12 +282,26 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
     return true;
   });
 
+  // A shortcut can name a network path as its icon or target. Asking Windows
+  // for its icon would contact that server and hand it this PC's sign-in hash,
+  // just from showing a downloaded folder, so those are left without one.
+  const shortcutIsLocal = async (p) => {
+    try {
+      if (/\.url$/i.test(p)) return !/^IconFile=\s*(\\\\|\/\/|file:)/im.test((await fs.promises.readFile(p, "utf8")).slice(0, 8192).replace(/\0/g, ""));
+      const link = shell.readShortcutLink(p);
+      return !paths.isUncPath(link.target || "") && !paths.isUncPath(link.icon || "");
+    } catch (_) { return false; }
+  };
+
   handle("fs:icons", async (_e, targets) => {
     const out = {};
     const wanted = [];
+    const trusted = trustedShortcutDirs();
     for (const raw of (Array.isArray(targets) ? targets.slice(0, 200) : [])) {
       if (typeof raw !== "string" || !raw) continue;
-      const usable = ICON_EXTS.has(path.extname(raw).toLowerCase()) && !paths.isSensitive(raw) && !paths.isUncPath(raw);
+      const ext = path.extname(raw).toLowerCase();
+      const usable = ICON_EXTS.has(ext) && !paths.isSensitive(raw) && !paths.isUncPath(raw) &&
+        (!(ext === ".lnk" || ext === ".url") || trusted.some((d) => paths.isPathInside(d, raw)) || await shortcutIsLocal(raw));
       if (usable) wanted.push(raw);
       else out[raw] = null;
     }
@@ -323,14 +354,12 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
 
   handle("fs:search", async (_e, opts = {}) => {
     const root = await paths.forRead(asString(opts.root, "root"));
-    const query = String(opts.query || "").trim().toLowerCase();
+    const query = String(opts.query || "").trim().toLowerCase().slice(0, 260);
     if (!query) return { results: [], truncated: false };
     const max = Math.min(500, Math.max(1, Number(opts.max) || 200));
     const deadline = Date.now() + 10000;
-    const wildcard = /[*?]/.test(query)
-      ? new RegExp(`^${query.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`)
-      : null;
-    const matches = (name) => (wildcard ? wildcard.test(name.toLowerCase()) : name.toLowerCase().includes(query));
+    const wildcard = /[*?]/.test(query);
+    const matches = (name) => (wildcard ? wildcardMatch(query, name.toLowerCase()) : name.toLowerCase().includes(query));
     const results = [];
     const queue = [root];
     let scanned = 0;
@@ -345,7 +374,7 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
         if (d.isDirectory() && !d.isSymbolicLink()) {
           if (!isHiddenName(d.name) && d.name !== "node_modules") queue.push(full);
         }
-        if (matches(d.name)) {
+        if (matches(d.name) && !paths.isSensitive(full)) {
           results.push({ name: d.name, path: full, isDir: d.isDirectory() });
           if (results.length >= max) break;
         }
@@ -372,6 +401,7 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
         if (out.length >= LIMIT) return;
         if (isHiddenName(d.name) || d.name === "node_modules") continue;
         const full = path.join(dir, d.name);
+        if (paths.isSensitive(full)) continue;
         out.push({ name: d.name, path: full, isDir: d.isDirectory() });
         if (d.isDirectory() && !d.isSymbolicLink()) await walk(full, depth + 1);
       }
@@ -391,4 +421,4 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
   return { invalidate };
 }
 
-module.exports = { registerFiles, EXECUTABLE_EXTS };
+module.exports = { registerFiles };

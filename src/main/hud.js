@@ -48,9 +48,7 @@ class Hud {
   sync() {
     const targets = this._targets();
     const wanted = new Set(targets.map((d) => String(d.id)));
-    for (const [id, win] of this.huds) {
-      if (!wanted.has(id)) { this._drop(id, win); continue; }
-    }
+    for (const [id, win] of this.huds) if (!wanted.has(id)) this._drop(id, win);
     for (const d of targets) {
       const id = String(d.id);
       let win = this.huds.get(id);

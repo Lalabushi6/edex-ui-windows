@@ -7,13 +7,16 @@ const https = require("https");
 const { app, clipboard, dialog, shell } = require("electron");
 const { cached } = require("../lib/cache");
 const { JsonStore } = require("../lib/store");
+const paths = require("../lib/paths");
 const { handle, asString } = require("./util");
 
 // ── Network ─────────────────────────────────────────────────────────────────
 function fetchJson(url, maxBytes = 32768) {
   return new Promise((resolve) => {
     let settled = false;
-    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+    const done = (v) => { if (!settled) { settled = true; clearTimeout(deadline); resolve(v); } };
+    // The request's own timeout only notices a silent connection, not a slow one.
+    const deadline = setTimeout(() => { req.destroy(); done(null); }, 12000);
     const req = https.get(url, { timeout: 6000, headers: { "User-Agent": "eDEX-UI" } }, (res) => {
       if (res.statusCode < 200 || res.statusCode >= 300) { res.resume(); return done(null); }
       const chunks = [];
@@ -26,6 +29,8 @@ function fetchJson(url, maxBytes = 32768) {
       res.on("end", () => {
         try { done(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch (_) { done(null); }
       });
+      // A connection dropped mid-answer ends with neither "end" nor a request error.
+      res.on("close", () => done(null));
     });
     req.on("error", () => done(null));
     req.on("timeout", () => { req.destroy(); done(null); });
@@ -160,6 +165,17 @@ function registerAlarms({ windows, notices }) {
 
 // ── Clipboard history ───────────────────────────────────────────────────────
 // Text only and in memory only: nothing copied is ever written to disk.
+// Password managers mark what they copy with these formats, asking clipboard
+// watchers to leave it alone.
+const PRIVATE_CLIP_FORMATS = ["ExcludeClipboardContentFromMonitorProcessing", "Clipboard Viewer Ignore"];
+const isPrivateClip = () => {
+  try {
+    if (PRIVATE_CLIP_FORMATS.some((f) => clipboard.has(f))) return true;
+    // Present and zero: "don't keep this in clipboard history".
+    return clipboard.has("CanIncludeInClipboardHistory") && clipboard.readBuffer("CanIncludeInClipboardHistory").readUInt32LE(0) === 0;
+  } catch (_) { return false; }
+};
+
 function registerClipboard({ settings, windows, bridge }) {
   let history = [];
   let last = "";
@@ -182,6 +198,7 @@ function registerClipboard({ settings, windows, bridge }) {
         lastSeq = seq;
       }
     }
+    if (isPrivateClip()) return;
     let text = "";
     try { text = clipboard.readText(); } catch (_) { return; }
     if (!text || text === last || text.length > 100000) return;
@@ -498,7 +515,7 @@ function registerThemes({ windows }) {
         const builtIn = existing.get(id) && !existing.get(id).custom;
         if (builtIn) id = `imported-${id}`;
         normalizeTheme(id, raw);
-        await fs.promises.writeFile(path.join(userDir, `${id}.json`), JSON.stringify(raw, null, 2), "utf8");
+        await fs.promises.writeFile(path.join(userDir, paths.validateEntryName(`${id}.json`)), JSON.stringify(raw, null, 2), "utf8");
         imported.push(id);
       } catch (e) {
         errors.push({ file: base, message: e.message });

@@ -4,13 +4,15 @@
 
 const { execFile } = require("child_process");
 const { cached } = require("../lib/cache");
+const { CMD, system32 } = require("../lib/sysexe");
 const { handle, asString } = require("./util");
 
 // Listing commands go through cmd with code page 65001 so network names
-// with non-ASCII characters come back as UTF-8. Only fixed strings are used.
+// with non-ASCII characters come back as UTF-8. Only fixed strings are used,
+// and cmd starts in System32 (see main.js), so that's the netsh it finds.
 function netshList(args) {
   return new Promise((resolve) => {
-    execFile("cmd.exe", ["/d", "/c", `chcp 65001>nul&netsh ${args}`], { windowsHide: true, timeout: 10000, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
+    execFile(CMD, ["/d", "/c", `chcp 65001>nul&netsh ${args}`], { windowsHide: true, timeout: 10000, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
       resolve({ ok: !err, out: String(stdout || "") });
     });
   });
@@ -19,7 +21,7 @@ function netshList(args) {
 // User-supplied values never pass through a shell.
 function netsh(args) {
   return new Promise((resolve) => {
-    execFile("netsh.exe", args, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) => {
+    execFile(system32("netsh.exe"), args, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) => {
       resolve({ ok: !err, out: `${stdout || ""}${stderr || ""}`.trim() });
     });
   });
@@ -133,4 +135,4 @@ function registerWifi() {
   });
 }
 
-module.exports = { registerWifi, parseNetworks, parseInterfaces, parseProfiles };
+module.exports = { registerWifi };

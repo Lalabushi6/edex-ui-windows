@@ -31,16 +31,15 @@ function registerDisk({ aux }) {
   });
   handle("disk:progress", () => { busy(); return aux.proc || aux.holds?.has("disk") ? aux.call("diskProgress", {}, 5000) : null; });
   handle("disk:node", (_e, target, depth = 3) => { busy(); return aux.call("diskNode", { path: asString(target, "path"), depth: Math.max(1, Math.min(4, Number(depth) || 3)) }, 15000); });
-  handle("disk:cancel", () => aux.call("diskCancel", {}, 8000));
-  handle("disk:clear", () => clear());
+  handle("disk:cancel", () => (aux.proc ? aux.call("diskCancel", {}, 8000) : false));
   // The disk tab closed.
   handle("disk:release", () => {
     busy();
+    const later = () => { releaseTimer = setTimeout(() => clear().catch(() => {}), RELEASE_AFTER_MS); };
     releaseTimer = setTimeout(() => {
       // A scan still running when the time is up gets its own ten minutes.
-      aux.call("diskProgress", {}, 5000).then((p) => (p && !p.done && p.running ? handleLater() : clear())).catch(() => clear());
+      aux.call("diskProgress", {}, 5000).then((p) => (p && !p.done && p.running ? later() : clear())).catch(() => clear().catch(() => {}));
     }, RELEASE_AFTER_MS);
-    const handleLater = () => { releaseTimer = setTimeout(() => clear().catch(() => {}), RELEASE_AFTER_MS); };
     return true;
   });
 }

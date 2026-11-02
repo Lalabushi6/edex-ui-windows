@@ -297,12 +297,14 @@ export class SpotifyView {
     const id = h("input", { class: "input", placeholder: "Client ID (32 characters)", spellcheck: false, autocomplete: "off" });
     id.value = s.clientId || settings.get("spotifyClientId") || "";
     const go = h("button", { class: "btn primary", type: "button" }, icon("spotify"), "Connect");
+    let waiting = false;
     const connect = async () => {
+      if (waiting) { api.spotify.cancel().catch(() => {}); return; }
       const v = id.value.trim().toLowerCase();
       if (!/^[0-9a-f]{32}$/.test(v)) { toast("A Client ID is 32 letters and digits (0–9, a–f)", { level: "warn" }); return; }
       await settings.set({ spotifyClientId: v });
-      go.disabled = true;
-      setText(go, "Waiting for Spotify…");
+      waiting = true;
+      setText(go, "Waiting for Spotify… (Cancel)");
       try {
         const me = await api.spotify.connect();
         toast(`Connected to Spotify as ${me.name}${me.product && me.product !== "premium" ? " — playback control needs Premium" : ""}`, { level: "ok", timeout: 5000 });
@@ -312,9 +314,8 @@ export class SpotifyView {
         this.startPolling();
       } catch (e) {
         toast(cleanError(e), { level: "warn", timeout: 6000 });
-        go.disabled = false;
         go.replaceChildren(icon("spotify"), "Connect");
-      }
+      } finally { waiting = false; }
     };
     go.addEventListener("click", connect);
     id.addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });

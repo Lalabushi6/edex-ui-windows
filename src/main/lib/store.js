@@ -46,7 +46,8 @@ class JsonStore {
       await fs.promises.writeFile(tmp, payload, "utf8");
       await fs.promises.rename(tmp, this.filePath);
     });
-    return this.writing;
+    // Nothing waits on a debounced save, so a full disk is only reported here.
+    return this.writing.catch((e) => console.warn(`[store] ${path.basename(this.filePath)}: ${e.message}`));
   }
 
   // On quit. Atomic like flush() (a separate temp name, so an async write

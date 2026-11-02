@@ -6,10 +6,10 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawn } = require("child_process");
 const { app, dialog, shell } = require("electron");
 const { cached } = require("../lib/cache");
 const { JsonStore } = require("../lib/store");
+const { EXPLORER, POWERSHELL, system32, spawnDetached, psQuote } = require("../lib/sysexe");
 const { handle, asString } = require("./util");
 
 function startMenuDirs() {
@@ -41,10 +41,6 @@ async function collectShortcuts(dir, depth = 0, out = []) {
 
 const UNINSTALL_RE = /\b(uninstall|remove|readme|help|documentation|license|release notes|website)\b/i;
 
-function psQuote(s) {
-  return `'${String(s).replace(/'/g, "''")}'`;
-}
-
 function registerDesktop({ windows, bridge, icons, ownPids }) {
   const apps = new Map(); // id -> { id, name, kind, target, iconPath, source }
   const listView = () => [...apps.values()]
@@ -55,7 +51,7 @@ function registerDesktop({ windows, bridge, icons, ownPids }) {
   // instant eDEX starts; the live rebuild happens later in the background.
   const indexStore = new JsonStore(path.join(app.getPath("userData"), "apps-cache.json"), { fallback: { apps: [] } });
   for (const a of Array.isArray(indexStore.data.apps) ? indexStore.data.apps : []) {
-    if (a && typeof a.id === "string" && typeof a.name === "string") apps.set(a.id, a);
+    if (a && typeof a.id === "string" && typeof a.name === "string" && typeof a.target === "string") apps.set(a.id, a);
   }
   let built = false;
 
@@ -138,12 +134,11 @@ function registerDesktop({ windows, bridge, icons, ownPids }) {
     if (opts.admin) {
       const target = entry.kind === "path" ? entry.target : (/^[A-Za-z]:\\/.test(entry.target) ? entry.target : null);
       if (!target) throw new Error("This app cannot be started as administrator from here");
-      spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Start-Process -FilePath ${psQuote(target)} -Verb RunAs`],
-        { windowsHide: true, detached: true, stdio: "ignore" }).unref();
+      spawnDetached(POWERSHELL, ["-NoProfile", "-NonInteractive", "-Command", `Start-Process -FilePath ${psQuote(target)} -Verb RunAs`], { windowsHide: true });
       return true;
     }
     if (entry.kind === "appsfolder") {
-      spawn("explorer.exe", [`shell:AppsFolder\\${entry.target}`], { detached: true, stdio: "ignore" }).unref();
+      spawnDetached(EXPLORER, [`shell:AppsFolder\\${entry.target}`]);
       return true;
     }
     const err = await shell.openPath(entry.target);
@@ -224,12 +219,12 @@ function registerDesktop({ windows, bridge, icons, ownPids }) {
   const POWER = {
     lock: { confirm: null, run: () => bridge.call("lock") },
     sleep: { confirm: "Put the computer to sleep?", run: () => bridge.call("sleep") },
-    signout: { confirm: "Sign out of Windows? Unsaved work in open apps may be lost.", run: () => spawnDetached("shutdown.exe", ["/l"]) },
-    restart: { confirm: "Restart the computer? Unsaved work in open apps may be lost.", run: () => spawnDetached("shutdown.exe", ["/r", "/t", "0"]) },
-    shutdown: { confirm: "Shut down the computer? Unsaved work in open apps may be lost.", run: () => spawnDetached("shutdown.exe", ["/s", "/t", "0"]) }
+    signout: { confirm: "Sign out of Windows? Unsaved work in open apps may be lost.", run: () => shutdown(["/l"]) },
+    restart: { confirm: "Restart the computer? Unsaved work in open apps may be lost.", run: () => shutdown(["/r", "/t", "0"]) },
+    shutdown: { confirm: "Shut down the computer? Unsaved work in open apps may be lost.", run: () => shutdown(["/s", "/t", "0"]) }
   };
-  function spawnDetached(file, args) {
-    spawn(file, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  function shutdown(args) {
+    spawnDetached(system32("shutdown.exe"), args, { windowsHide: true });
     return true;
   }
   handle("power:action", async (_e, action) => {
@@ -271,7 +266,7 @@ function registerDesktop({ windows, bridge, icons, ownPids }) {
   // (behind shell.openPath) handles the UAC hand-off.
   handle("shell:taskManager", async () => {
     windows.yieldFocus();
-    const err = await shell.openPath(path.join(process.env.WINDIR || "C:\\Windows", "System32", "Taskmgr.exe"));
+    const err = await shell.openPath(system32("Taskmgr.exe"));
     if (err) throw new Error(err);
     return true;
   });

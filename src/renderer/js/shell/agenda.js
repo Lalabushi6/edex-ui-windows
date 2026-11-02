@@ -43,7 +43,7 @@ let feedEvents = []; // { id, date, time, title, feed, color, location, readOnly
 const remindedFeed = new Set();
 const timeOf = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
-export async function loadFeedEvents() {
+async function loadFeedEvents() {
   const now = Date.now();
   let list = [];
   try { list = await api.calendars.events({ from: now - 35 * 86400000, to: now + 185 * 86400000 }); } catch (_) { return; }
@@ -133,7 +133,7 @@ export function removeEvent(id) {
   changed();
 }
 
-export function eventTime(ev) {
+function eventTime(ev) {
   const [y, m, d] = ev.date.split("-").map(Number);
   const [hh, mm] = (ev.time || "09:00").split(":").map(Number);
   return new Date(y, m - 1, d, hh, mm).getTime();
@@ -217,11 +217,11 @@ function parseClock(s) {
   const ap = m[3]?.toLowerCase();
   if (ap === "pm" && hh < 12) hh += 12;
   if (ap === "am" && hh === 12) hh = 0;
-  if (hh > 23 || mm > 59 || (!ap && !m[2] && hh > 23)) return null;
+  if (hh > 23 || mm > 59) return null;
   return [hh, mm];
 }
 
-export function parseWhen(input) {
+function parseWhen(input) {
   let text = String(input || "").trim();
   let due = null;
   const now = new Date();
@@ -258,8 +258,8 @@ export function parseWhen(input) {
     m = /\s*\bat\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*$/i.exec(text);
     const clock = m && parseClock(m[1]);
     if (clock) {
-      let d = at(now, clock);
-      if (d.getTime() <= Date.now()) d = new Date(d.getTime() + 86400000);
+      const d = at(now, clock);
+      if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
       due = d.getTime();
       text = text.slice(0, m.index).trim();
     }

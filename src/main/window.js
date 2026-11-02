@@ -144,7 +144,6 @@ class WindowManager {
     else win.setAlwaysOnTop(false);
     win.setBounds(this._targetBounds());
     this.fitExact();
-    this.send("app:mode", { mode: this.mode });
   }
 
   // Square corners, no border, and the monitor's exact physical pixels (see

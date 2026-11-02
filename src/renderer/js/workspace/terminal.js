@@ -228,7 +228,18 @@ export class TerminalTab {
 
   async mount() {
     await Promise.all(['14px "Fira Mono"', '14px "Fira Code"'].map((f) => document.fonts.load(f))).catch(() => {});
-    this.term = new Terminal({ ...this.options(), allowProposedApi: false, macOptionIsMeta: false, rightClickSelectsWord: false });
+    this.term = new Terminal({
+      ...this.options(), allowProposedApi: false, macOptionIsMeta: false, rightClickSelectsWord: false,
+      // Links a program prints with a hidden address (OSC 8): same rule as
+      // plain ones, and the address is what gets shown.
+      linkHandler: {
+        allowNonHttpProtocols: false,
+        activate: (event, uri) => {
+          if (event.ctrlKey) openUrl(uri);
+          else toast(`Ctrl+click to open ${uri}`, { timeout: 2600 });
+        }
+      }
+    });
     this.fit = new FitAddon();
     this.term.loadAddon(this.fit);
     this.term.open(this.host);
@@ -389,7 +400,12 @@ export class TerminalTab {
       for (const m of data.matchAll(osc)) {
         // Programs can print malformed sequences (a binary file cat'd);
         // a bad %-escape must not throw out of the data handler.
-        try { found = m[1] ? decodeURIComponent(m[1]).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\") : m[2]; } catch (_) {}
+        let dir = null;
+        try { dir = m[1] ? decodeURIComponent(m[1]).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\") : m[2]; } catch (_) {}
+        // Anything printed can claim to be the folder, a file being cat'd for
+        // one. Believing a network path would make eDEX look at it, and that
+        // hands this PC's sign-in hash to the server it names.
+        if (dir && /^[A-Za-z]:\\/.test(dir)) found = dir;
       }
     }
     this.promptTail = ((this.promptTail || "") + data).slice(-600);

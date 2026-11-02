@@ -18,9 +18,11 @@ reproduce it, and the eDEX version.
   (`persist:edex-browser`), each in a sandboxed view with no preload bridge,
   so a page can't call eDEX's handlers or reach `app://` / `localfile:`.
   Only `http(s)` pages load (mail links go to the mail app, other schemes
-  are refused), pop-ups become new tabs, web permissions are refused apart
-  from fullscreen and copying to the clipboard, and downloads are saved only
-  where you choose in a Save dialog. Sites see an ordinary Chrome user agent.
+  are refused), pop-ups become new tabs (a few at a time), web permissions are
+  refused apart from fullscreen and copying to the clipboard, client
+  certificates are never offered on their own, WebRTC doesn't reveal local
+  network addresses, and downloads are saved only where you choose in a Save
+  dialog. Sites see an ordinary Chrome user agent.
 - **App tabs** only move, minimise and restore another app's window (and
   take a picture of it for the tab); nothing is injected into it or
   re-parented, and the window goes back where it was when the tab closes or
@@ -36,13 +38,14 @@ reproduce it, and the eDEX version.
   links and strips the ICY title metadata before the audio reaches the
   interface, whose CSP stays closed to the internet. Station logos are
   fetched by the main process (images only, size-capped) and handed over as
-  data URLs; game cover art is cached as local files.
+  data URLs; game cover art is cached as local files. Addresses from a
+  directory listing or a playlist file can't point at the local network.
 - **Lyrics, game art, the radio directory and calendar feeds** are plain
   HTTPS GETs from the main process; responses are parsed as data (JSON,
   iCalendar, images) and size-limited, never run. Calendar subscription
   links are secrets that grant read access to a calendar: they're stored in
-  settings (and therefore in settings backups) in plain text, so share
-  backups accordingly.
+  settings in plain text, and exporting settings asks whether to leave them
+  out.
 - **The game library** reads the Steam, Epic and Xbox launchers' own
   manifest files and launches games only through the launchers' documented
   URIs (`steam://rungameid/…`, `com.epicgames.launcher://apps/…`) or the
@@ -51,11 +54,22 @@ reproduce it, and the eDEX version.
 - Every file operation goes through one path policy (`src/main/lib/paths.js`):
   links are resolved before checks, credential stores and token files are
   never readable, system folders and network paths are never written. eDEX's
-  own encrypted AI key and Spotify sign-in are on that list too.
+  own encrypted AI key, Spotify sign-in and browser-tab cookies are on that
+  list too.
+- Network paths named by a file or by program output aren't followed (a
+  shortcut's icon, a folder a command prints for the terminal to "follow"):
+  just looking at one would send the Windows sign-in hash to that server.
+- Windows' own programs are started by their full path and eDEX runs from
+  System32, so a program planted in the folder it was started from can't run
+  in their place.
 - Running a program from the file explorer, ending a process and importing
   command widgets from a settings file all ask first.
-- The Git widget won't inspect a repository whose own config would make Git
-  start programs (fsmonitor, filters, includes).
+- The Git widget won't inspect a repository whose own config could make Git
+  start programs (filters, signature checks, lazy fetches, includes). Git
+  itself reads the config for this check, including a linked worktree's main
+  repository, and submodules are left out.
+- Clipboard history skips what password managers mark as private. System
+  snapshots leave out the PC name, user name and network addresses.
 - Network use is limited to the documented lookups (Settings → Privacy can
   turn them all off), pages you open in browser tabs, radio stations you
   play or search for, and, only if you set them up, the Claude API (your own
@@ -64,8 +78,9 @@ reproduce it, and the eDEX version.
   account (DPAPI); Spotify sign-in uses PKCE, so no client secret exists.
 - **Updates** come from this repository's GitHub releases page. A download
   must match the release file's size and the SHA-256 digest GitHub publishes
-  for it before anything runs, and installing always asks first. The
-  executables aren't code-signed, so the digest is the integrity check.
+  for it before anything runs, is checked again just before it starts, and
+  installing always asks first. The executables aren't code-signed, so the
+  digest is the integrity check.
 - **Portable mode** keeps the data folder next to the `.exe`. Encrypted
   secrets in it only open on the Windows account that saved them, so a lost
   drive doesn't give away the AI key or Spotify sign-in (other data on the

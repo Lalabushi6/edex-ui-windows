@@ -8,7 +8,7 @@ import * as sfx from "../core/audio.js";
 import { openModal, toast, prompt, contextMenu } from "../core/ui.js";
 import { getStatic } from "../core/live.js";
 
-export const MAX_ART = 12000;
+const MAX_ART = 12000;
 const MAX_LINES = 120;
 const MAX_COLS = 240;
 const LINE_HEIGHT = 1; // block characters (█ ▓) join up into solid shapes
@@ -39,7 +39,7 @@ export function normalizeArt(text) {
   return lines.join("\n");
 }
 
-export function artSize(text) {
+function artSize(text) {
   const lines = text ? text.split("\n") : [];
   return { lines: lines.length, cols: lines.reduce((m, l) => Math.max(m, [...l].length), 0) };
 }

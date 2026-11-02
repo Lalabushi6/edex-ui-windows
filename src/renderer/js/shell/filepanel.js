@@ -23,9 +23,20 @@ const MAX_ROWS = 600;
 // The command that changes directory in each shell, or null where the
 // panel should not type into the shell (WSL / Git Bash use other paths).
 function cdCommand(shell, path) {
-  if (shell === "powershell" || shell === "pwsh") return `Set-Location -LiteralPath '${path.replace(/'/g, "''")}'`;
+  if (shell === "powershell" || shell === "pwsh") return `Set-Location -LiteralPath ${psQuote(path)}`;
   if (shell === "cmd") return `cd /d "${path}"`;
   return null;
+}
+
+// A PowerShell string. It also ends at the curly quotes, which folder names
+// can contain: unescaped, clicking one could run what follows it in the name.
+const psQuote = (s) => `'${s.replace(/['‘’‚‛]/g, "$&$&")}'`;
+
+// A path to type into a shell without it being read as anything else.
+function quotedForShell(shell, path) {
+  if (shell === "powershell" || shell === "pwsh") return psQuote(path);
+  if (shell === "gitbash" || shell === "wsl") return `'${path.replace(/'/g, "'\\''")}'`;
+  return /[\s&()^=;,]/.test(path) ? `"${path}"` : path;
 }
 
 export function initFilePanel(root, getTerminal) {
@@ -178,7 +189,7 @@ export function initFilePanel(root, getTerminal) {
       { label: "Open in explorer tab", icon: "folder", run: () => emit("open-path", e.isDir ? { path: e.path, newTab: true } : { path: fmt.dirname(e.path), select: e.path, newTab: true }) },
       { label: "Show in Windows Explorer", icon: "window", run: () => api.fs.reveal(e.path) },
       { label: "Copy path", icon: "copy", run: () => copyText(e.path, "Path copied") },
-      term?.alive && { label: "Insert path in terminal", icon: "terminal", run: () => { term.sendKeys(/\s/.test(e.path) ? `"${e.path}"` : e.path); term.focus(); } },
+      term?.alive && { label: "Insert path in terminal", icon: "terminal", run: () => { term.sendKeys(quotedForShell(term.shell, e.path)); term.focus(); } },
       { separator: true },
       ...viewItems()
     ]);

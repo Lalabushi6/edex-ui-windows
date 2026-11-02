@@ -12,6 +12,7 @@ const { handle, asString } = require("./util");
 const { JsonStore } = require("../lib/store");
 const { cached } = require("../lib/cache");
 const paths = require("../lib/paths");
+const { CMD, POWERSHELL, system32 } = require("../lib/sysexe");
 const { normalizeTheme } = require("./extras");
 const { normalizeLayout, LAYOUT_ID } = require("../lib/kb-layout");
 
@@ -38,8 +39,8 @@ function registerTools({ settings, windows }) {
     const prev = lastRun.get(id);
     if (prev && Date.now() - prev.at < 3000) return prev.result;
     const r = def.shell === "cmd"
-      ? await run("cmd.exe", ["/d", "/s", "/c", `"chcp 65001>nul & ${def.command}"`], { windowsVerbatimArguments: true, cwd: os.homedir() })
-      : await run("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+      ? await run(CMD, ["/d", "/s", "/c", `"chcp 65001>nul & ${def.command}"`], { windowsVerbatimArguments: true, cwd: os.homedir() })
+      : await run(POWERSHELL, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
         `[Console]::OutputEncoding = [Text.Encoding]::UTF8; $ProgressPreference = 'SilentlyContinue'; ${def.command}`], { cwd: os.homedir() });
     const clean = (s) => s.replace(ANSI, "").replace(/\r/g, "").split("\n").slice(-200).join("\n").trimEnd();
     const result = {
@@ -52,25 +53,54 @@ function registerTools({ settings, windows }) {
 
   // ── Git status ───────────────────────────────────────────────────────────
   // This runs on its own for whatever folder the terminal enters, so a
-  // repository whose own config would make git start programs (fsmonitor,
-  // clean/smudge filters, includes that could add either) is not inspected:
-  // a downloaded folder must never be able to run code just by being opened.
-  const UNSAFE_REPO_CONFIG = /^\s*(fsmonitor|clean|smudge|process|textconv|hookspath|sshcommand|askpass|pager|editor)\s*=|^\s*\[\s*(include|includeif)\b/im;
+  // repository whose own config could make git start programs (filters,
+  // signature checks, lazy fetches, includes that could add any of them) is
+  // not inspected: a downloaded folder must never be able to run code just
+  // by being opened. Git itself reads the config, so no way of spelling it
+  // gets past the check, and one it can't read counts as unsafe. Its file
+  // monitor is off for every call, so that key doesn't matter here.
+  const UNSAFE_GIT_KEY = new RegExp([
+    "^(include|includeif|pager|credential)\\.",
+    "\\.(clean|smudge|process|textconv|command|driver|cmd|program|defaultkeycommand)$",
+    "^core\\.(hookspath|sshcommand|askpass|pager|editor|gitproxy|alternaterefscommand|virtualfilesystem)$",
+    "^diff\\.external$",
+    "^log\\.showsignature$",
+    "^extensions\\.partialclone$",
+    "^remote\\..*\\.(uploadpack|receivepack|vcs|proxy|promisor|partialclonefilter)$"
+  ].join("|"), "i");
+  const gitEnv = { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" };
+  // "file|modified|size" -> unsafe?; these are read on every status check.
+  const configVerdicts = new Map();
+  const configUnsafe = async (file) => {
+    let st;
+    try { st = await fs.promises.stat(file); } catch (_) { return false; }
+    const key = `${file}|${st.mtimeMs}|${st.size}`;
+    if (configVerdicts.has(key)) return configVerdicts.get(key);
+    const r = await run("git", ["config", "--file", file, "--name-only", "--list"], { timeout: 8000, env: gitEnv });
+    const unsafe = r.code !== 0 || r.stdout.split(/\r?\n/).some((name) => UNSAFE_GIT_KEY.test(name.trim()));
+    if (configVerdicts.size >= 32) configVerdicts.delete(configVerdicts.keys().next().value);
+    configVerdicts.set(key, unsafe);
+    return unsafe;
+  };
   handle("git:status", async (_e, cwd) => {
+    // Looking at a network path at all would send this PC's sign-in hash there.
+    if (paths.isUncPath(asString(cwd, "folder"))) return { repo: false };
     let dir;
-    try { dir = await paths.forRead(asString(cwd, "folder")); } catch (_) { return { repo: false }; }
+    try { dir = await paths.forRead(cwd); } catch (_) { return { repo: false }; }
     if (paths.isUncPath(dir)) return { repo: false };
-    const git = (args) => run("git", ["-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "-C", dir, ...args], { timeout: 8000 });
-    const where = await git(["rev-parse", "--show-toplevel", "--absolute-git-dir"]);
+    const git = (args) => run("git", ["-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "-C", dir, ...args], { timeout: 8000, env: gitEnv });
+    const where = await git(["rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"]);
     if (where.err && where.err.code === "ENOENT") return { repo: false, error: "nogit" };
     if (where.code !== 0) return { repo: false };
-    const [topLine, gitDir] = where.stdout.trim().split(/\r?\n/);
+    const [topLine, gitDir, commonDir] = where.stdout.trim().split(/\r?\n/);
     const root = (topLine || dir).replace(/\//g, "\\");
-    let config = "";
-    try { config = await fs.promises.readFile(path.join(gitDir.replace(/\//g, "\\"), "config"), "utf8"); } catch (_) {}
-    if (UNSAFE_REPO_CONFIG.test(config)) return { repo: true, unsafe: true, root };
+    // A linked worktree keeps its settings in the main repository's folder.
+    const dirs = [...new Set([gitDir, commonDir].filter(Boolean).map((d) => path.resolve(dir, d)))];
+    const verdicts = await Promise.all(dirs.flatMap((d) => [configUnsafe(path.join(d, "config")), configUnsafe(path.join(d, "config.worktree"))]));
+    if (verdicts.some(Boolean)) return { repo: true, unsafe: true, root };
     const [status, log] = await Promise.all([
-      git(["--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal"]),
+      // Each submodule is a repository with a config of its own.
+      git(["--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal", "--ignore-submodules=all"]),
       git(["log", "-1", "--format=%h%x09%s%x09%cr"])
     ]);
     if (status.code !== 0) return { repo: false };
@@ -105,7 +135,7 @@ function registerTools({ settings, windows }) {
   // ── Battery health (Windows' battery report) ─────────────────────────────
   const batteryHealth = cached(async () => {
     const file = path.join(os.tmpdir(), `edex-battery-${process.pid}.xml`);
-    const r = await run("powercfg.exe", ["/batteryreport", "/xml", "/output", file], { timeout: 15000 });
+    const r = await run(system32("powercfg.exe"), ["/batteryreport", "/xml", "/output", file], { timeout: 15000 });
     let xml = "";
     try { xml = await fs.promises.readFile(file, "utf8"); } catch (_) {}
     fs.promises.unlink(file).catch(() => {});
@@ -169,9 +199,24 @@ function registerTools({ settings, windows }) {
       filters: [{ name: "eDEX settings", extensions: ["json"] }]
     }));
     if (canceled || !filePath) return null;
+    const all = settings.all();
+    // Calendar links work like passwords, and this file tends to get shared.
+    if (all.calendarFeeds?.length) {
+      const { response } = await windows.withDialog((win) => dialog.showMessageBox(win, {
+        type: "warning",
+        buttons: ["Leave them out", "Include them"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+        title: "Private calendar links",
+        message: "Include your calendar subscription links?",
+        detail: "Anyone with one of these links can read that calendar. Only include them if this file stays with you."
+      }));
+      if (response !== 1) delete all.calendarFeeds;
+    }
     const bundle = {
       format: "edex-ui-settings", version: 1, exported: new Date().toISOString(),
-      settings: settings.all(),
+      settings: all,
       themes: await customFiles(path.join(userData, "themes")),
       keyboards: await customFiles(path.join(userData, "keyboards"))
     };
@@ -191,7 +236,11 @@ function registerTools({ settings, windows }) {
     let bundle;
     try { bundle = JSON.parse((await fs.promises.readFile(filePaths[0], "utf8")).replace(/^\uFEFF/, "")); } catch (_) { throw new Error("Not a valid settings file"); }
     if (!bundle || bundle.format !== "edex-ui-settings" || typeof bundle.settings !== "object") throw new Error("Not an eDEX settings export");
-    const safeName = (n) => String(n || "").replace(/[^\w .-]/g, "").replace(/^\.+/, "").slice(0, 64);
+    const safeName = (n) => {
+      const name = String(n || "").replace(/[^\w .-]/g, "").replace(/^\.+/, "").slice(0, 64);
+      // "con.json" and the like can't be files on Windows.
+      try { return paths.validateEntryName(name); } catch (_) { return ""; }
+    };
     let themes = 0;
     let keyboards = 0;
     const themeDir = path.join(userData, "themes");

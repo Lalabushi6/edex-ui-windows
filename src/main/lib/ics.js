@@ -186,7 +186,7 @@ function* occurrenceDays(rule, first, lastDay) {
   const freq = rule.freq;
   let guard = 0;
   if (freq === "DAILY") {
-    for (let n = first; n <= lastDay && guard++ < 5000; n += rule.interval) yield n;
+    for (let n = first; n <= lastDay && guard++ < 40000; n += rule.interval) yield n;
   } else if (freq === "WEEKLY") {
     const days = rule.byday?.length ? [...new Set(rule.byday.map((b) => b.wd))] : [s.wd];
     const weekStart = first - ((s.wd + 6) % 7); // Monday of the first week
@@ -267,4 +267,4 @@ function occKey(d, tz) {
   return String(Math.round(wallToEpoch(d, tz) / 60000));
 }
 
-module.exports = { parseIcs, expand, normalizeZone, wallToEpoch };
+module.exports = { parseIcs, expand };

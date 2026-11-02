@@ -838,7 +838,8 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
   assistant, clipboard history.
 - **About**: version, data folder (portable or this PC), updates, **Back up
   settings** (Export… / Import… — every setting, your own themes and keyboard
-  layouts in one `.json` file), developer tools.
+  layouts in one `.json` file; exporting asks whether to leave out your private
+  calendar links), developer tools.
 
 Settings live in `%APPDATA%\eDEX-UI\settings.json`. Settings from the
 previous version (`%USERPROFILE%\.edex-ui-settings.json`) are imported on first
@@ -861,7 +862,9 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 | Calendar subscriptions | the links you added | about every 30 minutes |
 
 Turn it off and eDEX makes no outbound requests of its own. Clipboard history
-is kept in memory only and can be disabled.
+is kept in memory only, skips what password managers mark as private, and can
+be disabled. System snapshots (`Ctrl+Shift+S`) leave out your PC name, user
+name and network addresses, so they're safe to attach to a bug report.
 
 Things you use yourself go online regardless: pages you open in **browser
 tabs** (in their own session, with their own cookies and sign-ins, cleared

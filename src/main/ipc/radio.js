@@ -18,6 +18,18 @@ const { readCapped } = require("../lib/http");
 
 const DIRECTORY = ["https://de1.api.radio-browser.info", "https://nl1.api.radio-browser.info", "https://at1.api.radio-browser.info"];
 const isWeb = (u) => /^https?:\/\/\S+$/i.test(String(u || ""));
+// Addresses on this PC or the local network. A station you add yourself may
+// live there; one named by a directory listing or a playlist file may not, or
+// a stranger's listing could make eDEX send requests to your router.
+const isLocalHost = (u) => {
+  let host;
+  try { host = new URL(u).hostname.toLowerCase().replace(/^\[|\]$/g, ""); } catch (_) { return true; }
+  // No dot: a single-label name, or an IPv6 address (rare for stations, and
+  // the local ones are many and varied).
+  return !host.includes(".") || host.endsWith(".localhost") || host.endsWith(".local") ||
+    /^(127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+};
+const isPublicWeb = (u) => isWeb(u) && !isLocalHost(String(u));
 
 // Strips ICY metadata blocks out of the audio and reports StreamTitle.
 function icyStream(body, metaint, onTitle) {
@@ -95,6 +107,7 @@ function registerRadio({ windows }) {
       const text = (await readCapped(res, 65536).catch(() => Buffer.alloc(0))).toString("utf8");
       const next = firstStream(text);
       if (!next) throw Object.assign(new Error(/#EXT-X-/i.test(text) ? "HLS streams aren't supported" : "Not a radio stream"), { status: 415 });
+      if (isLocalHost(next) && !isLocalHost(url)) throw Object.assign(new Error("That playlist points at a local address"), { status: 403 });
       return open(next, signal, depth + 1);
     }
     return { res, url };
@@ -112,7 +125,7 @@ function registerRadio({ windows }) {
     request.signal?.addEventListener?.("abort", () => ctrl.abort());
     try {
       const { res, url } = await open(target, ctrl.signal);
-      if (!res.ok || !res.body) return new Response("Station unavailable", { status: 502 });
+      if (!res.ok || !res.body) { ctrl.abort(); return new Response("Station unavailable", { status: 502 }); }
       const metaint = Number(res.headers.get("icy-metaint")) || 0;
       const station = res.headers.get("icy-name") || "";
       if (station) windows.send("radio:meta", { url: target, station });
@@ -137,7 +150,8 @@ function registerRadio({ windows }) {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 8000);
         const res = await net.fetch(`${base}${pathAndQuery}`, { headers: { "User-Agent": ua, Accept: "application/json" }, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-        if (res.ok) return await res.json();
+        if (res.ok) return JSON.parse((await readCapped(res, 4 * 1024 * 1024)).toString("utf8"));
+        res.body?.cancel().catch(() => {});
         last = new Error(`Radio directory answered ${res.status}`);
       } catch (e) { last = e; }
     }
@@ -153,10 +167,10 @@ function registerRadio({ windows }) {
     if (tag) params.set("tag", tag);
     if (!q && !tag) params.set("order", "votes");
     const list = await directory(`/json/stations/search?${params}`);
-    return (Array.isArray(list) ? list : []).filter((s) => isWeb(s.url_resolved || s.url)).map((s) => ({
+    return (Array.isArray(list) ? list : []).filter((s) => isPublicWeb(s?.url_resolved || s?.url) && String(s.url_resolved || s.url).length <= 1024).map((s) => ({
       name: String(s.name || "").trim().slice(0, 80) || "Station",
-      url: String(s.url_resolved || s.url).slice(0, 1024),
-      favicon: isWeb(s.favicon) ? String(s.favicon).slice(0, 1024) : "",
+      url: String(s.url_resolved || s.url),
+      favicon: isPublicWeb(s.favicon) && String(s.favicon).length <= 1024 ? String(s.favicon) : "",
       tags: String(s.tags || "").split(",").slice(0, 4).join(", ").slice(0, 120),
       country: String(s.countrycode || "").slice(0, 8),
       codec: String(s.codec || "").slice(0, 12),
@@ -166,11 +180,11 @@ function registerRadio({ windows }) {
 
   // Station logos as data URLs (the interface allows no remote images).
   handle("radio:icon", async (_e, url) => {
-    if (!isWeb(url) || url.length > 1024) return null;
+    if (typeof url !== "string" || !isPublicWeb(url) || url.length > 1024) return null;
     if (icons.has(url)) return icons.get(url);
     let data = null;
     try {
-      const res = await net.fetch(url, { headers: { "User-Agent": ua } });
+      const res = await net.fetch(url, { headers: { "User-Agent": ua }, signal: AbortSignal.timeout(10000) });
       const type = (res.headers.get("content-type") || "").split(";")[0];
       if (res.ok && /^image\//.test(type)) data = `data:${type};base64,${(await readCapped(res, 300 * 1024)).toString("base64")}`;
       else res.body?.cancel().catch(() => {});
@@ -181,4 +195,4 @@ function registerRadio({ windows }) {
   });
 }
 
-module.exports = { registerRadio, firstStream, icyStream };
+module.exports = { registerRadio };

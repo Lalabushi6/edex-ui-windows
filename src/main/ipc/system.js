@@ -21,13 +21,6 @@ function registerSystem({ windows, telemetry }) {
   // Everything the side panels refresh frequently, in one round trip.
   handle("sys:live", () => telemetry.live());
 
-  handle("sys:cpu", async () => {
-    const l = await telemetry.live();
-    return { load: l.cpu.load, cores: l.cpu.cores, speed: l.cpu.mhz ? l.cpu.mhz / 1000 : 0 };
-  });
-
-  handle("sys:mem", async () => (await telemetry.live()).mem);
-
   handle("sys:battery", () => telemetry.battery());
 
   handle("sys:temp", async () => {
@@ -36,31 +29,6 @@ function registerSystem({ windows, telemetry }) {
   });
 
   handle("sys:drives", () => telemetry.drives());
-
-  handle("sys:net", async () => {
-    const n = (await telemetry.live()).net;
-    return { online: n.online, iface: n.iface, ip4: n.ip4, mac: n.mac || null, type: n.type, speed: n.speed };
-  });
-
-  handle("sys:netStats", async () => {
-    const n = (await telemetry.live()).net;
-    return n.online ? { rxSec: n.rxSec, txSec: n.txSec, rx: n.rx, tx: n.tx } : null;
-  });
-
-  handle("sys:gpu", async () => {
-    const [s, l] = await Promise.all([telemetry.static(), telemetry.live()]);
-    return {
-      model: s.gpu?.model || null,
-      vendor: s.gpu?.vendor || null,
-      vramTotal: s.gpu?.vram || null,
-      util: l.gpu?.util ?? null,
-      dedicatedUsed: l.gpu?.dedicated ?? null,
-      sharedUsed: l.gpu?.shared ?? null,
-      temp: null
-    };
-  });
-
-  handle("sys:diskIO", async () => (await telemetry.live()).disk);
 
   handle("sys:processes", async (_e, opts = {}) => {
     const data = await (opts.paths ? telemetry.processesWithPaths() : telemetry.processes());
@@ -109,6 +77,7 @@ function registerSystem({ windows, telemetry }) {
     };
   });
 
+  // A file people attach to bug reports: no PC or user name, no addresses.
   handle("sys:snapshot", async () => {
     const [info, live, d, procs] = await Promise.all([
       telemetry.static(), telemetry.live(), telemetry.drives().catch(() => []), telemetry.processes().catch(() => ({ list: [] }))
@@ -116,13 +85,15 @@ function registerSystem({ windows, telemetry }) {
     const dest = path.join(app.getPath("documents"), `edex-snapshot-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
     const top = procs.list.slice().sort((a, b) => b.cpu - a.cpu).slice(0, 25)
       .map(({ pid, name, cpu, mem, memBytes }) => ({ pid, name, cpu, mem, memBytes }));
+    const { hostname: _h, user: _u, ...system } = info;
+    const { ip4: _ip, mac: _mac, ...network } = live.net;
     await fs.promises.writeFile(dest, JSON.stringify({
       timestamp: new Date().toISOString(),
-      system: info,
+      system,
       uptime: os.uptime(),
       cpu: live.cpu,
       memory: live.mem,
-      network: live.net,
+      network,
       drives: d,
       topProcesses: top
     }, null, 2), "utf8");

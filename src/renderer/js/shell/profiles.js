@@ -10,7 +10,7 @@ import { emit } from "../core/bus.js";
 
 const api = window.edex;
 // Settings a workspace's layout snapshot covers.
-export const LAYOUT_SNAPSHOT_KEYS = ["layoutPreset", "showTopbar", "showDock", "showLeftColumn", "showRightColumn", "columnsSide", "columnWidth", "filesPanel", "filesWidth", "bottomOrder", "showKeyboard", "hiddenWidgets", "widgetOrder"];
+const LAYOUT_SNAPSHOT_KEYS = ["layoutPreset", "showTopbar", "showDock", "showLeftColumn", "showRightColumn", "columnsSide", "columnWidth", "filesPanel", "filesWidth", "bottomOrder", "showKeyboard", "hiddenWidgets", "widgetOrder"];
 let workspace = null;
 
 const arrangementName = (p) => `Workspace · ${p.name}`;
@@ -27,7 +27,7 @@ export function profiles() {
 export const activeProfile = () => profiles().find((p) => p.id === (settings.get("activeProfile") || "main")) || profiles()[0];
 
 function save(list) {
-  return settings.set({ profiles: list.map(({ ...p }) => p) });
+  return settings.set({ profiles: list });
 }
 
 export function updateProfile(id, patch) {

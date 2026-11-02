@@ -8,10 +8,10 @@ const fs = require("fs");
 const path = require("path");
 const { app, dialog } = require("electron");
 const { cached } = require("../lib/cache");
+const paths = require("../lib/paths");
 const { handle } = require("./util");
 const { normalizeLayout, LAYOUT_ID } = require("../lib/kb-layout");
 
-const ID_RE = LAYOUT_ID;
 const MAX_FILE = 256 * 1024;
 
 const NAMES = {
@@ -46,7 +46,7 @@ function registerKeyboards({ windows }) {
       for (const f of files) {
         if (!f.toLowerCase().endsWith(".json")) continue;
         const id = f.slice(0, -5);
-        if (!ID_RE.test(id)) { if (custom) errors.push({ file: f, message: "file name must be letters, digits, - _ or ." }); continue; }
+        if (!LAYOUT_ID.test(id)) { if (custom) errors.push({ file: f, message: "file name must be letters, digits, - _ or ." }); continue; }
         const file = path.join(dir, f);
         try {
           const { raw } = await readLayout(file);
@@ -106,9 +106,9 @@ function registerKeyboards({ windows }) {
       const base = path.basename(src);
       const id = base.replace(/\.json$/i, "").replace(/[^\w.-]/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 64);
       try {
-        if (!ID_RE.test(id)) throw new Error("unusable file name");
+        if (!LAYOUT_ID.test(id)) throw new Error("unusable file name");
         await readLayout(src);
-        await fs.promises.copyFile(src, path.join(userDir, `${id}.json`));
+        await fs.promises.copyFile(src, path.join(userDir, paths.validateEntryName(`${id}.json`)));
         imported.push(id);
       } catch (e) {
         errors.push({ file: base, message: e.message });

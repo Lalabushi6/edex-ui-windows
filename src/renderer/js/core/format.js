@@ -79,7 +79,7 @@ export function dirname(p) {
   return /^[A-Za-z]:$/.test(parent) ? `${parent}\\` : parent;
 }
 
-export function joinPath(base, name) {
+function joinPath(base, name) {
   const b = normPath(base);
   return b.endsWith("\\") ? b + name : `${b}\\${name}`;
 }

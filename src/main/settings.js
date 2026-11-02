@@ -282,7 +282,6 @@ const SCHEMA = {
 
   // Browser tabs and app tabs
   browserLinks: [bool(), false],
-  browserHome: [(v, d) => (typeof v === "string" && (v === "" || /^https?:\/\/\S+$/i.test(v)) ? v.slice(0, 2048) : d), ""],
   appTabs: [oneOf("off", "all"), "off"],
   openAppsInside: [bool(), false],
   appTabsCtrlTab: [bool(), true],
@@ -335,9 +334,9 @@ function defaults() {
 }
 
 function sanitize(key, value, current) {
-  const entry = SCHEMA[key];
-  if (!entry) return undefined;
-  const [coerce, def] = entry;
+  // Own keys only: a file with a "constructor" key must not reach Object's.
+  if (!Object.hasOwn(SCHEMA, key)) return undefined;
+  const [coerce, def] = SCHEMA[key];
   return coerce(value, current === undefined ? structuredClone(def) : current);
 }
 
@@ -350,7 +349,7 @@ function migrateLegacy() {
   const copy = (from, to = from, map = (v) => v) => {
     if (legacy[from] !== undefined) out[to] = map(legacy[from]);
   };
-  copy("theme", "theme", (v) => (v === "default" ? "default" : v));
+  copy("theme");
   copy("termFontSize");
   copy("termScrollback");
   copy("audioEnabled");
@@ -395,7 +394,7 @@ class Settings extends EventEmitter {
     if (!patch || typeof patch !== "object") throw new Error("Settings patch must be an object");
     const changed = {};
     for (const [key, value] of Object.entries(patch)) {
-      if (!Object.prototype.hasOwnProperty.call(SCHEMA, key)) continue;
+      if (!Object.hasOwn(SCHEMA, key)) continue;
       const clean = sanitize(key, value, this.store.data[key]);
       if (JSON.stringify(clean) === JSON.stringify(this.store.data[key])) continue;
       this.store.data[key] = clean;
@@ -413,4 +412,4 @@ class Settings extends EventEmitter {
   }
 }
 
-module.exports = { Settings, SCHEMA };
+module.exports = { Settings };

@@ -37,8 +37,11 @@ function isDriveRoot(p) {
 // Credential stores and token files (directories or single files).
 const SENSITIVE_PATHS = [
   ".ssh", ".aws", ".gnupg", ".azure", ".kube", ".docker", ".password-store",
-  ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc",
-  path.join(".config", "gcloud"), path.join(".config", "gh"),
+  ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc", ".pgpass", ".vault-token",
+  path.join(".cargo", "credentials"), path.join(".cargo", "credentials.toml"),
+  path.join(".gem", "credentials"), path.join(".terraform.d", "credentials.tfrc.json"),
+  path.join(".config", "gcloud"), path.join(".config", "gh"), path.join(".config", "hub"),
+  path.join("AppData", "Roaming", "postgresql", "pgpass.conf"),
   path.join("AppData", "Local", "Microsoft", "Credentials"),
   path.join("AppData", "Roaming", "Microsoft", "Credentials"),
   path.join("AppData", "Local", "Microsoft", "Vault"),
@@ -49,6 +52,7 @@ const SENSITIVE_PATHS = [
   path.join("AppData", "Local", "Microsoft", "Edge", "User Data"),
   path.join("AppData", "Local", "BraveSoftware", "Brave-Browser", "User Data"),
   path.join("AppData", "Local", "Vivaldi", "User Data"),
+  path.join("AppData", "Local", "Chromium", "User Data"),
   path.join("AppData", "Roaming", "Opera Software"),
   path.join("AppData", "Roaming", "Mozilla", "Firefox", "Profiles")
 ].map((rel) => path.join(HOME, rel));
@@ -147,14 +151,11 @@ async function uniqueDestination(dir, baseName, { copySuffix = false } = {}) {
 }
 
 module.exports = {
-  HOME,
   canonicalHomePromise,
   isPathInside,
   isUncPath,
-  isDriveRoot,
   isSensitive,
   addSensitive,
-  canonicalize,
   forRead,
   forWrite,
   validateEntryName,

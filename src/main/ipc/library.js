@@ -138,6 +138,7 @@ function registerLibrary({ settings, windows }) {
     const p = await paths.forRead(asString(file, "path"));
     const dir = path.dirname(p);
     if (artCache.has(dir)) return artCache.get(dir);
+    const stem = path.join(artDir, crypto.createHash("sha1").update(dir.toLowerCase()).digest("hex").slice(0, 16));
     let out = null;
     try {
       const names = await fs.promises.readdir(dir);
@@ -146,7 +147,6 @@ function registerLibrary({ settings, windows }) {
     } catch (_) {}
     if (!out) {
       // Saved by an earlier session: no need to read the song again.
-      const stem = path.join(artDir, crypto.createHash("sha1").update(dir.toLowerCase()).digest("hex").slice(0, 16));
       for (const ext of ["jpg", "png"]) {
         if (!out && await fs.promises.access(`${stem}.${ext}`).then(() => true, () => false)) out = `${stem}.${ext}`;
       }
@@ -155,7 +155,6 @@ function registerLibrary({ settings, windows }) {
       try {
         const t = await readTags(p, { picture: true });
         if (t?.picture) {
-          const stem = path.join(artDir, crypto.createHash("sha1").update(dir.toLowerCase()).digest("hex").slice(0, 16));
           await fs.promises.mkdir(artDir, { recursive: true });
           out = `${stem}.${/png/.test(t.picture.mime) ? "png" : "jpg"}`;
           await fs.promises.writeFile(out, t.picture.data);

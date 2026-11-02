@@ -2,7 +2,7 @@
 // (by name or genre) in the Radio Browser directory, and stations added by
 // URL. Playing one makes it a playlist entry, so the control bar, the
 // visualizer and the equalizer all work with it.
-import { h, setText, debounce } from "../core/dom.js";
+import { h, debounce } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { toast, contextMenu, prompt, copyText, cleanError } from "../core/ui.js";

@@ -12,9 +12,11 @@ const { app, net } = require("electron");
 const paths = require("../lib/paths");
 const { handle } = require("./util");
 const { JsonStore } = require("../lib/store");
+const { readCapped } = require("../lib/http");
 
 const API = "https://lrclib.net/api";
 const MAX_CACHE = 400;
+const MAX_LRC_BYTES = 1024 * 1024;
 const RETRY_MISS_MS = 7 * 86400000;
 
 // "[01:02.34]line" (several stamps per line allowed) -> [{ t, text }].
@@ -34,8 +36,8 @@ function parseLrc(text) {
 
 // Video-style titles ("Artist - Song (Official Video) [4K]") -> clean parts.
 function tidy(title, artist) {
-  let t = String(title || "").replace(/\s*[([][^)\]]*\b(official|lyrics?|audio|video|visuali[sz]er|hd|4k|remaster(ed)?|explicit|clean)\b[^)\]]*[)\]]/gi, "").trim();
-  let a = String(artist || "").replace(/\s*-\s*topic$/i, "").trim();
+  let t = String(title || "").slice(0, 300).replace(/\s*[([][^)\]]*\b(official|lyrics?|audio|video|visuali[sz]er|hd|4k|remaster(ed)?|explicit|clean)\b[^)\]]*[)\]]/gi, "").trim();
+  let a = String(artist || "").slice(0, 300).replace(/\s*-\s*topic$/i, "").trim();
   const dash = /^(.+?)\s+[-–—]\s+(.+)$/.exec(t);
   if (dash && (!a || dash[1].toLowerCase().includes(a.toLowerCase()) || /vevo|records|music|official/i.test(a))) { a = dash[1]; t = dash[2]; }
   t = t.replace(/\s*[([]?\s*(feat\.?|ft\.?|featuring)\s.+$/i, "").replace(/\s*-\s*(\d{4}\s*)?remaster(ed)?.*$/i, "").trim();
@@ -54,7 +56,7 @@ function registerLyrics({ settings }) {
       const res = await net.fetch(url, { headers: { "User-Agent": userAgent, Accept: "application/json" }, signal: ctrl.signal });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`LRCLIB answered ${res.status}`);
-      return await res.json();
+      return JSON.parse((await readCapped(res, 2 * 1024 * 1024)).toString("utf8"));
     } finally { clearTimeout(timer); }
   }
 
@@ -84,10 +86,11 @@ function registerLyrics({ settings }) {
   handle("lyrics:get", async (_e, track = {}) => {
     if (settings.get("lyrics") === false) return { off: true };
     // A sidecar .lrc next to a local file.
-    if (typeof track.path === "string" && track.path && !/^https?:/i.test(track.path)) {
+    if (typeof track.path === "string" && track.path && !/^https?:/i.test(track.path) && !paths.isUncPath(track.path)) {
       try {
         const audio = await paths.forRead(track.path);
-        const lrc = audio.replace(/\.[^.\\/]+$/, ".lrc");
+        const lrc = await paths.forRead(audio.replace(/\.[^.\\/]+$/, ".lrc"));
+        if ((await fs.promises.stat(lrc)).size > MAX_LRC_BYTES) throw new Error("too large");
         const text = await fs.promises.readFile(lrc, "utf8");
         const synced = parseLrc(text);
         return { synced: synced.length ? synced : null, plain: synced.length ? null : text.slice(0, 20000), instrumental: false, source: "file" };
@@ -114,4 +117,4 @@ function registerLyrics({ settings }) {
   return { flush: () => cache.flushSync() };
 }
 
-module.exports = { registerLyrics, parseLrc, tidy };
+module.exports = { registerLyrics };

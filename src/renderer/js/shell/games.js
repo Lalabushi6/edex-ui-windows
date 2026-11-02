@@ -19,15 +19,20 @@ export const gameArt = (g) => (g?.art ? fmt.fileUrl(g.art) : null);
 export const onGames = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const changed = () => { for (const fn of listeners) { try { fn(cache); } catch (_) {} } };
 
-export function loadGames(force = false) {
-  if (cache && !force) return Promise.resolve(cache);
+function fetchGames(rescan) {
   if (!loading) {
-    loading = api.games.list(force).then((list) => { cache = list; changed(); return list; }).catch(() => cache || []).finally(() => { loading = null; });
+    loading = api.games.list(rescan).then((list) => { cache = list; changed(); return list; }).catch(() => cache || []).finally(() => { loading = null; });
   }
   return loading;
 }
 
-api.games.onChange(() => { loadGames(true); });
+export function loadGames(force = false) {
+  return cache && !force ? Promise.resolve(cache) : fetchGames(force);
+}
+
+// A scan just finished: fetch its results (asking for a rescan here would
+// scan every launcher a second time, each time).
+api.games.onChange(() => { fetchGames(false); });
 api.games.onArt(({ id, art }) => {
   const g = cache?.find((x) => x.id === id);
   if (g) { g.art = art; g.tall = true; changed(); }

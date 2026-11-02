@@ -6,7 +6,7 @@
 import * as settings from "./settings.js";
 import { emit } from "./bus.js";
 
-export const LAYOUT_KEYS = [
+const LAYOUT_KEYS = [
   "showTopbar", "showDock", "showLeftColumn", "showRightColumn", "columnsSide",
   "filesPanel", "bottomOrder", "showKeyboard", "columnWidth", "filesWidth"
 ];
@@ -61,7 +61,7 @@ export function applyPreset(name) {
 }
 
 // Which preset the current settings match, if any.
-export function matchingPreset() {
+function matchingPreset() {
   for (const [name, p] of Object.entries(PRESETS)) {
     if (Object.entries(p.values).every(([k, v]) => k === "showKeyboard" || settings.get(k) === v)) return name;
   }
@@ -108,14 +108,14 @@ export function computeGrid(v) {
   };
 }
 
-export function currentValues() {
+function currentValues() {
   const v = {};
   for (const k of LAYOUT_KEYS) v[k] = settings.get(k);
   for (const k of THEME_KEYS) v[k] = effective(k);
   return v;
 }
 
-export function applyLayout() {
+function applyLayout() {
   const app = document.getElementById("app");
   if (!app) return;
   const g = computeGrid(currentValues());

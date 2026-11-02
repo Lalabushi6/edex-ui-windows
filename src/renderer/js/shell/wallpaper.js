@@ -12,7 +12,7 @@ export const WALLPAPER_BACKDROPS = [["none", "None"], ["matrix", "Matrix rain"],
 
 // The wallpaper's own art; otherwise multi-line boot art; otherwise block
 // letters of the boot title (or "eDEX").
-export function wallpaperArt() {
+function wallpaperArt() {
   const own = normalizeArt(settings.get("wallpaperArt"));
   if (own) return own;
   const boot = normalizeArt(settings.get("bootLogo"));

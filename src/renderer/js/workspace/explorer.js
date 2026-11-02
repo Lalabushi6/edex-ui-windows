@@ -50,6 +50,7 @@ export class ExplorerTab {
     this.anchor = -1;
     this.history = [];
     this.hIndex = -1;
+    this.navTicket = 0;
     this.filter = "";
     this.loadedAt = 0;
     this.typeahead = "";
@@ -255,6 +256,8 @@ export class ExplorerTab {
 
   async navigate(path, { push = true, select } = {}) {
     const target = path === "" ? "" : fmt.normPath(path);
+    // A slow folder answering after you've moved on doesn't pull you back.
+    const ticket = ++this.navTicket;
     try {
       let entries;
       let dir = "";
@@ -269,6 +272,7 @@ export class ExplorerTab {
         dir = res.dir;
         entries = res.entries;
       }
+      if (ticket !== this.navTicket) return;
       const changed = this.cwd === null || !fmt.pathsEqual(this.cwd, dir) || (dir === "" && this.cwd !== "");
       this.cwd = dir;
       this.entries = entries;
@@ -294,6 +298,7 @@ export class ExplorerTab {
       this.render();
       if (select) this.selectPath(select);
     } catch (e) {
+      if (ticket !== this.navTicket) return;
       toast(cleanError(e), { level: "warn" });
       if (this.cwd === null) await this.navigate("", { push });
     }

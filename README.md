@@ -751,8 +751,15 @@ docs/                PUBLISHING.md (GitHub and releases)
   Credential stores and token files (`.ssh`, `.aws`, `.gnupg`, `.azure`,
   `.kube`, `.docker`, `.git-credentials`, `.npmrc`, `.netrc`, the GitHub CLI
   login, browser profiles, the Windows credential vault and DPAPI keys, eDEX's
-  own encrypted API key …) are never readable. Writes are refused in Windows,
-  Program Files, ProgramData, on drive roots and on network paths.
+  own encrypted API key and its browser tabs' cookies …) are never readable.
+  Writes are refused in Windows, Program Files, ProgramData, on drive roots and
+  on network paths.
+- **Programs** Windows itself provides are started by their full path, and eDEX
+  runs from System32, so a program planted in the folder it was started from
+  (Downloads, a USB drive) can't run in their place.
+- **Network paths named by a file or by program output** aren't followed: a
+  shortcut's icon, or a folder a command prints for the terminal to "follow".
+  Just looking at one would send your Windows sign-in hash to that server.
 - **Deleting** moves items to the Recycle Bin.
 - **Confirmations the UI can't fake**: running an executable from the explorer
   outside the Start menu / Desktop, ending a process and power actions are
@@ -762,14 +769,18 @@ docs/                PUBLISHING.md (GitHub and releases)
 - **Local files** reach the UI only through the read-only `localfile:`
   protocol (images and media), which refuses credential stores and anything
   that resolves to a network share; page scripts can't `fetch` them.
-- **The Git widget** won't inspect a repository whose own config would make Git
-  start programs (fsmonitor, clean/smudge filters, includes).
+- **The Git widget** won't inspect a repository whose own config could make Git
+  start programs (filters, signature checks, lazy fetches, includes). Git itself
+  reads the config for this check, including a linked worktree's main
+  repository, and submodules are left out.
 - **Browser tabs** are separate sandboxed views in their own session
   (`persist:edex-browser`) with no preload bridge, so pages can't call eDEX
-  or reach `app://` / `localfile:`. Only `http(s)` loads, pop-ups become tabs,
-  web permissions are refused (apart from fullscreen and clipboard writes),
-  downloads go through a Save dialog, and the page steps aside behind a
-  still picture whenever an eDEX menu or dialog is open.
+  or reach `app://` / `localfile:`. Only `http(s)` loads, pop-ups become tabs
+  (a few at a time), web permissions are refused (apart from fullscreen and
+  clipboard writes), client certificates are never offered on their own, local
+  network addresses stay hidden from WebRTC, downloads go through a Save
+  dialog, and the page steps aside behind a still picture whenever an eDEX menu
+  or dialog is open.
 - **App tabs** only move, minimise and restore another app's window (and
   picture it); nothing is injected or re-parented, and windows go back where
   they were when the tab closes or eDEX quits. *Open apps inside eDEX* only
@@ -782,17 +793,20 @@ docs/                PUBLISHING.md (GitHub and releases)
   `edexradio:` protocol: the main process fetches the station (http/https
   only), resolves .pls / .m3u links and strips the stream's title metadata,
   so the interface's CSP stays closed to the internet. Station logos and game
-  covers arrive as data / local files, never as remote images.
+  covers arrive as data / local files, never as remote images. A directory
+  listing or playlist file can't point eDEX at your local network; only a
+  station you add yourself can live there.
 - **Calendar links** are kept in settings like your other preferences and
   only ever fetched; the downloaded copies live in `calendars/` in eDEX's data
-  folder. Anyone with a secret iCal link can read that calendar, so treat
-  settings backups that contain one accordingly.
+  folder. Anyone with a secret iCal link can read that calendar, so exporting
+  settings asks whether to leave them out.
 - **Secrets** — the AI key and the Spotify refresh token — are encrypted with
   your Windows account (DPAPI) and unreadable through eDEX's own file
   previews. Spotify uses PKCE sign-in through a loopback address, so there's
   no client secret.
 - **Updates** must match the size and SHA-256 digest GitHub publishes for the
-  release file before anything runs, and installing always asks first.
+  release file before anything runs, are checked again just before they start,
+  and installing always asks first.
 - **Packaged builds** disable Node inspection and `NODE_OPTIONS` and load code
   only from the app archive (Electron fuses).
 
@@ -807,10 +821,11 @@ comes from radio-browser.info; and calendar subscriptions refresh from the
 links you added. Turn all of this off under Settings → Privacy. Browser
 tabs, radio stations and station search, Spotify (accounts.spotify.com,
 api.spotify.com and its cover-art servers) and the AI assistant only go
-online when you use them. Clipboard history is never
-written to disk. Screen time stores only program names and durations, on
-this PC, for two weeks. The AI assistant is off until you add your own key
-and sends only what you ask. Report problems as described in
+online when you use them. Clipboard history is never written to disk, and
+skips what password managers mark as private. System snapshots leave out your
+PC name, user name and network addresses. Screen time stores only program names
+and durations, on this PC, for two weeks. The AI assistant is off until you add
+your own key and sends only what you ask. Report problems as described in
 [SECURITY.md](SECURITY.md).
 
 ## Credits

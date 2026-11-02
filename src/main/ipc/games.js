@@ -12,11 +12,12 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execFile, spawn } = require("child_process");
+const { execFile } = require("child_process");
 const { app, net, shell } = require("electron");
 const { handle, asString } = require("./util");
 const { JsonStore } = require("../lib/store");
 const { readCapped } = require("../lib/http");
+const { EXPLORER, system32, spawnDetached } = require("../lib/sysexe");
 
 const SKIP_STEAM = /redistributable|steam linux runtime|^proton\b|steamvr performance test|^steamworks/i;
 const RESCAN_MS = 30 * 60 * 1000;
@@ -53,7 +54,7 @@ const exists = (p) => fs.promises.access(p).then(() => true, () => false);
 
 function regValue(keyPath, name) {
   return new Promise((resolve) => {
-    execFile("reg.exe", ["query", keyPath, "/v", name], { windowsHide: true, timeout: 5000 }, (err, stdout) => {
+    execFile(system32("reg.exe"), ["query", keyPath, "/v", name], { windowsHide: true, timeout: 5000 }, (err, stdout) => {
       if (err) return resolve(null);
       const m = new RegExp(`${name}\\s+REG_\\w+\\s+(.+)`, "i").exec(stdout || "");
       resolve(m ? m[1].trim() : null);
@@ -168,7 +169,7 @@ async function epicGames() {
   return out;
 }
 
-async function xboxGames(aux, bridge) {
+async function xboxGames(aux) {
   let list = [];
   try { list = await aux.call("xboxGames", {}, 60000); } catch (_) { return []; }
   // Packages that only name themselves through a resource string get the
@@ -177,7 +178,7 @@ async function xboxGames(aux, bridge) {
   let names = new Map();
   const needNames = (Array.isArray(list) ? list : []).some((g) => !g?.name || /^ms-resource:/i.test(g.name));
   if (needNames) {
-    try { names = new Map((await (aux || bridge).call("startApps", {}, 20000)).map((a) => [a.appId, a.name])); } catch (_) {}
+    try { names = new Map((await aux.call("startApps", {}, 20000)).map((a) => [a.appId, a.name])); } catch (_) {}
   }
   const out = [];
   for (const g of Array.isArray(list) ? list : []) {
@@ -194,7 +195,7 @@ async function xboxGames(aux, bridge) {
   return out;
 }
 
-function registerGames({ settings, windows, bridge, aux }) {
+function registerGames({ settings, windows, aux }) {
   const userData = app.getPath("userData");
   const artDir = path.join(userData, "game-art");
   const store = new JsonStore(path.join(userData, "games.json"), { fallback: { games: [], played: {} } });
@@ -214,7 +215,7 @@ function registerGames({ settings, windows, bridge, aux }) {
     const file = path.join(artDir, `${g.id.replace(/[^\w.-]+/g, "_")}.jpg`);
     if (await exists(file)) { g.art = file; g.tall = true; return; }
     try {
-      const res = await net.fetch(g.remoteArt);
+      const res = await net.fetch(g.remoteArt, { signal: AbortSignal.timeout(20000) });
       const type = res.headers.get("content-type") || "";
       if (!res.ok || !/^image\//.test(type)) { res.body?.cancel().catch(() => {}); return; }
       const buf = await readCapped(res, 3 * 1024 * 1024);
@@ -229,7 +230,7 @@ function registerGames({ settings, windows, bridge, aux }) {
   async function scan() {
     if (scanning) return scanning;
     scanning = (async () => {
-      const found = (await Promise.all([steamGames(), epicGames(), xboxGames(aux, bridge)].map((p) => p.catch(() => [])))).flat();
+      const found = (await Promise.all([steamGames(), epicGames(), xboxGames(aux)].map((p) => p.catch(() => [])))).flat();
       // Art downloaded earlier is reused.
       for (const g of found) {
         if (g.art) continue;
@@ -265,13 +266,16 @@ function registerGames({ settings, windows, bridge, aux }) {
   handle("games:launch", async (_e, id) => {
     const g = find(id);
     windows.yieldFocus();
+    // The list is read back from games.json, so nothing in it is taken on trust.
     if (g.source === "steam") {
       if (!/^\d+$/.test(g.appid)) throw new Error("Invalid game");
       await shell.openExternal(`steam://rungameid/${g.appid}`);
     } else if (g.source === "epic") {
+      if (!/^com\.epicgames\.launcher:\/\/apps\/[\w.%-]+\?action=launch&silent=true$/.test(String(g.uri))) throw new Error("Invalid game");
       await shell.openExternal(g.uri);
     } else if (g.source === "xbox") {
-      spawn("explorer.exe", [`shell:AppsFolder\\${g.aumid}`], { detached: true, stdio: "ignore" }).unref();
+      if (!/^[\w.-]+_[a-z0-9]+![\w.-]+$/i.test(String(g.aumid))) throw new Error("Invalid game");
+      spawnDetached(EXPLORER, [`shell:AppsFolder\\${g.aumid}`]);
     }
     played()[g.id] = Date.now();
     store.save();
@@ -313,4 +317,4 @@ function registerGames({ settings, windows, bridge, aux }) {
   };
 }
 
-module.exports = { registerGames, parseVdf };
+module.exports = { registerGames };

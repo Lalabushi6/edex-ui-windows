@@ -6,15 +6,18 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const pty = require("node-pty");
+const { isUncPath } = require("../lib/paths");
 const { handle, on } = require("./util");
 
 const MAX_SESSIONS = 24;
 const FLUSH_MS = 8;
 
 function findOnPath(exe) {
-  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir.replace(/^"|"$/g, ""), exe);
+  for (const raw of (process.env.PATH || "").split(path.delimiter)) {
+    const dir = raw.replace(/^"|"$/g, "");
+    // A relative entry would mean "wherever eDEX was started from".
+    if (!path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, exe);
     try { if (fs.statSync(candidate).isFile()) return candidate; } catch (_) {}
   }
   return null;
@@ -47,6 +50,7 @@ function registerTerminal({ settings }) {
   const flush = (id) => {
     const s = sessions.get(id);
     if (!s) return;
+    clearTimeout(s.timer);
     s.timer = null;
     if (!s.buffer) return;
     const data = s.buffer;
@@ -63,6 +67,17 @@ function registerTerminal({ settings }) {
     return true;
   };
 
+  // A page's sessions end with it: when its window goes, and when it reloads
+  // (the new page knows nothing about them, so they'd run on unseen).
+  const watched = new WeakSet();
+  const watch = (wc) => {
+    if (watched.has(wc)) return;
+    watched.add(wc);
+    const killOwn = () => { for (const [id, s] of [...sessions]) if (s.wc === wc) kill(id); };
+    wc.once("destroyed", killOwn);
+    wc.on("did-navigate", killOwn);
+  };
+
   handle("term:shells", () => shells.map(({ id, name }) => ({ id, name })));
 
   handle("term:spawn", (event, opts = {}) => {
@@ -70,7 +85,7 @@ function registerTerminal({ settings }) {
     const shell = shells.find((s) => s.id === opts.shell) ||
       shells.find((s) => s.id === settings.get("defaultShell")) || shells[0];
     let cwd = os.homedir();
-    if (typeof opts.cwd === "string" && opts.cwd) {
+    if (typeof opts.cwd === "string" && opts.cwd && !isUncPath(opts.cwd)) {
       try { if (fs.statSync(opts.cwd).isDirectory()) cwd = opts.cwd; } catch (_) {}
     }
     const cols = Math.max(2, Math.min(1000, Number(opts.cols) || 80));
@@ -100,7 +115,7 @@ function registerTerminal({ settings }) {
       sessions.delete(id);
       if (!wc.isDestroyed()) wc.send("term:exit", { id, exitCode, signal });
     });
-    wc.once("destroyed", () => kill(id));
+    watch(wc);
 
     return { id, shell: shell.id, shellName: shell.name, cwd };
   });
@@ -109,7 +124,9 @@ function registerTerminal({ settings }) {
 
   on("term:write", (event, { id, data } = {}) => {
     const s = sessions.get(Number(id));
-    if (s && s.wc === event.sender && typeof data === "string") s.proc.write(data);
+    if (!s || s.wc !== event.sender || typeof data !== "string") return;
+    // The shell can exit between the key press and this write.
+    try { s.proc.write(data); } catch (_) {}
   });
 
   on("term:resize", (event, { id, cols, rows } = {}) => {

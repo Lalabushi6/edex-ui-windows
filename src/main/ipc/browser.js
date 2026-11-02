@@ -24,6 +24,10 @@ const MAX_VIEWS = 12;
 const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write"]);
 const ACTIONS = new Set(["back", "forward", "reload", "stop", "zoomIn", "zoomOut", "zoomReset", "external", "inspect"]);
 const isWeb = (u) => /^https?:\/\//i.test(String(u || ""));
+// A page opening things by itself: most pop-ups per ten seconds, and the
+// shortest gap between handing mail links to the mail app.
+const POPUPS_PER_10S = 4;
+const MAIL_GAP_MS = 5000;
 
 function registerBrowser({ windows, notices, settings }) {
   const ses = session.fromPartition(PARTITION);
@@ -38,6 +42,13 @@ function registerBrowser({ windows, notices, settings }) {
   ses.setPermissionRequestHandler((_wc, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
   ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
   ses.setDevicePermissionHandler(() => false);
+  // A site asking for a client certificate must not silently get the first
+  // one in the store, which is what happens unless this says otherwise.
+  app.on("select-client-certificate", (event, wc, _url, _list, callback) => {
+    if (wc?.session !== ses) return;
+    event.preventDefault();
+    callback();
+  });
   ses.on("will-download", (_event, item, wc) => {
     item.setSaveDialogOptions({ title: "Save download", defaultPath: path.join(app.getPath("downloads"), item.getFilename()) });
     const id = idOf(wc);
@@ -136,20 +147,31 @@ function registerBrowser({ windows, notices, settings }) {
     wc.on("enter-html-full-screen", () => { const v = views.get(id); if (v) { v.full = true; applyBounds(v); } });
     wc.on("leave-html-full-screen", () => { const v = views.get(id); if (v) { v.full = false; applyBounds(v); } });
 
-    // Only web pages; mail links go to the mail app; other schemes are refused.
-    const guard = (event, url) => {
+    // Only web pages; mail links go to the mail app (not when a server
+    // redirects there, and not over and over); other schemes are refused.
+    let lastMail = 0;
+    const guard = (event, url, redirect) => {
       if (isWeb(url) || url === "about:blank") return;
       event.preventDefault();
-      if (/^mailto:/i.test(url)) shell.openExternal(url).catch(() => {});
-      else windows.send("browser:state", { id, blocked: String(url).split(":")[0].slice(0, 32) });
+      if (/^mailto:/i.test(url) && !redirect) {
+        if (Date.now() - lastMail < MAIL_GAP_MS) return;
+        lastMail = Date.now();
+        shell.openExternal(url).catch(() => {});
+      } else windows.send("browser:state", { id, blocked: String(url).split(":")[0].slice(0, 32) });
     };
-    wc.on("will-navigate", (e) => guard(e, e.url));
-    wc.on("will-redirect", (e) => guard(e, e.url));
+    wc.on("will-navigate", (e) => guard(e, e.url, false));
+    wc.on("will-redirect", (e) => guard(e, e.url, true));
     wc.on("will-frame-navigate", (e) => { if (!isWeb(e.url) && e.url !== "about:blank" && !/^(about|data|blob):/i.test(e.url)) e.preventDefault(); });
     wc.on("will-attach-webview", (e) => e.preventDefault());
-    // Pop-ups and target=_blank links open as new eDEX browser tabs.
+    // Pop-ups and target=_blank links open as new eDEX browser tabs, within reason.
+    let popups = [];
     wc.setWindowOpenHandler(({ url, disposition }) => {
-      if (isWeb(url)) windows.send("browser:open", { url, from: id, background: disposition === "background-tab" });
+      const now = Date.now();
+      popups = popups.filter((t) => now - t < 10000);
+      if (isWeb(url) && popups.length < POPUPS_PER_10S) {
+        popups.push(now);
+        windows.send("browser:open", { url, from: id, background: disposition === "background-tab" });
+      }
       return { action: "deny" };
     });
 
@@ -256,6 +278,8 @@ function registerBrowser({ windows, notices, settings }) {
     win.contentView.addChildView(view);
     entry.view = view;
     entry.wc = view.webContents;
+    // Pages don't get to see this PC's local network addresses through WebRTC.
+    entry.wc.setWebRTCIPHandlingPolicy("default_public_interface_only");
     wire(key, entry.wc);
   }
 
@@ -263,10 +287,11 @@ function registerBrowser({ windows, notices, settings }) {
     const key = asId(id);
     if (views.has(key)) return true;
     if (views.size >= MAX_VIEWS) throw new Error(`At most ${MAX_VIEWS} browser tabs`);
+    const target = url ? asUrl(url) : null;
     const entry = { view: null, wc: null, bounds: null, visible: false, active: false, full: false, hiddenAt: Date.now(), downloads: 0, unloaded: null };
     makeView(key, entry);
     views.set(key, entry);
-    if (url) entry.wc.loadURL(asUrl(url)).catch(() => {});
+    if (target) entry.wc.loadURL(target).catch(() => {});
     return true;
   });
 
@@ -293,8 +318,10 @@ function registerBrowser({ windows, notices, settings }) {
     const v = views.get(key);
     if (!v?.unloaded) return false;
     const saved = v.unloaded;
-    v.unloaded = null;
+    // Before anything changes: with no window to attach to this throws, and
+    // the tab must stay unloaded rather than half-restored.
     makeView(key, v);
+    v.unloaded = null;
     applyBounds(v);
     const zoom = () => { if (live(v) && saved.zoom && saved.zoom !== 1) v.wc.setZoomFactor(saved.zoom); };
     v.wc.once("did-finish-load", zoom);
@@ -325,7 +352,7 @@ function registerBrowser({ windows, notices, settings }) {
     const v = views.get(key);
     if (!v) throw new Error("No such browser tab");
     if (v.unloaded) { reload(key, asUrl(url)); return true; }
-    v.wc.loadURL(asUrl(url)).catch(() => {});
+    if (live(v)) v.wc.loadURL(asUrl(url)).catch(() => {});
     return true;
   });
 
@@ -412,10 +439,8 @@ function registerBrowser({ windows, notices, settings }) {
     closeAll,
     stop: () => clearInterval(unloadTimer),
     // For the benchmark: open browser tabs and how many are unloaded.
-    stats: () => ({ tabs: views.size, unloaded: [...views.values()].filter((v) => v.unloaded).length }),
-    // Development probes: unload every background tab now.
-    unloadBackground: () => [...views.keys()].filter((k) => { const v = views.get(k); return !v.visible && !v.active; }).filter(unload)
+    stats: () => ({ tabs: views.size, unloaded: [...views.values()].filter((v) => v.unloaded).length })
   };
 }
 
-module.exports = { registerBrowser, PARTITION };
+module.exports = { registerBrowser };

@@ -186,7 +186,7 @@ defineWidget({
 });
 
 // ── Quick links ─────────────────────────────────────────────────────────────
-export async function openTarget(target) {
+async function openTarget(target) {
   if (/^(https?|mailto):/i.test(target)) return openUrl(target);
   try {
     const st = await api.fs.stat(target);

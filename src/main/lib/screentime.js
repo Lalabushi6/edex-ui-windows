@@ -115,7 +115,7 @@ class ScreenTime {
     const limits = this.settings.get("screenTimeLimits") || {};
     return {
       day: key, enabled: this.settings.get("screenTime") !== false, total: apps.reduce((a, b) => a + b.seconds, 0),
-      apps: apps.slice(0, 30).map((a) => (limits[a.name] ? { ...a, limit: limits[a.name] * 60 } : a)), week
+      apps: apps.slice(0, 30).map((a) => (Object.hasOwn(limits, a.name) ? { ...a, limit: limits[a.name] * 60 } : a)), week
     };
   }
 

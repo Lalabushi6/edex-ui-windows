@@ -54,10 +54,10 @@ function wake() {
   armCalm();
 }
 
+// Called once. Input is watched even while this is off: turned on later from
+// Settings, it would otherwise slow everything down with nothing to wake it.
 export function initCalm(enabled = true) {
-  if (!calmOn && enabled) {
-    for (const t of ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"]) window.addEventListener(t, wake, { capture: true, passive: true });
-  }
+  for (const t of ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"]) window.addEventListener(t, wake, { capture: true, passive: true });
   setCalmEnabled(enabled);
 }
 
