@@ -3,7 +3,8 @@
 // Checks the latest release (api.github.com), and on request downloads the
 // matching executable: the installer for an installed copy, the portable
 // .exe for the portable build. Downloads are checked against the size and the
-// SHA-256 digest GitHub publishes for each release file before anything runs.
+// SHA-256 digest GitHub publishes for each release file before anything runs,
+// and a file with no digest isn't downloaded.
 // Automatic checks happen at most once a day, only with outbound lookups on.
 "use strict";
 
@@ -50,7 +51,7 @@ function registerUpdates({ settings, windows, notices }) {
   const kind = portable.state().portable ? "portable" : app.isPackaged ? "installer" : devKind;
   const downloadDir = path.join(app.getPath("temp"), "eDEX-UI-update");
   let latest = null;   // last successful check
-  let download = null; // { version, file, verified, sha256 }
+  let download = null; // { version, file, sha256 }
   let busy = null;
 
   async function check() {
@@ -90,7 +91,7 @@ function registerUpdates({ settings, windows, notices }) {
       notes: String(r.body || "").slice(0, 20000),
       url: /^https:\/\/github\.com\//.test(r.html_url) ? r.html_url : `https://github.com/${slug}/releases/latest`,
       published: r.published_at || null,
-      asset: asset && { name: asset.name, size: asset.size, verified: !!asset.sha256 },
+      asset: asset && { name: asset.name, size: asset.size, digest: !!asset.sha256 },
       kind,
       _asset: asset
     };
@@ -130,6 +131,7 @@ function registerUpdates({ settings, windows, notices }) {
     if (!r.newer) throw new Error("You already have the latest version");
     const asset = r._asset;
     if (!asset) throw new Error(kind ? `The release has no ${ASSET[kind]}` : "Development runs can't install updates");
+    if (!asset.sha256) throw new Error("GitHub lists no SHA-256 for this file, so it can't be verified — nothing was downloaded");
     if (asset.size > MAX_BYTES) throw new Error("The update file is unexpectedly large");
     const send = (p) => { if (!event.sender.isDestroyed()) event.sender.send("updates:progress", p); };
     busy = (async () => {
@@ -167,14 +169,14 @@ function registerUpdates({ settings, windows, notices }) {
         clearTimeout(stall);
       }
       const digest = hash.digest("hex");
-      if ((asset.size && got !== asset.size) || (asset.sha256 && digest !== asset.sha256)) {
+      if ((asset.size && got !== asset.size) || digest !== asset.sha256) {
         await fs.promises.rm(part, { force: true });
         throw new Error("The download doesn't match the release (damaged or tampered) — nothing was installed");
       }
       await fs.promises.rename(part, file);
       send({ got, total: got, done: true });
-      download = { version: r.version, file, verified: !!asset.sha256, sha256: digest };
-      return { version: r.version, verified: download.verified };
+      download = { version: r.version, file, sha256: digest };
+      return { version: r.version, verified: true };
     })().finally(() => { busy = null; });
     return busy;
   });

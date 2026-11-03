@@ -165,8 +165,8 @@ that to work:
 - The tag must be a higher version than the running copy (`v2.0.3` >
   `2.0.2`); drafts and pre-releases are ignored.
 - eDEX checks each download against the SHA-256 digest GitHub computes for
-  every release file, so don't replace a file in a published release; cut a
-  new one instead.
+  every release file, and won't install a file that has none, so don't replace
+  a file in a published release; cut a new one instead.
 - The repository it checks comes from `"repository"` in `package.json`. If
   you fork or rename the project, change that URL.
 
@@ -186,9 +186,11 @@ that to work:
   artifacts; release files aren't touched); GitHub recalculates the usage
   6–12 hours later. Uploads no longer fail the build either way.
 - **"Node.js 20 is deprecated" warnings**: an action in a workflow is on an
-  old major version. Bump it (`actions/checkout@v7`, `actions/setup-node@v7`,
-  `actions/upload-artifact@v7`, `softprops/action-gh-release@v3` are the
-  Node 24 ones the workflows use).
+  old major version. Merge Dependabot's pull request. The workflows pin each
+  action to a commit with its version in a comment, so a bump by hand changes
+  both (`actions/checkout` v7, `actions/setup-node` v7,
+  `actions/upload-artifact` v7 and `softprops/action-gh-release` v3 are the
+  Node 24 ones they use).
 - **SmartScreen warns about the downloaded .exe**: expected for unsigned
   apps. Users click **More info → Run anyway**. Signing needs a paid
   code-signing certificate; electron-builder picks one up from the
