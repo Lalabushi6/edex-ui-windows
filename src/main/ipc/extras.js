@@ -168,12 +168,17 @@ function registerAlarms({ windows, notices }) {
 // Password managers mark what they copy with these formats, asking clipboard
 // watchers to leave it alone.
 const PRIVATE_CLIP_FORMATS = ["ExcludeClipboardContentFromMonitorProcessing", "Clipboard Viewer Ignore"];
-const isPrivateClip = () => {
+const osFormat = (name) => `electron application/osclipboard;format="${name}"`;
+const isPrivateClip = async () => {
   try {
-    if (PRIVATE_CLIP_FORMATS.some((f) => clipboard.has(f))) return true;
+    for (const f of PRIVATE_CLIP_FORMATS) if (await clipboard.has(osFormat(f))) return true;
+    const flag = osFormat("CanIncludeInClipboardHistory");
+    if (!(await clipboard.has(flag))) return false;
     // Present and zero: "don't keep this in clipboard history".
-    return clipboard.has("CanIncludeInClipboardHistory") && clipboard.readBuffer("CanIncludeInClipboardHistory").readUInt32LE(0) === 0;
-  } catch (_) { return false; }
+    const [item] = await clipboard.read();
+    const blob = await item.getType(flag);
+    return new DataView(await blob.arrayBuffer()).getUint32(0, true) === 0;
+  } catch (_) { return true; } // can't tell, so it stays out of the history
 };
 
 function registerClipboard({ settings, windows, bridge }) {
@@ -198,9 +203,11 @@ function registerClipboard({ settings, windows, bridge }) {
         lastSeq = seq;
       }
     }
-    if (isPrivateClip()) return;
+    if (await isPrivateClip()) return;
     let text = "";
-    try { text = clipboard.readText(); } catch (_) { return; }
+    try { text = await clipboard.readText(); } catch (_) { return; }
+    // Something private may have been copied while waiting for the text.
+    if (await isPrivateClip()) return;
     if (!text || text === last || text.length > 100000) return;
     last = text;
     if (!text.trim()) return;
@@ -212,7 +219,7 @@ function registerClipboard({ settings, windows, bridge }) {
     clearInterval(timer);
     timer = null;
     if (settings.get("clipboardHistory")) {
-      try { last = clipboard.readText(); } catch (_) {}
+      clipboard.readText().then((text) => { last = text; }).catch(() => {});
       timer = setInterval(() => { poll().catch(() => {}); }, 1000);
     } else if (history.length) {
       history = [];
@@ -227,9 +234,9 @@ function registerClipboard({ settings, windows, bridge }) {
 
   handle("clip:list", () => history);
   handle("clip:read", () => clipboard.readText());
-  handle("clip:copy", (_e, text) => {
+  handle("clip:copy", async (_e, text) => {
     const value = asString(text, "text", 100000);
-    clipboard.writeText(value);
+    await clipboard.writeText(value);
     last = value;
     history = [{ text: value, at: Date.now() }, ...history.filter((h) => h.text !== value)].slice(0, settings.get("clipboardMax"));
     broadcast();

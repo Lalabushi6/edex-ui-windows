@@ -11,7 +11,7 @@
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
   <br>
   <img alt="Windows 10 / 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white">
-  <img alt="Electron 41" src="https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white">
+  <img alt="Electron 45" src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white">
   <img alt="64-bit" src="https://img.shields.io/badge/arch-x64-555">
   <br>
   <a href="https://github.com/Lalabushi6/edex-ui-windows/releases/latest/download/eDEX-UI-Setup.exe"><img alt="Download the Windows installer" src="https://badgen.net/badge/Windows/Installer%20(.exe)/blue?icon=windows"></a>
@@ -602,7 +602,7 @@ Read [USER_MANUAL.md](USER_MANUAL.md) for everything eDEX can do, and
 
 ## Useful commands for the nerds
 
-**IMPORTANT NOTE:** You need [Node.js](https://nodejs.org) 20 or newer and Git.
+**IMPORTANT NOTE:** You need [Node.js](https://nodejs.org) 22.12 or newer and Git.
 No Developer Mode, admin rights or code-signing certificate is needed.
 
 #### Starting from source:

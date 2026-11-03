@@ -28,6 +28,12 @@ fs.writeFileSync(path.join(profile, "settings.json"), JSON.stringify({
   bootAnimation: false, audioEnabled: false, mediaVolume: 0, allowNetworkGeolocation: false,
   updateCheck: false, gameMode: "off", openAtLogin: false, screensaver: false, theme: "tron"
 }));
+// A moment of silence as a WAV file, for the media player check.
+const tone = path.join(profile, "tone.wav");
+const wav = Buffer.alloc(44 + 8820);
+wav.write("RIFF", 0); wav.writeUInt32LE(36 + 8820, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+wav.writeUInt32LE(44100, 24); wav.writeUInt32LE(88200, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(8820, 40);
+fs.writeFileSync(tone, wav);
 
 const child = spawn(electron, [".", "--remote-debugging-port=0", `--user-data-dir=${profile}`], {
   cwd: root, env: { ...process.env, EDEX_DEV_WINDOWED: "1" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: false
@@ -170,6 +176,16 @@ async function main() {
       await settings.set({ mediaView: 'player' }); await sleep(400);
       return { lib, radio };`);
     if (!r.lib || !r.radio) throw new Error(JSON.stringify(r));
+  });
+
+  await check("a local audio file loads in the media player", async () => {
+    const r = await run(`${H}
+      const { player } = await import('app://edex/js/media/player.js');
+      const el = player().el;
+      bus.emit('open-media', { paths: [${JSON.stringify(tone)}], play: false });
+      for (let i = 0; i < 40 && !el.error && el.readyState < 1; i++) await sleep(250);
+      return { ready: el.readyState, error: el.error?.message || null };`);
+    if (r.error || r.ready < 1) throw new Error(JSON.stringify(r));
   });
 
   await check("every settings page opens", async () => {
