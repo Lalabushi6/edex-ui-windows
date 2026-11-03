@@ -113,8 +113,9 @@ reproduce it, and the eDEX version.
   installing always asks first. A file with no digest isn't downloaded. The
   executables aren't code-signed, so the digest is the integrity check, and it
   comes from the same place as the download.
-- **Release builds** pin their GitHub Actions to commits, and the checkout
-  doesn't keep the workflow's token on disk.
+- **Release builds** pin their GitHub Actions to commits and build with a
+  read-only token that the checkout doesn't keep on disk. Only a separate publish
+  job can write to the repository, and it runs nothing from the repository.
 - **Portable mode** keeps the data folder next to the `.exe`. Encrypted
   secrets in it only open on the Windows account that saved them, so a lost
   drive doesn't give away the AI key or Spotify sign-in (other data on the

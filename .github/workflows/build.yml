@@ -8,8 +8,10 @@
 # build by hand (Actions → Build → Run workflow), for a few days. Release
 # files don't count against it.
 #
-# Pull requests from forks build with a read-only token (GitHub's default
-# for the pull_request event), so they can't publish anything.
+# Every build runs with a read-only token. Publishing is a separate job that
+# only runs for a version tag, once the build has passed. It holds the one write
+# token and runs nothing from the repository, so build steps and dependencies
+# never get near that token.
 #
 # Actions are pinned to commits, because a tag can be moved to different code.
 # Dependabot keeps the pins and their version comments up to date.
@@ -33,11 +35,12 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+permissions:
+  contents: read
+
 jobs:
   windows:
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       # No later step needs Git credentials, so the token isn't left on disk
       # for build steps to find.
@@ -91,8 +94,35 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
-      - name: Publish release
+      # The publish job picks these up from the Actions cache, which has its own
+      # 10 GB limit, so a full artifact quota can't stop a release.
+      - name: Hand over the release files
         if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            dist/eDEX-UI-Setup.exe
+            dist/eDEX-UI-Portable.exe
+          key: release-${{ github.sha }}-${{ github.run_id }}
+
+  publish:
+    needs: windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    # The same system as the build: a cache only restores where it was made.
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get the release files
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            dist/eDEX-UI-Setup.exe
+            dist/eDEX-UI-Portable.exe
+          key: release-${{ github.sha }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - name: Publish release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
