@@ -7,7 +7,7 @@ import { terminalTheme, terminalFont, terminalCursorStyle } from "../core/theme.
 import * as settings from "../core/settings.js";
 import * as sfx from "../core/audio.js";
 import { on, emit } from "../core/bus.js";
-import { toast, contextMenu, copyText, cleanError } from "../core/ui.js";
+import { toast, contextMenu, copyText, cleanError, confirmCommand, modalOpen } from "../core/ui.js";
 import { openUrl } from "../core/links.js";
 
 const api = window.edex;
@@ -324,9 +324,9 @@ export class TerminalTab {
         return false;
       }
       if (e.ctrlKey && e.shiftKey && key === "c") { pane.copy(); return false; }
-      if (e.ctrlKey && e.shiftKey && key === "v") { pane.paste(); return false; }
+      if (e.ctrlKey && e.shiftKey && key === "v") { e.preventDefault(); pane.paste(); return false; }
       if (e.ctrlKey && !e.shiftKey && key === "c" && term.hasSelection()) { pane.copy(); term.clearSelection(); return false; }
-      if (e.ctrlKey && !e.shiftKey && key === "v") { pane.paste(); return false; }
+      if (e.ctrlKey && !e.shiftKey && key === "v") { e.preventDefault(); pane.paste(); return false; }
       if (e.ctrlKey && (key === "=" || key === "+")) { pane.zoom(1); return false; }
       if (e.ctrlKey && key === "-") { pane.zoom(-1); return false; }
       if (e.ctrlKey && key === "0") { settings.set({ termFontSize: 14 }); return false; }
@@ -336,6 +336,14 @@ export class TerminalTab {
       if (e.key === "F1") return false;
       return true;
     });
+
+    // The browser's own paste (Shift+Insert) would go straight to the shell
+    // from xterm's handler, past the check in pasteText.
+    this.host.addEventListener("paste", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      me().paste();
+    }, true);
 
     // Windows Terminal convention: right-click copies a selection, else pastes.
     this.host.addEventListener("contextmenu", (e) => {
@@ -448,13 +456,32 @@ export class TerminalTab {
   async paste() {
     let text = "";
     try { text = await api.clip.read(); } catch (_) {}
-    if (!text) return;
-    this.input(text.replace(/\r?\n/g, "\r"));
+    this.pasteText(text);
   }
 
-  input(text) {
-    if (!this.alive || !text) return;
-    this.term.paste(text);
+  // A line break in pasted text runs what came before it, and other control
+  // characters act as key presses (an escape sequence can even press Enter), so
+  // text holding them is shown first. A program that turned on bracketed paste
+  // takes it all as text, unless an escape inside ends the bracket early.
+  async pasteText(text) {
+    if (!text || !this.alive || modalOpen()) return;
+    const bracketed = this.term.modes.bracketedPasteMode;
+    if (!bracketed) {
+      // A single line copied along with its line ending shouldn't run by itself.
+      const trimmed = text.replace(/[\r\n]+$/, "");
+      if (!/[\r\n]/.test(trimmed)) text = trimmed;
+    }
+    if ((bracketed ? /[\x1b\x9b]/ : /[\x00-\x08\x0a-\x1f\x7f-\x9f]/).test(text)) {
+      const lines = text.split(/\r\n?|\n/).filter((l) => l.trim()).length;
+      const ok = await confirmCommand({
+        title: lines > 1 ? `Paste ${lines} lines?` : "Paste this text?",
+        message: "Line breaks in this text run what comes before them straight away, and other control characters act as key presses. Only paste it if you understand all of it.",
+        command: text,
+        confirmLabel: "Paste"
+      });
+      if (!ok) return;
+    }
+    if (this.alive && text) this.term.paste(text.replace(/\r?\n/g, "\r"));
   }
 
   // Find bar: Enter / Shift+Enter step through matches, Esc closes.

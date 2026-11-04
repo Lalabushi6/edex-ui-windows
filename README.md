@@ -171,7 +171,8 @@ locked down.
   browser follow the focused pane.
 - **Find in terminal** (`Ctrl+Shift+F`, Enter / Shift+Enter, match case),
   clickable links (`Ctrl`+click), Windows Terminal-style copy / paste
-  (right-click copies a selection or pastes), font zoom (`Ctrl+=` / `Ctrl+-` /
+  (right-click copies a selection or pastes, and text with several lines is
+  shown first), font zoom (`Ctrl+=` / `Ctrl+-` /
   `Ctrl+0`), restart a shell that exited with Enter, rename tabs.
 - **Explain with Claude**: Shift+right-click → send the selection or the last
   screenful of output to the AI assistant.
@@ -285,7 +286,8 @@ locked down.
 - **AI assistant** (optional, your own Anthropic API key): ask Claude from the
   launcher (`? question`), with `Ctrl+Shift+J`, or "Explain with Claude" on
   terminal output. Answers stream in; commands in them run in the terminal
-  with one click. Choose Claude Opus 5.5, Sonnet 5.5 or Haiku 5.5.
+  with one click, or with a confirmation once the conversation has read
+  terminal output. Choose Claude Opus 5.5, Sonnet 5.5 or Haiku 5.5.
 - **Weather** with a four-day forecast, **notes** (auto-saved), **clipboard
   history** (memory only, never written to disk) and **quick links**.
 
@@ -536,7 +538,8 @@ shown again, and only sent to Anthropic's API (api.anthropic.com) when you
 ask something. Pick Claude Opus 5.5 for the best answers, or Sonnet 5.5 /
 Haiku 5.5 for faster, cheaper ones. If Opus or Sonnet declines a
 request, the API retries it on a fallback model automatically. Commands in
-answers only run when you click **Run in terminal**.
+answers only run when you click **Run in terminal**, and once a conversation
+has read terminal output, you confirm each one first.
 
 #### How heavy is it on my PC?
 Light for what it shows: telemetry comes from one long-lived helper, every
@@ -660,7 +663,8 @@ How the build works:
   helper bundle can't be unpacked without Windows Developer Mode.
 - The packaged app is hardened with **Electron fuses**: no `--inspect`, no
   `NODE_OPTIONS`, code loads only from the app archive, cookies are encrypted.
-  (`runAsNode` stays on because node-pty needs it.)
+  (`runAsNode` stays on because node-pty needs it, and asar integrity validation
+  is off while the `.exe` isn't signed.)
 - Unneeded dependency files (sources, docs, tests, other platforms' binaries)
   are left out of the package.
 
@@ -753,8 +757,9 @@ docs/                PUBLISHING.md (GitHub and releases)
   `.kube`, `.docker`, `.git-credentials`, `.npmrc`, `.netrc`, the GitHub CLI
   login, browser profiles, the Windows credential vault and DPAPI keys, eDEX's
   own encrypted API key and its browser tabs' cookies …) are never readable.
-  Writes are refused in Windows, Program Files, ProgramData, on drive roots and
-  on network paths.
+  Copying a folder that holds one leaves it behind and says so, and that folder
+  can't be moved or renamed. Writes are refused in Windows, Program Files,
+  ProgramData, on drive roots and on network paths.
 - **Programs** Windows itself provides are started by their full path, and eDEX
   runs from System32, so a program planted in the folder it was started from
   (Downloads, a USB drive) can't run in their place.
@@ -765,10 +770,10 @@ docs/                PUBLISHING.md (GitHub and releases)
   the terminal to "follow", a restored tab. Just looking at one would send your
   Windows sign-in hash to that server. Mapped drives work as usual.
 - **Deleting** moves items to the Recycle Bin.
-- **Confirmations the UI can't fake**: running an executable from the explorer
-  outside the Start menu / Desktop, ending a process and power actions are
-  confirmed by the main process; critical system processes are refused
-  outright.
+- **Confirmations the UI can't fake**: opening anything that can run code from
+  the explorer (only shortcuts in the Start menu or on the Desktop open directly),
+  ending a process and power actions are confirmed by the main process; critical
+  system processes are refused outright.
 - **Settings files** can't start anything by themselves. Their command widgets
   and calendars arrive switched off, and a widget turns on only after you've
   reviewed its full command, with long blank stretches and invisible characters
@@ -815,9 +820,10 @@ docs/                PUBLISHING.md (GitHub and releases)
   no client secret.
 - **Updates** must match the size and SHA-256 digest GitHub publishes for the
   release file before anything runs, are checked again just before they start,
-  and installing always asks first.
+  and installing always asks first. A file with no digest isn't downloaded.
 - **Packaged builds** disable Node inspection and `NODE_OPTIONS` and load code
-  only from the app archive (Electron fuses).
+  only from the app archive (Electron fuses). `SECURITY.md` lists the two fuses
+  left at a less strict setting, and why.
 
 **Privacy:** the world-view globe looks up your public IP location (ipapi.co,
 falling back to ipinfo.io) and checks latency to google.com and twelve public

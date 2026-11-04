@@ -59,7 +59,9 @@ reproduce it, and the eDEX version.
   links are resolved before checks, credential stores and token files are
   never readable, system folders and network paths are never written. eDEX's
   own encrypted AI key, Spotify sign-in and browser-tab cookies are on that
-  list too.
+  list too. Copying a folder that holds one of these leaves it behind and says
+  so, and that folder can't be moved or renamed. This is a safeguard for the
+  interface, not a wall: anything run in a terminal has your full access.
 - Network paths aren't touched until you open that share yourself, by typing
   it in the file explorer or launcher or confirming a saved link, and that
   lasts for the session. Ones named by a file, by program output or by settings
@@ -70,8 +72,20 @@ reproduce it, and the eDEX version.
 - Windows' own programs are started by their full path and eDEX runs from
   System32, so a program planted in the folder it was started from can't run
   in their place.
-- Running a program from the file explorer and ending a process both ask
-  first.
+- Opening anything that can run code from the file explorer asks first:
+  programs and scripts, but also help files, web archives and disk images. Only
+  shortcuts in the Start Menu, Quick Launch or on the Desktop open directly, so
+  a program downloaded to the Desktop still asks. Ending a process asks too.
+- Pasting into a terminal shows the text first if it holds line breaks or other
+  control characters, since those can run commands straight away. A single line
+  copied with its line ending doesn't run. There's no prompt when the program
+  in the terminal has turned on bracketed paste, because it then takes the text
+  as text, unless the text contains an escape that could end that mode.
+- **The AI assistant** gets terminal output marked as untrusted data, in a
+  delimiter the output can't close. A command in an answer runs only when you
+  click, and once a conversation has read terminal output you confirm it in a
+  dialog that shows the whole command. A model can still be misled by what it
+  reads, so that dialog is the check that counts.
 - A settings file can't start anything by itself: its command widgets and
   calendar links arrive switched off. A widget turns on only after you've
   reviewed its full command, with long blank stretches and invisible characters
@@ -96,11 +110,19 @@ reproduce it, and the eDEX version.
 - **Updates** come from this repository's GitHub releases page. A download
   must match the release file's size and the SHA-256 digest GitHub publishes
   for it before anything runs, is checked again just before it starts, and
-  installing always asks first. The executables aren't code-signed, so the
-  digest is the integrity check.
+  installing always asks first. A file with no digest isn't downloaded. The
+  executables aren't code-signed, so the digest is the integrity check, and it
+  comes from the same place as the download.
+- **Release builds** pin their GitHub Actions to commits and build with a
+  read-only token that the checkout doesn't keep on disk. Only a separate publish
+  job can write to the repository, and it runs nothing from the repository.
 - **Portable mode** keeps the data folder next to the `.exe`. Encrypted
   secrets in it only open on the Windows account that saved them, so a lost
   drive doesn't give away the AI key or Spotify sign-in (other data on the
   drive, like notes and settings, is not encrypted).
 - Packaged builds disable Node inspection and `NODE_OPTIONS` and load code
-  only from the app archive (Electron fuses).
+  only from the app archive (Electron fuses). Two fuses stay at the less strict
+  setting. `runAsNode` is on because node-pty starts a helper with Electron as
+  Node. Asar integrity validation is off, so the archive isn't hash-checked at
+  startup. Both only matter to something already running as you, and an
+  integrity check adds little while the `.exe` itself isn't signed.

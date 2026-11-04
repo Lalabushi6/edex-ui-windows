@@ -204,6 +204,7 @@ New tab: `Ctrl+Shift+T` (default shell) or the ⌄ menu for a specific shell.
 | Copy selection | `Ctrl+C` (with a selection) or `Ctrl+Shift+C` |
 | Paste | `Ctrl+V` or `Ctrl+Shift+V` |
 | Right-click | copy selection, or paste when nothing is selected |
+| Pasting several lines | eDEX shows the text first, because line breaks can run commands |
 | Terminal menu | `Shift`+right-click |
 | Font size | `Ctrl+=`, `Ctrl+-`, `Ctrl+0` |
 | Open a link | `Ctrl`+click |
@@ -882,7 +883,10 @@ is sent to Anthropic's Claude API (api.anthropic.com), and only when you
 ask. Pick Claude Opus 5.5 (best answers), Sonnet 5.5 or Haiku 5.5 (faster,
 cheaper); usage is billed to your API account. If Opus or Sonnet declines a
 request, the API retries it on a fallback model automatically. Commands in
-answers run in the terminal only when you click **Run in terminal**.
+answers run in the terminal only when you click **Run in terminal**. Once a
+conversation has read terminal output, eDEX shows the command and asks you to
+confirm it, because anything printed there can try to steer the answer. **New
+chat** starts clean.
 
 Whole-PC search, the disk map, Bluetooth, Now playing, the mixer, the game
 library (read from the launchers' files on this PC) and the music library
@@ -896,7 +900,8 @@ all work locally; they send nothing anywhere. The notification history
 Settings → About → **Check now** (or the launcher: "Check for updates")
 looks at this project's GitHub releases page. When there's a newer version
 you see its release notes and **Download and install**: the file downloads,
-is checked against its size and the SHA-256 digest GitHub publishes for it,
+is checked against its size and the SHA-256 digest GitHub publishes for it
+(a file with no digest isn't offered for install; use the release page),
 and — after you confirm — eDEX closes and the installer starts (your
 settings stay). The portable build downloads the new portable `.exe`,
 replaces itself on the drive and starts again. **Skip this version** stops
