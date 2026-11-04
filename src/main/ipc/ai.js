@@ -4,11 +4,11 @@
 // they explicitly choose to include, is sent. Answers stream back as text.
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
-const { app, safeStorage } = require("electron");
+const { app } = require("electron");
 const sdk = require("@anthropic-ai/sdk");
 const { handle } = require("./util");
+const { SecretFile } = require("../lib/secret-file");
 
 const Anthropic = sdk.Anthropic || sdk.default || sdk;
 const MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]);
@@ -23,24 +23,17 @@ const SYSTEM = [
 ].join(" ");
 
 function registerAi({ settings }) {
-  const keyFile = path.join(app.getPath("userData"), "ai-key.bin");
+  const keyFile = new SecretFile(path.join(app.getPath("userData"), "ai-key.bin"));
   const active = new Map(); // request id -> stream
-
-  const readKey = () => {
-    try {
-      if (!safeStorage.isEncryptionAvailable()) return null;
-      return safeStorage.decryptString(fs.readFileSync(keyFile));
-    } catch (_) { return null; }
-  };
 
   // A key saved on another PC or Windows account (a portable drive) exists
   // but can't be decrypted here.
-  handle("ai:status", () => {
-    const key = readKey();
+  handle("ai:status", async () => {
+    const key = await keyFile.read();
     return {
       configured: !!key,
-      unreadable: !key && fs.existsSync(keyFile),
-      encryption: safeStorage.isEncryptionAvailable(),
+      unreadable: !key && keyFile.exists,
+      encryption: await keyFile.available(),
       enabled: !!settings.get("aiEnabled"),
       model: settings.get("aiModel")
     };
@@ -48,12 +41,12 @@ function registerAi({ settings }) {
 
   handle("ai:setKey", async (_e, key) => {
     if (key === "" || key === null) {
-      await fs.promises.rm(keyFile, { force: true });
+      await keyFile.remove();
       return { configured: false };
     }
     if (typeof key !== "string" || key.length < 20 || key.length > 400 || /\s/.test(key.trim())) throw new Error("That doesn't look like an API key");
-    if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows can't encrypt the key on this account");
-    await fs.promises.writeFile(keyFile, safeStorage.encryptString(key.trim()));
+    if (!(await keyFile.available())) throw new Error("Windows can't encrypt the key on this account");
+    await keyFile.write(key.trim());
     return { configured: true };
   });
 
@@ -61,7 +54,11 @@ function registerAi({ settings }) {
   handle("ai:ask", async (event, id, messages) => {
     if (typeof id !== "string" || !/^[\w-]{1,40}$/.test(id)) throw new Error("Invalid request");
     if (!settings.get("aiEnabled")) throw new Error("The AI assistant is turned off (Settings → Privacy)");
-    const apiKey = readKey();
+    // Stop can arrive while the key is being read, before there is a stream.
+    let stopped = false;
+    active.set(id, { abort: () => { stopped = true; } });
+    const apiKey = await keyFile.read();
+    active.delete(id);
     if (!apiKey) throw new Error("Add an API key in Settings → Privacy → AI assistant");
     if (!Array.isArray(messages) || !messages.length || messages.length > 40) throw new Error("Invalid conversation");
     let total = 0;
@@ -75,6 +72,10 @@ function registerAi({ settings }) {
 
     const model = MODELS.has(settings.get("aiModel")) ? settings.get("aiModel") : "claude-opus-5-5";
     const send = (channel, payload) => { if (!event.sender.isDestroyed()) event.sender.send(channel, { id, ...payload }); };
+    if (stopped || event.sender.isDestroyed()) {
+      send("ai:done", { stop: "cancelled" });
+      return true;
+    }
     const client = new Anthropic({ apiKey, maxRetries: 2 });
     const params = {
       model,
