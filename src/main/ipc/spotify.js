@@ -33,6 +33,7 @@ const REQUEST_MS = 15000;
 
 const b64url = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const fail = (message, code) => Object.assign(new Error(message), { code });
+const notConnected = () => fail("Connect your Spotify account first", "not_connected");
 
 function page(title, text) {
   return `<!doctype html><meta charset="utf-8"><title>${title}</title><body style="background:#05080d;color:#aacfd1;font:16px system-ui,sans-serif;display:grid;place-items:center;height:96vh;margin:0"><div style="text-align:center"><h1 style="font-weight:400;letter-spacing:.08em">${title}</h1><p>${text}</p></div>`;
@@ -67,10 +68,12 @@ function registerSpotify({ settings, windows }) {
   let access = null; // { token, expires }
   let profile = null;
   let pending = null;
+  let signOuts = 0; // an answer to a request sent before a sign-out must not undo it
   const art = new Map();
 
   const clientId = () => settings.get("spotifyClientId") || "";
   const forget = async () => {
+    signOuts++;
     access = null;
     profile = null;
     await tokenFile.remove();
@@ -103,17 +106,22 @@ function registerSpotify({ settings, windows }) {
 
   async function token() {
     if (access && Date.now() < access.expires) return access.token;
+    const seen = signOuts;
     const refresh = await tokenFile.read();
-    if (!refresh || !clientId()) throw fail("Connect your Spotify account first", "not_connected");
+    if (!refresh || !clientId() || seen !== signOuts) throw notConnected();
+    let body;
     try {
-      return await keep(await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() }));
+      body = await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() });
     } catch (e) {
+      if (seen !== signOuts) throw notConnected();
       if (e.code === "invalid_grant" || e.code === "invalid_client") {
         await forget();
         throw fail("Spotify signed eDEX out — connect again", "not_connected");
       }
       throw e;
     }
+    if (seen !== signOuts) throw notConnected();
+    return keep(body);
   }
 
   async function api(method, endpoint, { query, body } = {}) {
@@ -151,7 +159,9 @@ function registerSpotify({ settings, windows }) {
 
   async function me() {
     if (!profile) {
+      const seen = signOuts;
       const p = await api("GET", "/me");
+      if (seen !== signOuts) throw notConnected();
       profile = { id: p?.id || "", name: p?.display_name || p?.id || "Spotify user", product: p?.product || "" };
     }
     return profile;
@@ -214,7 +224,11 @@ function registerSpotify({ settings, windows }) {
         }
       });
     });
-    await keep(await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier }));
+    // Disconnect cancels the wait above, but by now there is nothing left to cancel.
+    const seen = signOuts;
+    const body = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier });
+    if (seen !== signOuts) throw fail("Cancelled");
+    await keep(body);
     profile = null;
     return me();
   });
