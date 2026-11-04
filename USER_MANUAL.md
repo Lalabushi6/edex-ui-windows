@@ -241,7 +241,9 @@ and the explorer's address bar open here instead of your default browser
 
 Right-click a page for back / forward / reload, open a link in a new tab or
 in your browser, copy a link, save an image, or inspect. Links that open a
-new window (target=_blank, pop-ups) open as new eDEX browser tabs.
+new window (target=_blank, pop-ups) open as new eDEX browser tabs. As in any
+browser, a page can talk to a pop-up it opened (sign-in windows do) and a
+pop-up can close itself, which closes its tab.
 Downloads ask where to save, and a notice offers to show the file. eDEX's
 own shortcuts (Ctrl+Shift+…, Ctrl+Tab, Ctrl+1…9, Ctrl+, and F1) keep
 working while a page has focus. An empty tab shows your web quick links.

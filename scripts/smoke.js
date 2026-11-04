@@ -8,6 +8,7 @@
 "use strict";
 
 const fs = require("fs");
+const http = require("http");
 const os = require("os");
 const path = require("path");
 const { spawn, execSync } = require("child_process");
@@ -158,6 +159,32 @@ async function main() {
       return { added: tabs().length - before, missing: kinds };`);
     if (opened.missing.length) throw new Error(`didn't open: ${opened.missing.join(", ")}`);
     return `${opened.added} tabs added`;
+  });
+
+  await check("a page's pop-up opens as a tab and closes with it", async () => {
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(`<title>${new URL(req.url, "http://x").pathname.slice(1)}</title>`);
+    });
+    await new Promise((res) => server.listen(0, "127.0.0.1", res));
+    const site = `http://127.0.0.1:${server.address().port}`;
+    const hasTab = (name) => `[...document.querySelectorAll('.tab-browser .t')].some((t) => t.textContent === '${name}')`;
+    let opener = null;
+    try {
+      await run(`${H} bus.emit('open-browser', { url: '${site}/smoke-opener' });`);
+      if (!(await waitFor(`return ${hasTab("smoke-opener")};`))) throw new Error("the opening page has no tab");
+      const list = await (await fetch(`http://127.0.0.1:${devtoolsPort}/json/list`)).json();
+      opener = await connect(list.find((t) => t.url === `${site}/smoke-opener`).webSocketDebuggerUrl);
+      await opener.send("Runtime.evaluate", { expression: `window.popup = window.open('${site}/smoke-popup'); true` });
+      if (!(await waitFor(`return ${hasTab("smoke-popup")};`))) throw new Error("the pop-up didn't become a tab");
+      await opener.send("Runtime.evaluate", { expression: "window.popup.close(); true" });
+      if (!(await waitFor(`return !${hasTab("smoke-popup")};`))) throw new Error("the pop-up's tab didn't close");
+    } finally {
+      opener?.ws.close();
+      await run(`[...document.querySelectorAll('.tab-browser')].find((t) => t.querySelector('.t').textContent === 'smoke-opener')?.querySelector('.x').click();`).catch(() => {});
+      server.closeAllConnections();
+      server.close();
+    }
   });
 
   await check("media player views (player, library, radio)", async () => {

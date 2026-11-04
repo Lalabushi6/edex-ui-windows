@@ -18,7 +18,8 @@ reproduce it, and the eDEX version.
   (`persist:edex-browser`), each in a sandboxed view with no preload bridge,
   so a page can't call eDEX's handlers or reach `app://` / `localfile:`.
   Only `http(s)` pages load (mail links go to the mail app, other schemes
-  are refused), pop-ups become new tabs (a few at a time), web permissions are
+  are refused), pop-ups become new tabs (a few at a time) and load as links
+  from the page that opened them, web permissions are
   refused apart from fullscreen and copying to the clipboard, client
   certificates are never offered on their own, WebRTC doesn't reveal local
   network addresses, and downloads are saved only where you choose in a Save
