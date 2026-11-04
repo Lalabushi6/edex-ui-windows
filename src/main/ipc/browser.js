@@ -300,6 +300,13 @@ function registerBrowser({ windows, notices, settings }) {
     view.setBackgroundColor("#ffffff");
     view.setVisible(false);
     win.contentView.addChildView(view);
+    // A page Chromium made thinks it's on show until a view with a size has
+    // shown and hidden it; left alone, one opened behind keeps drawing.
+    if (popup) {
+      view.setBounds({ x: 0, y: 0, width: 1, height: 1 });
+      view.setVisible(true);
+      view.setVisible(false);
+    }
     entry.view = view;
     entry.wc = view.webContents;
     // Pages don't get to see this PC's local network addresses through WebRTC.
