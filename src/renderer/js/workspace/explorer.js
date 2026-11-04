@@ -658,6 +658,8 @@ export class ExplorerTab {
           this.paintSelection();
         }
         toast(`${mode === "move" ? "Moved" : "Copied"} ${results.length} item${results.length === 1 ? "" : "s"} to ${fmt.basename(destDir) || destDir}`, { level: "ok" });
+        const skipped = results.flatMap((r) => r.skipped);
+        if (skipped.length) toast(`Left out ${skipped.length} protected item${skipped.length === 1 ? "" : "s"}: ${skipped.slice(0, 3).map(fmt.basename).join(", ")}${skipped.length > 3 ? "…" : ""}`, { level: "warn", timeout: 8000 });
       }
     } catch (e) {
       toast(cleanError(e), { level: "warn", timeout: 5000 });

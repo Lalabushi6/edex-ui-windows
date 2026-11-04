@@ -90,8 +90,9 @@ Later changes: `git push` after committing.
 - **Commit email**: every commit shows the email it was made with. For
   future commits, use GitHub's no-reply address (see *Your email address in
   commits* above); commits already pushed keep theirs.
-- Pull requests from forks build with a read-only token, so they can't
-  publish releases or change the repository.
+- Every build runs with a read-only token, so pull requests and their
+  dependencies can't publish releases or change the repository. Only the
+  publish job can write, and it only runs for a version tag.
 
 ## The automatic build
 
@@ -107,7 +108,9 @@ get a test build you can download: repository → **Actions** tab → **Build**
 → **Run workflow** → **Run workflow**. When it finishes, the run's
 **Artifacts** list `eDEX-UI-Setup.exe` and `eDEX-UI-Portable.exe`, each
 downloadable as the `.exe` itself, for 3 days. Release builds put their
-files on the release page instead, which doesn't use artifact storage.
+files on the release page instead, which doesn't use artifact storage. On the
+way there they pass through the Actions cache, so a full artifact quota can't
+stop a release either.
 
 ## Publishing a release (the download page)
 
@@ -165,8 +168,8 @@ that to work:
 - The tag must be a higher version than the running copy (`v2.0.3` >
   `2.0.2`); drafts and pre-releases are ignored.
 - eDEX checks each download against the SHA-256 digest GitHub computes for
-  every release file, so don't replace a file in a published release; cut a
-  new one instead.
+  every release file, and won't install a file that has none, so don't replace
+  a file in a published release; cut a new one instead.
 - The repository it checks comes from `"repository"` in `package.json`. If
   you fork or rename the project, change that URL.
 
@@ -178,6 +181,8 @@ that to work:
 - **Release step fails with a permissions error**: repository → Settings →
   Actions → General → Workflow permissions → **Read and write permissions**
   → Save, then re-run the job (Actions → the run → Re-run jobs).
+- **Publish job can't find the release files in the cache**: nothing was
+  published. Actions → the run → **Re-run all jobs** builds them again.
 - **Build fails in `npm ci`**: `package-lock.json` is out of date; run
   `npm install` locally, commit the updated lock file and push.
 - **"Artifact storage quota has been hit"**: old build artifacts fill the
@@ -186,9 +191,11 @@ that to work:
   artifacts; release files aren't touched); GitHub recalculates the usage
   6–12 hours later. Uploads no longer fail the build either way.
 - **"Node.js 20 is deprecated" warnings**: an action in a workflow is on an
-  old major version. Bump it (`actions/checkout@v7`, `actions/setup-node@v7`,
-  `actions/upload-artifact@v7`, `softprops/action-gh-release@v3` are the
-  Node 24 ones the workflows use).
+  old major version. Merge Dependabot's pull request. The workflows pin each
+  action to a commit with its version in a comment, so a bump by hand changes
+  both (`actions/checkout` v7, `actions/setup-node` v7,
+  `actions/upload-artifact` v7, `actions/cache` v6 and
+  `softprops/action-gh-release` v3 are the Node 24 ones they use).
 - **SmartScreen warns about the downloaded .exe**: expected for unsigned
   apps. Users click **More info → Run anyway**. Signing needs a paid
   code-signing certificate; electron-builder picks one up from the

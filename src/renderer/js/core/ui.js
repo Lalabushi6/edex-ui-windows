@@ -121,6 +121,45 @@ export function confirm({ title, message = "", confirmLabel = "Confirm", danger 
   });
 }
 
+// A command exactly as it would run: blank space that could push the rest out
+// of sight is counted, and characters that don't show are named.
+function revealCommand(text) {
+  return text
+    .replace(/\n(?:[\t\p{Zs}]*\n)+/gu, (m) => `\n⟦${m.split("\n").length - 1} line breaks⟧\n`)
+    .replace(/[\t\p{Zs}]{4,}/gu, (m) => ` ⟦${m.length} blanks⟧ `)
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => (c === "\n" || c === "\t" ? c : `⟦U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}⟧`));
+}
+
+const COMMAND_PREVIEW_MAX = 20000;
+
+// The elements that show a command in a dialog, for someone deciding whether
+// to let it run.
+export function commandPreview(command) {
+  const plain = String(command).replace(/\r\n?/g, "\n");
+  const head = plain.slice(0, COMMAND_PREVIEW_MAX);
+  const shown = revealCommand(head);
+  const rest = plain.length - head.length;
+  return [
+    h("pre", { class: "cmdw-out cmdw-review" }, rest > 0 ? `${shown}\n⟦${rest} more characters not shown⟧` : shown),
+    shown !== head && h("p", { class: "dialog-msg warn-text" }, "This command has long blank stretches or invisible characters, marked ⟦like this⟧. That's unusual, and can be a way of hiding part of a command.")
+  ];
+}
+
+// Asks before text reaches a shell. Cancel has the focus, so a stray Enter
+// doesn't run anything.
+export function confirmCommand({ title, message, command, confirmLabel }) {
+  return new Promise((resolve) => {
+    openModal((close) => h("div", { class: "dialog cmdw-dialog" },
+      h("h2", { class: "dialog-title" }, title),
+      h("p", { class: "dialog-msg" }, message),
+      commandPreview(command),
+      h("div", { class: "dialog-actions" },
+        h("button", { class: "btn", type: "button", "data-autofocus": true, onclick: () => close(false) }, "Cancel"),
+        h("button", { class: "btn primary", type: "button", onclick: () => close(true) }, confirmLabel))),
+    { onClose: (r) => resolve(r === true), label: title });
+  });
+}
+
 // A saved link (a pin, a quick link) can name a network path, and a settings
 // file can plant one under a harmless label. Opening it contacts that server,
 // so the full address is shown first the time it's opened each session.

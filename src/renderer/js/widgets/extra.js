@@ -6,7 +6,7 @@ import { poll } from "../core/poll.js";
 import * as fmt from "../core/format.js";
 import * as settings from "../core/settings.js";
 import { on, emit } from "../core/bus.js";
-import { openModal, toast, contextMenu, confirm, copyText, cleanError } from "../core/ui.js";
+import { openModal, toast, contextMenu, confirm, copyText, cleanError, commandPreview } from "../core/ui.js";
 import { defineWidget, undefineWidget, refreshWidgets } from "./registry.js";
 
 const api = window.edex;
@@ -168,17 +168,7 @@ async function removeCommandWidget(cfg) {
   settings.set({ commandWidgets: (settings.get("commandWidgets") || []).filter((c) => c.id !== cfg.id) });
 }
 
-// A command exactly as it would run: blank space that could push the rest out
-// of sight is counted, and characters that don't show are named.
-function revealCommand(text) {
-  return text
-    .replace(/(?:[\t\p{Zs}]*\n){2,}/gu, (m) => `\n⟦${m.split("\n").length - 1} line breaks⟧\n`)
-    .replace(/[\t\p{Zs}]{4,}/gu, (m) => ` ⟦${m.length} blanks⟧ `)
-    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => (c === "\n" || c === "\t" ? c : `⟦U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}⟧`));
-}
-
 export function reviewCommandWidget(cfg, onTurnedOn) {
-  const shown = revealCommand(cfg.command);
   openModal((close) => {
     const turnOn = () => {
       settings.set({ commandWidgets: (settings.get("commandWidgets") || []).map((c) => (c.id === cfg.id && c.command === cfg.command ? { ...c, enabled: true } : c)) });
@@ -189,8 +179,7 @@ export function reviewCommandWidget(cfg, onTurnedOn) {
     return h("div", { class: "dialog cmdw-dialog" },
       h("h2", { class: "dialog-title" }, `Review “${cfg.title}”`),
       h("p", { class: "dialog-msg" }, `This command came from a settings file. Once on, it runs as you, in ${cfg.shell === "cmd" ? "Command Prompt" : "PowerShell"}, every ${cfg.interval} seconds while eDEX is on screen. Only turn it on if you understand all of it.`),
-      h("pre", { class: "cmdw-out cmdw-review" }, shown),
-      shown !== cfg.command && h("p", { class: "dialog-msg warn-text" }, "This command has long blank stretches or invisible characters, marked ⟦like this⟧. That's unusual, and can be a way of hiding part of a command."),
+      commandPreview(cfg.command),
       h("div", { class: "dialog-actions" },
         h("button", { class: "btn", type: "button", "data-autofocus": true, onclick: () => close() }, "Keep it off"),
         h("button", { class: "btn primary", type: "button", onclick: turnOn }, "Turn on")));
