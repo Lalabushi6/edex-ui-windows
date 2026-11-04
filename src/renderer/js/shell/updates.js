@@ -57,11 +57,13 @@ export async function openUpdates({ result = null } = {}) {
       }
       setText(status, `eDEX-UI ${r.version} is available — you have ${r.current}.`);
       body.append(
-        h("div", { class: "upd-meta muted" }, [r.name, r.published ? new Date(r.published).toLocaleDateString() : "", r.asset ? `${r.asset.name} · ${fmt.bytes(r.asset.size)}${r.asset.verified ? " · checked against GitHub's SHA-256" : ""}` : ""].filter(Boolean).join(" · ")),
+        h("div", { class: "upd-meta muted" }, [r.name, r.published ? new Date(r.published).toLocaleDateString() : "", r.asset ? `${r.asset.name} · ${fmt.bytes(r.asset.size)}${r.asset.digest ? " · SHA-256 published" : ""}` : ""].filter(Boolean).join(" · ")),
+        r.asset && !r.asset.digest ? h("div", { class: "upd-meta warn-text" }, "GitHub lists no SHA-256 for this file, so eDEX can't verify it and won't install it. If you trust this release, get it from the release page.") : null,
         notes(r.notes));
       const install = h("button", { class: "btn primary", type: "button" }, icon("download"), r.kind === "portable" ? "Download and replace" : "Download and install");
-      install.disabled = !r.asset;
+      install.disabled = !r.asset?.digest;
       if (!r.asset) install.title = r.kind ? "This release has no matching file" : "Development runs can't install updates";
+      else if (!r.asset.digest) install.title = "GitHub lists no SHA-256 for this file";
       install.addEventListener("click", async () => {
         if (busy) return;
         busy = true;
@@ -72,8 +74,8 @@ export async function openUpdates({ result = null } = {}) {
           setText(status, `Downloading… ${fmt.bytes(got)}${total ? ` of ${fmt.bytes(total)}` : ""}`);
         });
         try {
-          await api.updates.download();
-          setText(status, "Downloaded and verified. Installing restarts eDEX.");
+          const { verified } = await api.updates.download();
+          setText(status, `${verified ? "Downloaded and verified" : "Downloaded"}. Installing restarts eDEX.`);
           const ok = await api.updates.install();
           if (!ok) { install.disabled = false; setText(status, "Ready to install whenever you like."); }
         } catch (e) {

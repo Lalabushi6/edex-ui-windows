@@ -133,6 +133,12 @@ function isSensitive(p) {
   return SENSITIVE_PATHS.some((blocked) => isPathInside(blocked, p));
 }
 
+// Whether a protected location sits inside this folder. Moving or renaming the
+// folder would carry it out from under the check above.
+function holdsSensitive(p) {
+  return SENSITIVE_PATHS.some((blocked) => isPathInside(p, blocked) && fs.existsSync(blocked));
+}
+
 // Resolves `target` to its canonical form. realpath() throws on a missing
 // leaf, so the deepest existing ancestor is resolved and the tail re-joined.
 async function canonicalize(target) {
@@ -221,6 +227,7 @@ module.exports = {
   allowNetworkShare,
   linksToNetwork,
   isSensitive,
+  holdsSensitive,
   addSensitive,
   forRead,
   forWrite,

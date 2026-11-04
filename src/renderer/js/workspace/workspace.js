@@ -54,7 +54,7 @@ export class Workspace {
     });
     on("terminal-input", ({ text }) => {
       const tab = this.active?.type === "terminal" ? this.active : this.visibleTabs().find((x) => x.type === "terminal");
-      if (tab) { this.activate(tab); tab.focusedPane().input(text); }
+      if (tab) { this.activate(tab); tab.focusedPane().pasteText(text); }
     });
     // Run a command (launcher "$ …", an AI answer): the focused pane of the
     // active terminal, another live one, or a new tab once its shell started.

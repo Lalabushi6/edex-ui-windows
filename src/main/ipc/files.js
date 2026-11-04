@@ -14,13 +14,20 @@ const { handle, on, asString, asStringList } = require("./util");
 const MAX_TEXT_BYTES = 16 * 1024 * 1024;
 const PEEK_BYTES = 256 * 1024;
 
+// Opening one of these can run code: programs and scripts, but also help files,
+// web archives and disk images (which mount, and the files inside may lose the
+// mark that says they were downloaded).
 const EXECUTABLE_EXTS = new Set([
   ".exe", ".msi", ".msp", ".mst", ".bat", ".cmd", ".com", ".scr", ".ps1", ".psm1", ".psd1", ".ps1xml", ".psc1",
   ".vbs", ".vbe", ".vb", ".js", ".jse", ".ws", ".wsc", ".wsf", ".wsh", ".sct", ".jar", ".hta", ".cpl", ".msc",
   ".reg", ".inf", ".scf", ".shb", ".shs", ".lnk", ".url", ".pif", ".gadget", ".xll", ".application", ".appref-ms",
   ".appx", ".appxbundle", ".msix", ".msixbundle", ".appinstaller", ".diagcab", ".library-ms", ".search-ms",
-  ".searchconnector-ms", ".settingcontent-ms", ".theme", ".themepack"
+  ".searchconnector-ms", ".settingcontent-ms", ".theme", ".themepack",
+  ".chm", ".hlp", ".website", ".mht", ".mhtml", ".iso", ".img", ".vhd", ".vhdx"
 ]);
+// Shortcuts open without asking from the folders in trustedShortcutDirs. Nothing
+// else does: a download saved to the Desktop still asks.
+const SHORTCUT_EXTS = new Set([".lnk", ".url", ".appref-ms"]);
 const ICON_EXTS = new Set([".exe", ".lnk", ".url", ".msi", ".appref-ms", ".ico", ".cpl", ".msc"]);
 const HIDDEN_NAMES = new Set([
   "desktop.ini", "thumbs.db", "ntuser.dat", "ntuser.ini", "ntuser.pol", "pagefile.sys", "hiberfil.sys",
@@ -72,6 +79,10 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
   const confirm = (options) => windows.withDialog((win) => dialog.showMessageBox(win, {
     type: "warning", defaultId: 0, cancelId: 0, noLink: true, ...options
   }));
+
+  const refuseIfHoldsSensitive = (p) => {
+    if (paths.holdsSensitive(p)) throw new Error(`"${path.basename(p)}" holds protected credential files, so it can't be moved or renamed here`);
+  };
 
   async function listDir(dirPath, fresh = false) {
     const dir = await paths.forRead(dirPath);
@@ -205,6 +216,7 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
 
   handle("fs:rename", async (_e, target, nextName) => {
     const p = await paths.forWrite(asString(target, "path"));
+    refuseIfHoldsSensitive(p);
     const dest = path.join(path.dirname(p), paths.validateEntryName(nextName));
     if (dest.toLowerCase() !== p.toLowerCase() && fs.existsSync(dest)) {
       throw new Error("An item with that name already exists");
@@ -228,7 +240,9 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
       const sameDir = path.dirname(src).toLowerCase() === dest.toLowerCase();
       if (mode === "move" && sameDir) continue;
       const target = await paths.uniqueDestination(dest, path.basename(src), { copySuffix: mode === "copy" && sameDir });
+      const skipped = [];
       if (mode === "move") {
+        refuseIfHoldsSensitive(src);
         try {
           await fs.promises.rename(src, target);
         } catch (e) {
@@ -238,9 +252,16 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
         }
         invalidate(path.dirname(src));
       } else {
-        await fs.promises.cp(src, target, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true });
+        // The folder itself passed the check, but a protected item inside it
+        // stays behind, and the interface says so.
+        const filter = (from) => {
+          if (!paths.isSensitive(from)) return true;
+          skipped.push(from);
+          return false;
+        };
+        await fs.promises.cp(src, target, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true, filter });
       }
-      results.push({ from: src, to: target });
+      results.push({ from: src, to: target, skipped });
     }
     invalidate(dest);
     return results;
@@ -266,9 +287,9 @@ function registerFiles({ windows, bridge, icons, aux = null }) {
     if (paths.isUncPath(p)) throw new Error("Refusing to open items from network paths");
     const stat = await fs.promises.stat(p);
     const ext = path.extname(p).toLowerCase();
-    const trusted = trustedShortcutDirs().some((d) => paths.isPathInside(d, p));
+    const trusted = SHORTCUT_EXTS.has(ext) && trustedShortcutDirs().some((d) => paths.isPathInside(d, p));
     if (!stat.isDirectory() && EXECUTABLE_EXTS.has(ext) && !trusted) {
-      const { response } = await confirm({ buttons: ["Cancel", "Run"], message: "Run this program?", detail: p });
+      const { response } = await confirm({ buttons: ["Cancel", "Open"], message: "Open this file?", detail: `${p}\n\nOpening it can run programs or change this PC.` });
       if (response !== 1) return false;
     }
     windows.yieldFocus();

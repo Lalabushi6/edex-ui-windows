@@ -1,12 +1,13 @@
 // AI assistant panel (Claude): opened from the launcher ("? question"),
 // Ctrl+Shift+J, or "Explain with Claude" on terminal output. Answers stream
 // in; code blocks get Copy and Run-in-terminal buttons (running always needs
-// the click). The conversation lasts until "New chat" or eDEX restarts.
+// the click, and a confirmation once the conversation has read terminal
+// output). The conversation lasts until "New chat" or eDEX restarts.
 import { h, setText } from "../core/dom.js";
 import { icon } from "../core/icons.js";
 import * as settings from "../core/settings.js";
 import { on, emit } from "../core/bus.js";
-import { openModal, toast, copyText, cleanError } from "../core/ui.js";
+import { openModal, toast, copyText, cleanError, confirmCommand } from "../core/ui.js";
 
 const api = window.edex;
 let history = []; // { role, content, display? }
@@ -38,16 +39,26 @@ function inline(text) {
   return out;
 }
 
-function codeBlock(lang, code) {
+function codeBlock(lang, code, usedTerminal) {
   const shellish = !lang || /^(powershell|ps1?|pwsh|cmd|bat|batch|shell|sh|bash|console)$/i.test(lang);
+  const run = async () => {
+    if (usedTerminal && !(await confirmCommand({
+      title: "Run this command?",
+      message: "This answer came after Claude read terminal output, and anything a program or file printed there can try to steer it. Only run this if you understand all of it.",
+      command: code,
+      confirmLabel: "Run"
+    }))) return;
+    emit("terminal-run", { command: code.replace(/\n+$/, "").replace(/\n/g, "\r") });
+    toast("Sent to the terminal", { timeout: 1400 });
+  };
   return h("div", { class: "ai-code" },
     h("div", { class: "ai-code-bar" }, h("span", { class: "muted" }, lang || "code"), h("span", { class: "grow" }),
       h("button", { class: "btn sm", type: "button", onclick: () => copyText(code, "Copied") }, icon("copy"), "Copy"),
-      shellish ? h("button", { class: "btn sm", type: "button", title: "Paste into the active terminal and run it", onclick: () => { emit("terminal-run", { command: code.replace(/\n+$/, "").replace(/\n/g, "\r") }); toast("Sent to the terminal", { timeout: 1400 }); } }, icon("terminal"), "Run in terminal") : null),
+      shellish ? h("button", { class: "btn sm", type: "button", title: "Paste into the active terminal and run it", onclick: run }, icon("terminal"), "Run in terminal") : null),
     h("pre", null, code));
 }
 
-function renderMarkdown(src) {
+function renderMarkdown(src, usedTerminal = false) {
   const root = h("div", { class: "ai-md" });
   const parts = src.split(/^```/m);
   parts.forEach((part, i) => {
@@ -55,7 +66,7 @@ function renderMarkdown(src) {
       const nl = part.indexOf("\n");
       const lang = nl >= 0 ? part.slice(0, nl).trim() : "";
       const code = nl >= 0 ? part.slice(nl + 1) : "";
-      root.append(codeBlock(lang, code.replace(/\n$/, "")));
+      root.append(codeBlock(lang, code.replace(/\n$/, ""), usedTerminal));
       return;
     }
     for (const block of part.split(/\n{2,}/)) {
@@ -103,7 +114,7 @@ export async function openAiPanel({ prompt = "", context = "" } = {}) {
           h("div", { class: "ai-text" }, m.display || m.content),
           m.context ? h("details", { class: "ai-context" }, h("summary", null, `Terminal output (${m.context.split("\n").length} lines)`), h("pre", null, m.context)) : null);
       }
-      const body = h("div", { class: "ai-msg assistant" }, renderMarkdown(m.content));
+      const body = h("div", { class: "ai-msg assistant" }, renderMarkdown(m.content, m.usedTerminal));
       if (m.content) body.append(h("div", { class: "ai-msg-tools" }, h("button", { class: "icon-btn sm", type: "button", title: "Copy answer", onclick: () => copyText(m.content, "Answer copied") }, icon("copy"))));
       return body;
     };
@@ -117,9 +128,12 @@ export async function openAiPanel({ prompt = "", context = "" } = {}) {
       const q = String(text || "").trim();
       if (!q || busy) return;
       if (!ready) { toast("Set up the AI assistant first", { level: "warn" }); return; }
-      const content = context ? `${q}\n\n\`\`\`\n${context}\n\`\`\`` : q;
+      // Anything can be in terminal output, so its delimiter has a name that
+      // output printed earlier couldn't have known, and can't close it.
+      const tag = `terminal-output-${crypto.randomUUID().replace(/-/g, "")}`;
+      const content = context ? `${q}\n\n<${tag}>\n${context}\n</${tag}>` : q;
       history.push({ role: "user", content, display: q, context: context || undefined });
-      const answer = { role: "assistant", content: "" };
+      const answer = { role: "assistant", content: "", usedTerminal: history.some((m) => m.context) };
       history.push(answer);
       renderLog();
       const live = log.lastElementChild;
@@ -131,7 +145,7 @@ export async function openAiPanel({ prompt = "", context = "" } = {}) {
       let paintQueued = false;
       const paint = () => {
         paintQueued = false;
-        live.replaceChildren(renderMarkdown(answer.content || "…"));
+        live.replaceChildren(renderMarkdown(answer.content || "…", answer.usedTerminal));
         log.scrollTop = log.scrollHeight;
       };
       pending.set(id, {
