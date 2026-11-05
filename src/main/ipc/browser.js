@@ -100,12 +100,12 @@ function registerBrowser({ windows, notices, settings }) {
     });
   };
 
-  // Favicons are fetched through the browser session and handed over as
-  // data URLs (the interface's CSP allows no remote images).
+  // Favicons are fetched through the browser session, as an anonymous request,
+  // and handed over as data URLs (the interface's CSP allows no remote images).
   async function favicon(id, url) {
     if (!isWeb(url)) return;
     try {
-      const res = await ses.fetch(url, { headers: { Accept: "image/*" } });
+      const res = await ses.fetch(url, { credentials: "omit", headers: { Accept: "image/*" } });
       const type = res.headers.get("content-type") || "";
       if (!res.ok || !/^image\//i.test(type)) { res.body?.cancel().catch(() => {}); return; }
       const buf = await readCapped(res, 200 * 1024);
@@ -336,12 +336,6 @@ function registerBrowser({ windows, notices, settings }) {
     makeView(key, entry, popup);
     views.set(key, entry);
     windows.send("browser:open", { url, from, id: key, background: disposition === "background-tab" });
-    // Electron before 45 makes no page for Ctrl and middle clicks. A blank page
-    // going to the address stands in for it, so a page still does the opening.
-    if (!popup) {
-      const { wc } = entry;
-      wc.loadURL("about:blank").then(() => wc.executeJavaScript(`location.replace(${JSON.stringify(url)})`)).catch(() => {});
-    }
     return popup;
   }
 

@@ -67,9 +67,13 @@ function registerSpotify({ settings, windows }) {
   let access = null; // { token, expires }
   let profile = null;
   let pending = null;
+  // How many times the user has signed out. A request still on the network when
+  // that happens compares this on landing, and its answer no longer counts.
+  let signOuts = 0;
   const art = new Map();
 
   const clientId = () => settings.get("spotifyClientId") || "";
+  const notConnected = () => fail("Connect your Spotify account first", "not_connected");
   const forget = async () => {
     access = null;
     profile = null;
@@ -93,22 +97,28 @@ function registerSpotify({ settings, windows }) {
     return body;
   }
 
-  async function keep(body) {
+  // since: the count of sign-outs when the request behind this answer went out.
+  async function keep(body, since) {
+    if (since !== signOuts) throw notConnected();
     if (!body.access_token) throw fail("Spotify didn't return a token");
     access = { token: body.access_token, expires: Date.now() + ((Number(body.expires_in) || 3600) - 60) * 1000 };
-    // Spotify may rotate the refresh token; always keep the newest.
+    // Spotify may rotate the refresh token; always keep the newest. The file's
+    // queue puts a sign-out's removal after this write.
     if (body.refresh_token) await tokenFile.write(body.refresh_token);
     return body.access_token;
   }
 
   async function token() {
     if (access && Date.now() < access.expires) return access.token;
+    const since = signOuts;
     const refresh = await tokenFile.read();
-    if (!refresh || !clientId()) throw fail("Connect your Spotify account first", "not_connected");
+    if (!refresh || !clientId() || since !== signOuts) throw notConnected();
     try {
-      return await keep(await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() }));
+      return await keep(await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() }), since);
     } catch (e) {
-      if (e.code === "invalid_grant" || e.code === "invalid_client") {
+      // After a sign-out this answer is about a token that's gone: if there's a
+      // newer sign-in by now, it isn't this answer's to remove.
+      if (since === signOuts && (e.code === "invalid_grant" || e.code === "invalid_client")) {
         await forget();
         throw fail("Spotify signed eDEX out — connect again", "not_connected");
       }
@@ -151,7 +161,9 @@ function registerSpotify({ settings, windows }) {
 
   async function me() {
     if (!profile) {
+      const since = signOuts;
       const p = await api("GET", "/me");
+      if (since !== signOuts) throw notConnected();
       profile = { id: p?.id || "", name: p?.display_name || p?.id || "Spotify user", product: p?.product || "" };
     }
     return profile;
@@ -214,13 +226,15 @@ function registerSpotify({ settings, windows }) {
         }
       });
     });
-    await keep(await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier }));
+    // Signing out before this point cancelled the wait above.
+    const since = signOuts;
+    await keep(await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier }), since);
     profile = null;
     return me();
   });
 
   handle("spotify:cancel", () => { pending?.cancel(); return true; });
-  handle("spotify:disconnect", async () => { pending?.cancel(); await forget(); return true; });
+  handle("spotify:disconnect", async () => { pending?.cancel(); signOuts++; await forget(); return true; });
   handle("spotify:me", () => me());
 
   handle("spotify:player", async () => {
