@@ -13,12 +13,12 @@
 "use strict";
 
 const crypto = require("crypto");
-const fs = require("fs");
 const http = require("http");
 const path = require("path");
-const { app, net, safeStorage, shell } = require("electron");
+const { app, net, shell } = require("electron");
 const { handle } = require("./util");
 const { readCapped } = require("../lib/http");
+const { SecretFile } = require("../lib/secret-file");
 
 const REDIRECT_PORT = 43821;
 const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
@@ -59,7 +59,7 @@ function track(t) {
 }
 
 function registerSpotify({ settings, windows }) {
-  const tokenFile = path.join(app.getPath("userData"), "spotify-token.bin");
+  const tokenFile = new SecretFile(path.join(app.getPath("userData"), "spotify-token.bin"));
   // Development runs can point at a test server; packaged builds never can.
   const testAccounts = !app.isPackaged ? process.env.EDEX_SPOTIFY_ACCOUNTS : "";
   const accountsBase = testAccounts || "https://accounts.spotify.com";
@@ -70,16 +70,10 @@ function registerSpotify({ settings, windows }) {
   const art = new Map();
 
   const clientId = () => settings.get("spotifyClientId") || "";
-  const readRefresh = () => {
-    try {
-      if (!safeStorage.isEncryptionAvailable()) return null;
-      return safeStorage.decryptString(fs.readFileSync(tokenFile));
-    } catch (_) { return null; }
-  };
   const forget = async () => {
     access = null;
     profile = null;
-    await fs.promises.rm(tokenFile, { force: true });
+    await tokenFile.remove();
   };
 
   async function tokenRequest(params) {
@@ -99,19 +93,20 @@ function registerSpotify({ settings, windows }) {
     return body;
   }
 
-  function keep(body) {
+  async function keep(body) {
     if (!body.access_token) throw fail("Spotify didn't return a token");
     access = { token: body.access_token, expires: Date.now() + ((Number(body.expires_in) || 3600) - 60) * 1000 };
     // Spotify may rotate the refresh token; always keep the newest.
-    if (body.refresh_token) fs.writeFileSync(tokenFile, safeStorage.encryptString(body.refresh_token));
+    if (body.refresh_token) await tokenFile.write(body.refresh_token);
+    return body.access_token;
   }
 
   async function token() {
     if (access && Date.now() < access.expires) return access.token;
-    const refresh = readRefresh();
+    const refresh = await tokenFile.read();
     if (!refresh || !clientId()) throw fail("Connect your Spotify account first", "not_connected");
     try {
-      keep(await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() }));
+      return await keep(await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() }));
     } catch (e) {
       if (e.code === "invalid_grant" || e.code === "invalid_client") {
         await forget();
@@ -119,7 +114,6 @@ function registerSpotify({ settings, windows }) {
       }
       throw e;
     }
-    return access.token;
   }
 
   async function api(method, endpoint, { query, body } = {}) {
@@ -163,10 +157,10 @@ function registerSpotify({ settings, windows }) {
     return profile;
   }
 
-  handle("spotify:status", () => ({
+  handle("spotify:status", async () => ({
     clientId: clientId(),
-    connected: !!clientId() && !!readRefresh(),
-    encryption: safeStorage.isEncryptionAvailable(),
+    connected: !!clientId() && !!(await tokenFile.read()),
+    encryption: await tokenFile.available(),
     redirectUri: REDIRECT_URI,
     user: profile
   }));
@@ -175,7 +169,7 @@ function registerSpotify({ settings, windows }) {
   // browser back to the loopback address with a one-time code.
   handle("spotify:connect", async () => {
     if (!clientId()) throw fail("Paste your Spotify Client ID first");
-    if (!safeStorage.isEncryptionAvailable()) throw fail("Windows can't encrypt the sign-in on this account");
+    if (!(await tokenFile.available())) throw fail("Windows can't encrypt the sign-in on this account");
     pending?.cancel();
     const verifier = b64url(crypto.randomBytes(48));
     const challenge = b64url(crypto.createHash("sha256").update(verifier).digest());
@@ -220,7 +214,7 @@ function registerSpotify({ settings, windows }) {
         }
       });
     });
-    keep(await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier }));
+    await keep(await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier }));
     profile = null;
     return me();
   });

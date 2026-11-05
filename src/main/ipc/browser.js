@@ -55,10 +55,11 @@ function registerBrowser({ windows, notices, settings }) {
   ses.setPermissionRequestHandler((_wc, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
   ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
   ses.setDevicePermissionHandler(() => false);
-  // A site asking for a client certificate must not silently get the first
-  // one in the store, which is what happens unless this says otherwise.
-  app.on("select-client-certificate", (event, wc, _url, _list, callback) => {
-    if (wc?.session !== ses) return;
+  // A server asking for a client certificate must not silently get the first
+  // one in the store, which is what happens unless this says otherwise. That
+  // goes for eDEX's own requests too (update checks, calendar feeds, favicons),
+  // which arrive here with no webContents.
+  app.on("select-client-certificate", (event, _wc, _url, _list, callback) => {
     event.preventDefault();
     callback();
   });
@@ -223,13 +224,13 @@ function registerBrowser({ windows, notices, settings }) {
       if (p.linkURL && isWeb(p.linkURL)) {
         items.push({ label: "Open link in new tab", click: () => windows.send("browser:open", { url: p.linkURL, from: id }) });
         items.push({ label: "Open link in your browser", click: () => shell.openExternal(p.linkURL).catch(() => {}) });
-        items.push({ label: "Copy link address", click: () => clipboard.writeText(p.linkURL) });
+        items.push({ label: "Copy link address", click: () => clipboard.writeText(p.linkURL).catch(() => {}) });
         items.push({ type: "separator" });
       }
       if (p.mediaType === "image" && isWeb(p.srcURL)) {
         items.push({ label: "Open image in new tab", click: () => windows.send("browser:open", { url: p.srcURL, from: id }) });
         items.push({ label: "Save image as…", click: () => wc.downloadURL(p.srcURL) });
-        items.push({ label: "Copy image address", click: () => clipboard.writeText(p.srcURL) });
+        items.push({ label: "Copy image address", click: () => clipboard.writeText(p.srcURL).catch(() => {}) });
         items.push({ type: "separator" });
       }
       if (p.isEditable) {

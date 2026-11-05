@@ -33,7 +33,9 @@ const VENDOR_DIRS = {
 function registerSchemes() {
   protocol.registerSchemesAsPrivileged([
     { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } },
-    { scheme: "localfile", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    // corsEnabled so the media player's crossOrigin element can load these; the
+    // Access-Control-Allow-Origin header in handleLocalFile still decides who may.
+    { scheme: "localfile", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
     // Internet radio, proxied by the main process (see ipc/radio.js).
     { scheme: "edexradio", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
   ]);

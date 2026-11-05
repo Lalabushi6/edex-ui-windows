@@ -1,7 +1,8 @@
 // End-to-end smoke test: starts eDEX (development build, windowed) on a
 // throwaway profile, drives it through the DevTools protocol, and checks that
 // the main parts open without errors: tabs, media views, every settings page,
-// the top-bar panels, workspaces, Ctrl+Tab and a quick benchmark run.
+// the top-bar panels, workspaces, Ctrl+Tab, an encrypted key and a quick
+// benchmark run.
 // It never touches your real settings, other apps' windows or the desktop.
 //   npm run smoke             about a minute; needs a Windows desktop session
 //   npm run smoke -- --keep   leave the window open and keep the profile
@@ -29,6 +30,12 @@ fs.writeFileSync(path.join(profile, "settings.json"), JSON.stringify({
   bootAnimation: false, audioEnabled: false, mediaVolume: 0, allowNetworkGeolocation: false,
   updateCheck: false, gameMode: "off", openAtLogin: false, screensaver: false, theme: "tron"
 }));
+// A moment of silence as a WAV file, for the media player check.
+const tone = path.join(profile, "tone.wav");
+const wav = Buffer.alloc(44 + 8820);
+wav.write("RIFF", 0); wav.writeUInt32LE(36 + 8820, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+wav.writeUInt32LE(44100, 24); wav.writeUInt32LE(88200, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(8820, 40);
+fs.writeFileSync(tone, wav);
 
 const child = spawn(electron, [".", "--remote-debugging-port=0", `--user-data-dir=${profile}`], {
   cwd: root, env: { ...process.env, EDEX_DEV_WINDOWED: "1" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: false
@@ -199,6 +206,16 @@ async function main() {
     if (!r.lib || !r.radio) throw new Error(JSON.stringify(r));
   });
 
+  await check("a local audio file loads in the media player", async () => {
+    const r = await run(`${H}
+      const { player } = await import('app://edex/js/media/player.js');
+      const el = player().el;
+      bus.emit('open-media', { paths: [${JSON.stringify(tone)}], play: false });
+      for (let i = 0; i < 40 && !el.error && el.readyState < 1; i++) await sleep(250);
+      return { ready: el.readyState, error: el.error?.message || null };`);
+    if (r.error || r.ready < 1) throw new Error(JSON.stringify(r));
+  });
+
   await check("every settings page opens", async () => {
     const bad = await run(`${H}
       const m = await import('app://edex/js/shell/settings-panel.js');
@@ -253,6 +270,16 @@ async function main() {
     if (before === after || back !== before) throw new Error(`${before} -> ${after} -> ${back}`);
   });
 
+  await check("an encrypted key saves and reads back", async () => {
+    const r = await run(`
+      const saved = await edex.ai.setKey('stand-in-key-not-real-0123456789');
+      const kept = await edex.ai.status();
+      await edex.ai.setKey('');
+      const gone = await edex.ai.status();
+      return { saved: saved.configured, kept: kept.configured, gone: gone.configured };`);
+    if (!r.saved || !r.kept || r.gone) throw new Error(JSON.stringify(r));
+  });
+
   await check("quick benchmark runs", async () => {
     const s = await run(`const b = await import('app://edex/js/shell/benchmark.js'); const r = await b.runBenchmark({ quick: true }); return r.summary;`);
     const missing = ["idleMemoryMB", "idleCpuPctOfCore", "terminalMBps", "helperMedianMs", "effectDrawMedianMs"].filter((k) => !Number.isFinite(s?.[k]));
@@ -266,7 +293,8 @@ function report() {
   console.log("");
   for (const r of results) console.log(`${r.ok ? "  ok  " : "  FAIL"}  ${r.name}  (${(r.ms / 1000).toFixed(1)} s)${r.detail ? `  — ${r.detail}` : ""}`);
   const log = mainLog.join("");
-  const mainProblems = log.split(/\r?\n/).filter((l) => /Uncaught|UnhandledPromiseRejection|FATAL/i.test(l));
+  // safeStorage only logs when its deprecated sync calls are used; Electron 46 removes them.
+  const mainProblems = log.split(/\r?\n/).filter((l) => /Uncaught|UnhandledPromiseRejection|FATAL|safeStorage/i.test(l));
   if (mainProblems.length) {
     failed.push({ name: "main process" });
     console.log("  FAIL  main process errors:");
