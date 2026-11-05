@@ -68,12 +68,12 @@ function registerSpotify({ settings, windows }) {
   let access = null; // { token, expires }
   let profile = null;
   let pending = null;
-  let signOuts = 0; // an answer to a request sent before a sign-out must not undo it
+  let accountChanges = 0; // sign-ins and sign-outs: an answer to a request sent before one must not undo it
   const art = new Map();
 
   const clientId = () => settings.get("spotifyClientId") || "";
   const forget = async () => {
-    signOuts++;
+    accountChanges++;
     access = null;
     profile = null;
     await tokenFile.remove();
@@ -106,21 +106,21 @@ function registerSpotify({ settings, windows }) {
 
   async function token() {
     if (access && Date.now() < access.expires) return access.token;
-    const seen = signOuts;
+    const seen = accountChanges;
     const refresh = await tokenFile.read();
-    if (!refresh || !clientId() || seen !== signOuts) throw notConnected();
+    if (!refresh || !clientId() || seen !== accountChanges) throw notConnected();
     let body;
     try {
       body = await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() });
     } catch (e) {
-      if (seen !== signOuts) throw notConnected();
+      if (seen !== accountChanges) throw notConnected();
       if (e.code === "invalid_grant" || e.code === "invalid_client") {
         await forget();
         throw fail("Spotify signed eDEX out — connect again", "not_connected");
       }
       throw e;
     }
-    if (seen !== signOuts) throw notConnected();
+    if (seen !== accountChanges) throw notConnected();
     return keep(body);
   }
 
@@ -159,9 +159,9 @@ function registerSpotify({ settings, windows }) {
 
   async function me() {
     if (!profile) {
-      const seen = signOuts;
+      const seen = accountChanges;
       const p = await api("GET", "/me");
-      if (seen !== signOuts) throw notConnected();
+      if (seen !== accountChanges) throw notConnected();
       profile = { id: p?.id || "", name: p?.display_name || p?.id || "Spotify user", product: p?.product || "" };
     }
     return profile;
@@ -225,9 +225,10 @@ function registerSpotify({ settings, windows }) {
       });
     });
     // Disconnect cancels the wait above, but by now there is nothing left to cancel.
-    const seen = signOuts;
+    const seen = accountChanges;
     const body = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier });
-    if (seen !== signOuts) throw fail("Cancelled");
+    if (seen !== accountChanges) throw fail("Cancelled");
+    accountChanges++;
     await keep(body);
     profile = null;
     return me();
