@@ -70,6 +70,7 @@ function registerSpotify({ settings, windows }) {
   // How many times the user has signed out. A request still on the network when
   // that happens compares this on landing, and its answer no longer counts.
   let signOuts = 0;
+  let refreshing = null; // the token refresh under way, for whoever needs a token meanwhile
   const art = new Map();
 
   const clientId = () => settings.get("spotifyClientId") || "";
@@ -108,8 +109,7 @@ function registerSpotify({ settings, windows }) {
     return body.access_token;
   }
 
-  async function token() {
-    if (access && Date.now() < access.expires) return access.token;
+  async function refreshAccess() {
     const since = signOuts;
     const refresh = await tokenFile.read();
     if (!refresh || !clientId() || since !== signOuts) throw notConnected();
@@ -124,6 +124,18 @@ function registerSpotify({ settings, windows }) {
       }
       throw e;
     }
+  }
+
+  // Calls that need a token at the same moment share one refresh. Spotify can
+  // replace the refresh token each time it's used, so a second request with the
+  // old one could be refused, and that reads as Spotify signing eDEX out.
+  async function token() {
+    if (access && Date.now() < access.expires) return access.token;
+    if (!refreshing) {
+      const run = refreshAccess().finally(() => { if (refreshing === run) refreshing = null; });
+      refreshing = run;
+    }
+    return refreshing;
   }
 
   async function api(method, endpoint, { query, body } = {}) {
@@ -142,7 +154,8 @@ function registerSpotify({ settings, windows }) {
       } catch (_) {
         throw fail("Couldn't reach Spotify — check your connection", "offline");
       }
-      if (res.status === 401 && attempt === 0) { access = null; continue; }
+      // A refusal that lands late may be about a token already replaced.
+      if (res.status === 401 && attempt === 0) { if (access?.token === bearer) access = null; continue; }
       if (res.status === 204 || res.status === 202) return null;
       const text = await res.text();
       let data = null;
@@ -234,7 +247,9 @@ function registerSpotify({ settings, windows }) {
   });
 
   handle("spotify:cancel", () => { pending?.cancel(); return true; });
-  handle("spotify:disconnect", async () => { pending?.cancel(); signOuts++; await forget(); return true; });
+  // A refresh still out belongs to the sign-in that just ended: a later sign-in
+  // mustn't wait on it.
+  handle("spotify:disconnect", async () => { pending?.cancel(); signOuts++; refreshing = null; await forget(); return true; });
   handle("spotify:me", () => me());
 
   handle("spotify:player", async () => {
