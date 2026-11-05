@@ -100,12 +100,12 @@ function registerBrowser({ windows, notices, settings }) {
     });
   };
 
-  // Favicons are fetched through the browser session and handed over as
-  // data URLs (the interface's CSP allows no remote images).
+  // Favicons are fetched through the browser session, as an anonymous request,
+  // and handed over as data URLs (the interface's CSP allows no remote images).
   async function favicon(id, url) {
     if (!isWeb(url)) return;
     try {
-      const res = await ses.fetch(url, { headers: { Accept: "image/*" } });
+      const res = await ses.fetch(url, { credentials: "omit", headers: { Accept: "image/*" } });
       const type = res.headers.get("content-type") || "";
       if (!res.ok || !/^image\//i.test(type)) { res.body?.cancel().catch(() => {}); return; }
       const buf = await readCapped(res, 200 * 1024);
