@@ -21,9 +21,21 @@ const { readCapped } = require("../lib/http");
 
 const PARTITION = "persist:edex-browser";
 const MAX_VIEWS = 12;
+const MAX_URL = 8192;
 const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write"]);
 const ACTIONS = new Set(["back", "forward", "reload", "stop", "zoomIn", "zoomOut", "zoomReset", "external", "inspect"]);
 const isWeb = (u) => /^https?:\/\//i.test(String(u || ""));
+// How every page runs, whether eDEX makes it or Chromium does for a pop-up.
+const PAGE_PREFS = {
+  sandbox: true,
+  contextIsolation: true,
+  nodeIntegration: false,
+  webviewTag: false,
+  spellcheck: true,
+  safeDialogs: true,
+  navigateOnDragDrop: false,
+  backgroundThrottling: true
+};
 // A page opening things by itself: most pop-ups per ten seconds, and the
 // shortest gap between handing mail links to the mail app.
 const POPUPS_PER_10S = 4;
@@ -34,6 +46,7 @@ function registerBrowser({ windows, notices, settings }) {
   // id -> { view, wc, bounds, visible, active, full, hiddenAt, downloads,
   //         unloaded: null | { entries, index, url, title, zoom } }
   const views = new Map();
+  let popupSeq = 0;
   const idOf = (wc) => { for (const [id, v] of views) if (v.wc === wc) return id; return null; };
   const live = (v) => !!v && !v.unloaded && !!v.wc && !v.wc.isDestroyed();
 
@@ -163,16 +176,35 @@ function registerBrowser({ windows, notices, settings }) {
     wc.on("will-redirect", (e) => guard(e, e.url, true));
     wc.on("will-frame-navigate", (e) => { if (!isWeb(e.url) && e.url !== "about:blank" && !/^(about|data|blob):/i.test(e.url)) e.preventDefault(); });
     wc.on("will-attach-webview", (e) => e.preventDefault());
-    // Pop-ups and target=_blank links open as new eDEX browser tabs, within reason.
+    // A page closing itself (window.close()) takes its tab along.
+    wc.once("destroyed", () => {
+      const v = views.get(id);
+      if (v?.wc !== wc) return;
+      v.wc = null;
+      close(id);
+      windows.send("browser:state", { id, closed: true });
+    });
+    // Pop-ups and target=_blank links open as new eDEX browser tabs, within
+    // reason. The new page is Chromium's own and loads as a link followed from
+    // this page, not as an address typed into eDEX. Unless the page asked for
+    // noopener it keeps its link to its opener, as in any browser (sign-in
+    // windows rely on it), but a tab stays open when its opener goes.
     let popups = [];
     wc.setWindowOpenHandler(({ url, disposition }) => {
       const now = Date.now();
       popups = popups.filter((t) => now - t < 10000);
-      if (isWeb(url) && popups.length < POPUPS_PER_10S) {
-        popups.push(now);
-        windows.send("browser:open", { url, from: id, background: disposition === "background-tab" });
+      if (!isWeb(url) || url.length > MAX_URL || popups.length >= POPUPS_PER_10S) return { action: "deny" };
+      popups.push(now);
+      if (views.size >= MAX_VIEWS || !windows.win || windows.win.isDestroyed()) {
+        windows.send("browser:state", { id, tabLimit: MAX_VIEWS });
+        return { action: "deny" };
       }
-      return { action: "deny" };
+      return {
+        action: "allow",
+        outlivesOpener: true,
+        overrideBrowserWindowOptions: { webPreferences: PAGE_PREFS },
+        createWindow: ({ webContents: popup }) => openPopup(id, url, disposition, popup)
+      };
     });
 
     wc.on("before-input-event", (event, input) => {
@@ -252,30 +284,29 @@ function registerBrowser({ windows, notices, settings }) {
   };
   const asUrl = (url) => {
     const u = String(url || "");
-    if (!isWeb(u) || u.length > 8192) throw new Error("Only http(s) addresses can be opened");
+    if (!isWeb(u) || u.length > MAX_URL) throw new Error("Only http(s) addresses can be opened");
     return u;
   };
 
-  // A page for the entry: a new tab, or one coming back after unloading.
-  function makeView(key, entry) {
+  const newEntry = () => ({ view: null, wc: null, bounds: null, visible: false, active: false, full: false, hiddenAt: Date.now(), downloads: 0, unloaded: null });
+
+  // A page for the entry: a new tab, one coming back after unloading, or a
+  // pop-up, whose page Chromium has already made.
+  function makeView(key, entry, popup = null) {
     const win = windows.win;
     if (!win || win.isDestroyed()) throw new Error("No window");
-    const view = new WebContentsView({
-      webPreferences: {
-        session: ses,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        webviewTag: false,
-        spellcheck: true,
-        safeDialogs: true,
-        navigateOnDragDrop: false,
-        backgroundThrottling: true
-      }
-    });
+    // Taking over a page resets its preferences to whatever is given here.
+    const view = new WebContentsView({ ...(popup && { webContents: popup }), webPreferences: { session: ses, ...PAGE_PREFS } });
     view.setBackgroundColor("#ffffff");
     view.setVisible(false);
     win.contentView.addChildView(view);
+    // A page Chromium made thinks it's on show until a view with a size has
+    // shown and hidden it; left alone, one opened behind keeps drawing.
+    if (popup) {
+      view.setBounds({ x: 0, y: 0, width: 1, height: 1 });
+      view.setVisible(true);
+      view.setVisible(false);
+    }
     entry.view = view;
     entry.wc = view.webContents;
     // Pages don't get to see this PC's local network addresses through WebRTC.
@@ -288,12 +319,30 @@ function registerBrowser({ windows, notices, settings }) {
     if (views.has(key)) return true;
     if (views.size >= MAX_VIEWS) throw new Error(`At most ${MAX_VIEWS} browser tabs`);
     const target = url ? asUrl(url) : null;
-    const entry = { view: null, wc: null, bounds: null, visible: false, active: false, full: false, hiddenAt: Date.now(), downloads: 0, unloaded: null };
+    const entry = newEntry();
     makeView(key, entry);
     views.set(key, entry);
     if (target) entry.wc.loadURL(target).catch(() => {});
     return true;
   });
+
+  // A page's pop-up gets its entry here, under an id of eDEX's choosing, and
+  // the interface's new tab takes that id. It never asks for browser:create: the
+  // page may be gone by then, and that would load the address all over again.
+  function openPopup(from, url, disposition, popup) {
+    const key = `bp${Date.now().toString(36)}${(popupSeq++).toString(36)}`;
+    const entry = newEntry();
+    makeView(key, entry, popup);
+    views.set(key, entry);
+    windows.send("browser:open", { url, from, id: key, background: disposition === "background-tab" });
+    // Electron before 45 makes no page for Ctrl and middle clicks. A blank page
+    // going to the address stands in for it, so a page still does the opening.
+    if (!popup) {
+      const { wc } = entry;
+      wc.loadURL("about:blank").then(() => wc.executeJavaScript(`location.replace(${JSON.stringify(url)})`)).catch(() => {});
+    }
+    return popup;
+  }
 
   // Gives a background tab's page back, keeping what's needed to reload it.
   function unload(key) {
@@ -304,10 +353,11 @@ function registerBrowser({ windows, notices, settings }) {
     let index = 0;
     try { entries = h.getAllEntries(); index = h.getActiveIndex(); } catch (_) {}
     v.unloaded = { entries, index, url: v.wc.getURL(), title: v.wc.getTitle(), zoom: v.wc.getZoomFactor() };
-    try { windows.win?.contentView.removeChildView(v.view); } catch (_) {}
-    v.wc.close();
+    const { view, wc } = v;
     v.view = null;
     v.wc = null;
+    try { windows.win?.contentView.removeChildView(view); } catch (_) {}
+    wc.close();
     send(key);
     return true;
   }

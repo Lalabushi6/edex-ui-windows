@@ -366,8 +366,8 @@ export class Workspace {
   }
 
   // A new browser tab (empty: the start page with the address bar).
-  async openBrowser(url = "", { activate = true } = {}) {
-    return this.add("browser", { url }, { activate });
+  async openBrowser(url = "", { activate = true, id } = {}) {
+    return this.add("browser", { url, id }, { activate });
   }
 
   async openWallpaper() {

@@ -21,7 +21,10 @@ function wireEvents(ws) {
   if (wired) return;
   wired = true;
   api.browser.onState((s) => { tabs.get(s.id)?.onState(s); });
-  api.browser.onOpen(({ url, background }) => { ws.openBrowser(url, { activate: !background }); });
+  // A pop-up's page already exists under `id`; with no room for its tab it goes.
+  api.browser.onOpen(({ url, background, id }) => {
+    ws.openBrowser(url, { activate: !background, id }).then((tab) => { if (!tab && id) api.browser.close(id).catch(() => {}); });
+  });
   api.browser.onKey((k) => { tabs.get(k.id)?.onKey(k); });
   api.browser.onDownload(({ state, name, file }) => {
     if (isQuiet()) return; // the notification centre has it
@@ -40,13 +43,13 @@ export class BrowserTab {
   constructor(ws, opts = {}) {
     this.ws = ws;
     this.type = "browser";
-    this.id = `b${Date.now().toString(36)}${(seq++).toString(36)}`;
+    this.id = opts.id || `b${Date.now().toString(36)}${(seq++).toString(36)}`;
     this.url = opts.url || "";
     this.customLabel = opts.label;
     this.label = opts.label || "New tab";
     this.el = h("div", { class: "pane browser-pane" });
     this.page = { url: "", title: "", loading: false, canBack: false, canForward: false, zoom: 100 };
-    this.created = false;
+    this.created = !!opts.id; // a pop-up's page already exists in the main process
     this.active = false;
     this.covered = false;
     this.problem = null; // { kind: "error" | "crashed", text }
@@ -117,7 +120,7 @@ export class BrowserTab {
     this.off.push(onCoverChange((c) => this.setCovered(c)));
     this.covered = isCovered();
     this.render();
-    if (this.url) await this.ensureView(this.url);
+    if (this.url && !this.created) await this.ensureView(this.url);
   }
 
   buildStart() {
@@ -162,6 +165,8 @@ export class BrowserTab {
   }
 
   onState(s) {
+    if (s.closed) { this.ws.close(this); return; }
+    if (s.tabLimit) { toast(`At most ${s.tabLimit} browser tabs`, { level: "warn" }); return; }
     if (s.blocked) { toast(`Blocked a link to ${s.blocked}:`, { level: "warn" }); return; }
     if (s.favicon) { this.ws.setTabIcon(this, s.favicon); return; }
     if (s.find) {
