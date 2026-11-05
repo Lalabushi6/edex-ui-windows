@@ -1,7 +1,8 @@
 // End-to-end smoke test: starts eDEX (development build, windowed) on a
 // throwaway profile, drives it through the DevTools protocol, and checks that
 // the main parts open without errors: tabs, media views, every settings page,
-// the top-bar panels, workspaces, Ctrl+Tab and a quick benchmark run.
+// the top-bar panels, workspaces, Ctrl+Tab, an encrypted key and a quick
+// benchmark run.
 // It never touches your real settings, other apps' windows or the desktop.
 //   npm run smoke             about a minute; needs a Windows desktop session
 //   npm run smoke -- --keep   leave the window open and keep the profile
@@ -242,6 +243,16 @@ async function main() {
     if (before === after || back !== before) throw new Error(`${before} -> ${after} -> ${back}`);
   });
 
+  await check("an encrypted key saves and reads back", async () => {
+    const r = await run(`
+      const saved = await edex.ai.setKey('stand-in-key-not-real-0123456789');
+      const kept = await edex.ai.status();
+      await edex.ai.setKey('');
+      const gone = await edex.ai.status();
+      return { saved: saved.configured, kept: kept.configured, gone: gone.configured };`);
+    if (!r.saved || !r.kept || r.gone) throw new Error(JSON.stringify(r));
+  });
+
   await check("quick benchmark runs", async () => {
     const s = await run(`const b = await import('app://edex/js/shell/benchmark.js'); const r = await b.runBenchmark({ quick: true }); return r.summary;`);
     const missing = ["idleMemoryMB", "idleCpuPctOfCore", "terminalMBps", "helperMedianMs", "effectDrawMedianMs"].filter((k) => !Number.isFinite(s?.[k]));
@@ -255,7 +266,8 @@ function report() {
   console.log("");
   for (const r of results) console.log(`${r.ok ? "  ok  " : "  FAIL"}  ${r.name}  (${(r.ms / 1000).toFixed(1)} s)${r.detail ? `  — ${r.detail}` : ""}`);
   const log = mainLog.join("");
-  const mainProblems = log.split(/\r?\n/).filter((l) => /Uncaught|UnhandledPromiseRejection|FATAL/i.test(l));
+  // safeStorage only logs when its deprecated sync calls are used; Electron 46 removes them.
+  const mainProblems = log.split(/\r?\n/).filter((l) => /Uncaught|UnhandledPromiseRejection|FATAL|safeStorage/i.test(l));
   if (mainProblems.length) {
     failed.push({ name: "main process" });
     console.log("  FAIL  main process errors:");
