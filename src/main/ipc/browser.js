@@ -336,12 +336,6 @@ function registerBrowser({ windows, notices, settings }) {
     makeView(key, entry, popup);
     views.set(key, entry);
     windows.send("browser:open", { url, from, id: key, background: disposition === "background-tab" });
-    // Electron before 45 makes no page for Ctrl and middle clicks. A blank page
-    // going to the address stands in for it, so a page still does the opening.
-    if (!popup) {
-      const { wc } = entry;
-      wc.loadURL("about:blank").then(() => wc.executeJavaScript(`location.replace(${JSON.stringify(url)})`)).catch(() => {});
-    }
     return popup;
   }
 
