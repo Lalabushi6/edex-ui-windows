@@ -701,7 +701,7 @@ async function buildPage(id) {
     page.push(h("h3", null, "Network"),
       row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, the weather forecast for your approximate location (open-meteo.com), the daily update check (api.github.com), synced lyrics (lrclib.net), missing game cover art (Steam / Epic image servers) and refreshing calendar subscriptions. Turn off to make eDEX fully offline; pages you open in browser tabs, radio stations, the radio directory search, Spotify (once connected) and pressing Refresh on calendars still go online when you use them.", toggle("allowNetworkGeolocation")),
       h("h3", null, "Screen time"),
-      row("Track app usage", "Counts how long each program is the focused window (idle and locked time excluded). Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
+      row("Track app usage", "Counts how long each program is the focused window while you're at the PC. It stops at your last keyboard or mouse input once you've been away 2 minutes, and while the PC is locked or asleep. A video or call that keeps the screen on, with sound from the program in front, still counts. Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
       row("Clear screen time history", null, h("button", { class: "btn", type: "button", onclick: () => api.screenTime.clear().then(() => toast("Screen time history cleared", { level: "ok" })) }, "Clear")),
       screenTimeLimitsRows(),
       h("h3", null, "AI assistant"),

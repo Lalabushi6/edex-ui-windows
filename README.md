@@ -277,8 +277,9 @@ locked down.
   plays the alarm and shows a Windows notification, even while eDEX is
   hidden.
 - **Screen time**: how long each program has been the focused window today and
-  over the past week, with optional daily limits that nudge you once a day.
-  Kept on this PC only, for two weeks.
+  over the past week, while you're at the PC: it stops at your last input
+  when you step away, and keeps counting a video or call. Optional daily
+  limits nudge you once a day. Kept on this PC only, for two weeks.
 - **Git widget**: branch, commits to push / pull, staged / changed / new file
   counts, the last commit and the changed files for the terminal's folder.
 - **Command widgets**: any PowerShell or cmd command's output as a panel,

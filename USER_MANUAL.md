@@ -624,11 +624,17 @@ them at a time.
   → **Focus lengths…** to change the times (e.g. `50/10/20/3`).
 - **Screen time** widget: how long each program has been the focused window
   today, and a bar for each day of the past week; the arrow button switches
-  between today and yesterday. Idle time (2 minutes without input) and the lock screen aren't
-  counted. Only program names and durations are stored, on this PC, for two
-  weeks; Settings → Privacy turns it off or clears it. Right-click an app →
-  **Daily limit…** for a once-a-day notice when it passes that much time (the
-  bar shows the limit; the app turns amber past it).
+  between today and yesterday. Time counts while you're at the PC: it's
+  unlocked and awake, and you've used the keyboard or mouse in the last 2
+  minutes. A video, call or game counts without input while the program in
+  front plays sound and keeps the screen on. When you step away, counting
+  stops at your last input, so the 2 minutes it takes to notice aren't
+  added. Locking, sleep and shutting down stop it at once and save what was
+  counted. Only program names and durations are stored, on this PC, for the
+  last 14 days; Settings → Privacy turns it off or clears it. Right-click an
+  app → **Daily limit…** for a notice when it passes that much time in a day
+  (once that day, even if eDEX restarts; the bar shows the limit; the app
+  turns amber past it).
 - **Tasks** widget: today's calendar events, then your to-do list. Type a
   time to get a reminder — `call mum at 6pm`, `report in 2h`, `dentist
   tomorrow 9:30`, `gym friday` — with the alarm sound and a Windows

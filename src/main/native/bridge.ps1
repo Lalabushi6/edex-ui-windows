@@ -91,8 +91,6 @@ public static class EdexNative {
         "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Windows.UI.Core.CoreWindow",
         "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland", "XamlExplorerHostIslandWindow"
     };
-    static readonly Dictionary<uint, string> ExeCache = new Dictionary<uint, string>();
-
     public static string Q(string s) {
         if (s == null) return "null";
         var sb = new StringBuilder(s.Length + 2);
@@ -119,9 +117,10 @@ public static class EdexNative {
         return v.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
+    // Asked fresh every time: Windows gives a closed program's process ID to
+    // later processes, and a path cached by ID would then name the wrong
+    // program (in screen time, the window list and the mixer).
     static string ExePath(uint pid) {
-        string cached;
-        if (ExeCache.TryGetValue(pid, out cached)) return cached;
         string result = "";
         IntPtr h = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
         if (h != IntPtr.Zero) {
@@ -131,8 +130,6 @@ public static class EdexNative {
                 if (QueryFullProcessImageName(h, 0, sb, ref size)) result = sb.ToString();
             } finally { CloseHandle(h); }
         }
-        if (ExeCache.Count > 600) ExeCache.Clear();
-        ExeCache[pid] = result;
         return result;
     }
 

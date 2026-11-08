@@ -283,6 +283,9 @@ function start() {
 
     const win = windows.create();
     win.once("ready-to-show", () => { startup.readyToShow = Date.now(); });
+    // Shutting down, restarting or signing out ends eDEX without a quit, so
+    // will-quit never runs: save screen time while there's still time.
+    win.on("session-end", () => screenTime?.flush());
     recovering.finally(() => takeover.attach(win));
     hud.attach(win);
     browser.attach(win);
