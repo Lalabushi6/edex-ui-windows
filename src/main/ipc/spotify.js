@@ -67,9 +67,10 @@ function registerSpotify({ settings, windows }) {
   let access = null; // { token, expires }
   let profile = null;
   let pending = null;
-  // How many times the user has signed out. A request still on the network when
-  // that happens compares this on landing, and its answer no longer counts.
-  let signOuts = 0;
+  // How many times the account has changed: each sign-out, and each sign-in whose
+  // code exchange came back. A request still on the network when that happens
+  // compares this on landing, and its answer no longer counts.
+  let accountChanges = 0;
   let refreshing = null; // the token refresh under way, for whoever needs a token meanwhile
   const art = new Map();
 
@@ -98,9 +99,9 @@ function registerSpotify({ settings, windows }) {
     return body;
   }
 
-  // since: the count of sign-outs when the request behind this answer went out.
+  // since: the count of account changes when the request behind this answer went out.
   async function keep(body, since) {
-    if (since !== signOuts) throw notConnected();
+    if (since !== accountChanges) throw notConnected();
     if (!body.access_token) throw fail("Spotify didn't return a token");
     access = { token: body.access_token, expires: Date.now() + ((Number(body.expires_in) || 3600) - 60) * 1000 };
     // Spotify may rotate the refresh token; always keep the newest. The file's
@@ -110,15 +111,15 @@ function registerSpotify({ settings, windows }) {
   }
 
   async function refreshAccess() {
-    const since = signOuts;
+    const since = accountChanges;
     const refresh = await tokenFile.read();
-    if (!refresh || !clientId() || since !== signOuts) throw notConnected();
+    if (!refresh || !clientId() || since !== accountChanges) throw notConnected();
     try {
       return await keep(await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId() }), since);
     } catch (e) {
-      // After a sign-out this answer is about a token that's gone: if there's a
-      // newer sign-in by now, it isn't this answer's to remove.
-      if (since === signOuts && (e.code === "invalid_grant" || e.code === "invalid_client")) {
+      // After a sign-out or a new sign-in this answer is about a token that's
+      // gone: if there's a newer sign-in by now, it isn't this answer's to remove.
+      if (since === accountChanges && (e.code === "invalid_grant" || e.code === "invalid_client")) {
         await forget();
         throw fail("Spotify signed eDEX out — connect again", "not_connected");
       }
@@ -174,9 +175,9 @@ function registerSpotify({ settings, windows }) {
 
   async function me() {
     if (!profile) {
-      const since = signOuts;
+      const since = accountChanges;
       const p = await api("GET", "/me");
-      if (since !== signOuts) throw notConnected();
+      if (since !== accountChanges) throw notConnected();
       profile = { id: p?.id || "", name: p?.display_name || p?.id || "Spotify user", product: p?.product || "" };
     }
     return profile;
@@ -239,17 +240,28 @@ function registerSpotify({ settings, windows }) {
         }
       });
     });
-    // Signing out before this point cancelled the wait above.
-    const since = signOuts;
-    await keep(await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier }), since);
+    // Signing out before this point cancelled the wait above; past it there's
+    // nothing left to cancel, so the answer is checked when it lands.
+    const since = accountChanges;
+    const body = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, client_id: clientId(), code_verifier: verifier });
+    // A sign-out, or another sign-in that landed first, wins.
+    if (since !== accountChanges) throw fail("Cancelled");
+    if (!body.access_token) throw fail("Spotify didn't return a token");
+    // Settings offers Reconnect while connected. From here on, answers to requests
+    // made for the previous sign-in (a refresh, the profile) no longer count. A
+    // sign-in that's refused or cancelled never gets here, so it leaves a refresh
+    // on the network free to keep its rotated token.
+    accountChanges++;
+    refreshing = null;
     profile = null;
+    await keep(body, accountChanges);
     return me();
   });
 
   handle("spotify:cancel", () => { pending?.cancel(); return true; });
   // A refresh still out belongs to the sign-in that just ended: a later sign-in
   // mustn't wait on it.
-  handle("spotify:disconnect", async () => { pending?.cancel(); signOuts++; refreshing = null; await forget(); return true; });
+  handle("spotify:disconnect", async () => { pending?.cancel(); accountChanges++; refreshing = null; await forget(); return true; });
   handle("spotify:me", () => me());
 
   handle("spotify:player", async () => {
