@@ -196,11 +196,16 @@ contextBridge.exposeInMainWorld("edex", {
   },
   games: {
     list: invoke("games:list"),
+    icons: invoke("games:icons"),
     launch: invoke("games:launch"),
     reveal: invoke("games:reveal"),
+    add: invoke("games:add"),
+    remove: invoke("games:remove"),
+    hidden: invoke("games:hidden"),
+    unhide: invoke("games:unhide"),
+    rename: invoke("games:rename"),
     state: invoke("game:state"),
     onChange: subscribe("games:changed"),
-    onArt: subscribe("games:art"),
     onGameMode: subscribe("app:game")
   },
   lyrics: {

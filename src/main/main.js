@@ -241,7 +241,7 @@ function start() {
     hud = new Hud({ settings, windows, bridge });
 
     // Game library, and game mode while one runs.
-    games = registerGames({ settings, windows, aux });
+    games = registerGames({ windows, bridge, aux, desktop });
     gameMode = new GameMode({ settings, bridge, games, ownPids });
     const applyGame = () => {
       const st = { active: gameMode.active, name: gameMode.name };
@@ -265,7 +265,7 @@ function start() {
     registerBenchmark({ settings, telemetry, bridge, aux, portable, startup, browser });
     livewall = new LiveWallpaper({ settings, windows, bridge, gameMode });
     // Development runs can poke these from the main-process inspector.
-    if (!app.isPackaged) globalThis.__edex = { livewall, gameMode, notices, games, aux, bridge, getBrowser: () => browser };
+    if (!app.isPackaged) globalThis.__edex = { livewall, gameMode, notices, games, desktop, aux, bridge, getBrowser: () => browser };
     handle("saver:start", () => saver.start({ preview: true }));
     handle("saver:dismiss", () => { saver.stop(true); return true; });
 

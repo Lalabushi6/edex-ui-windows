@@ -130,7 +130,7 @@ anything. Useful hooks:
 | `.kb-key`, `.kb-key.mod`, `.kb-key.space`, `.kb-key.down` | On-screen keyboard |
 | `.fp-item`, `.fp-name`, `.fp-bar` | File browser |
 | `.nc-btn`, `.nc-badge`, `.nc-item` | Notification bell and its list |
-| `.game-card`, `.game-art`, `.game-badge` | Game library and the GAME MODE badge |
+| `.game-card`, `.game-tile`, `.game-icon`, `.game-badge` | Game library (each card's square tile and icon) and the GAME MODE badge |
 | `.ly-line`, `.ly-line.on` | Synced lyrics (the current line has `.on`) |
 | `.lib-tile`, `.lib-cover`, `.radio-row`, `.radio-now` | Music library and radio views |
 | `.ws-btn` | Workspace name next to the logo |

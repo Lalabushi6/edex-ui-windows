@@ -4,40 +4,13 @@
 "use strict";
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { app, dialog, shell } = require("electron");
 const { cached } = require("../lib/cache");
 const { JsonStore } = require("../lib/store");
+const { startMenuDirs, desktopDirs, collectShortcuts } = require("../lib/shortcuts");
 const { EXPLORER, POWERSHELL, system32, spawnDetached, psQuote } = require("../lib/sysexe");
 const { handle, asString } = require("./util");
-
-function startMenuDirs() {
-  const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-  const programData = process.env.ProgramData || "C:\\ProgramData";
-  return [
-    path.join(appData, "Microsoft", "Windows", "Start Menu", "Programs"),
-    path.join(programData, "Microsoft", "Windows", "Start Menu", "Programs")
-  ];
-}
-
-function desktopDirs() {
-  const dirs = [path.join(process.env.PUBLIC || "C:\\Users\\Public", "Desktop")];
-  try { dirs.unshift(app.getPath("desktop")); } catch (_) {}
-  return dirs;
-}
-
-async function collectShortcuts(dir, depth = 0, out = []) {
-  if (depth > 4) return out;
-  let dirents;
-  try { dirents = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (_) { return out; }
-  for (const d of dirents) {
-    const full = path.join(dir, d.name);
-    if (d.isDirectory()) await collectShortcuts(full, depth + 1, out);
-    else if (/\.(lnk|url|appref-ms)$/i.test(d.name)) out.push(full);
-  }
-  return out;
-}
 
 const UNINSTALL_RE = /\b(uninstall|remove|readme|help|documentation|license|release notes|website)\b/i;
 
@@ -271,7 +244,11 @@ function registerDesktop({ windows, bridge, icons, ownPids }) {
     return true;
   });
 
-  return { warm: () => index().catch(() => {}) };
+  return {
+    warm: () => index().catch(() => {}),
+    // An app's entry (its shortcut, program or Start menu id), for "Add to games".
+    resolve: (id) => resolveApp(asString(id, "app id"))
+  };
 }
 
 module.exports = { registerDesktop };

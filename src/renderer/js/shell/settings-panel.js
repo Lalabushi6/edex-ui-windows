@@ -614,16 +614,19 @@ async function buildPage(id) {
   }
   if (id === "games") {
     const games = await loadGames().catch(() => []);
+    const hidden = await window.edex.games.hidden().catch(() => []);
     const by = (s) => games.filter((g) => g.source === s).length;
     page.push(h("h3", null, "Game mode"),
       row("Game mode", "Automatic: while a game from your library (or anything running full-screen Direct3D) is in front, eDEX rests — panels and animations pause, the HUD on other displays hides, the screen saver and live wallpaper hold back. On: always rest. Off: never.", select("gameMode", [["auto", "Automatic"], ["on", "On"], ["off", "Off"]])),
       row("Hold notifications during games", "Reminders, alerts and timers wait silently in the notification centre until the game ends (a critically low battery still shows).", toggle("gameModeQuiet")),
       h("h3", null, "Game library"),
-      row("Installed games", `${games.length} found — Steam ${by("steam")}, Epic Games ${by("epic")}, Xbox ${by("xbox")}. Shown in the launcher (Games filter), the dock's game button and Ctrl+Shift+G; right-click a game to pin it to the dock.`,
+      row("Your games", `${games.length} in the library: Steam ${by("steam")}, Epic Games ${by("epic")}, Xbox ${by("xbox")}, added by you ${by("added")}. Shown in the library (Ctrl+Shift+G or the dock's game button) and the launcher's Games filter; right-click a game to pin it to the dock, rename it, or hide it.`,
         h("span", { style: { display: "flex", gap: ".4rem" } },
           h("button", { class: "btn", type: "button", onclick: () => { openPanel?.close(); setTimeout(() => openGameLibrary(), 200); } }, icon("gamepad"), "Open library"),
           h("button", { class: "btn", type: "button", onclick: async () => { await loadGames(true); openPanel?.show("games"); } }, icon("refresh"), "Rescan"))),
-      h("div", { class: "setting-desc" }, "Games are found from the launchers' own files (Steam's library folders, Epic's install manifests, installed Xbox / Microsoft Store packages). Cover art comes from the launchers' caches; missing art is downloaded once from the store's image server while Outbound lookups are on."));
+      hidden.length ? row("Hidden games", `${hidden.length} hidden: ${hidden.map((g) => g.name).join(", ")}. Hidden games stay out of the library and the launcher, and don't start game mode.`,
+        h("button", { class: "btn", type: "button", onclick: async () => { await window.edex.games.unhide(); openPanel?.show("games"); } }, "Show them again")) : null,
+      h("div", { class: "setting-desc" }, "Steam, Epic Games and Xbox games are found from the launchers' own files on this PC. Add any other game from the library's Add game button, by dragging its shortcut or program onto the library, or with Add to games on an app in the launcher. Each game's icon comes from its shortcut (the icon the shortcut names), or else from the game's program, and is made once and kept. Nothing is downloaded."));
   }
   if (id === "calendar") {
     page.push(h("h3", null, "Calendar subscriptions"),
@@ -699,7 +702,7 @@ async function buildPage(id) {
   }
   if (id === "privacy") {
     page.push(h("h3", null, "Network"),
-      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, the weather forecast for your approximate location (open-meteo.com), the daily update check (api.github.com), synced lyrics (lrclib.net), missing game cover art (Steam / Epic image servers) and refreshing calendar subscriptions. Turn off to make eDEX fully offline; pages you open in browser tabs, radio stations, the radio directory search, Spotify (once connected) and pressing Refresh on calendars still go online when you use them.", toggle("allowNetworkGeolocation")),
+      row("Outbound lookups", "Public-IP geolocation (ipapi.co / ipinfo.io), latency checks to google.com and twelve reference sites for the world view, the weather forecast for your approximate location (open-meteo.com), the daily update check (api.github.com), synced lyrics (lrclib.net) and refreshing calendar subscriptions. Turn off to make eDEX fully offline; pages you open in browser tabs, radio stations, the radio directory search, Spotify (once connected) and pressing Refresh on calendars still go online when you use them.", toggle("allowNetworkGeolocation")),
       h("h3", null, "Screen time"),
       row("Track app usage", "Counts how long each program is the focused window while you're at the PC. It stops at your last keyboard or mouse input once you've been away 2 minutes, and while the PC is locked or asleep. A video or call that keeps the screen on, with sound from the program in front, still counts. Only program names and durations are kept, on this PC, for two weeks.", toggle("screenTime")),
       row("Clear screen time history", null, h("button", { class: "btn", type: "button", onclick: () => api.screenTime.clear().then(() => toast("Screen time history cleared", { level: "ok" })) }, "Clear")),

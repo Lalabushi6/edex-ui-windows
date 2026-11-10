@@ -39,12 +39,12 @@ reproduce it, and the eDEX version.
   links and strips the ICY title metadata before the audio reaches the
   interface, whose CSP stays closed to the internet. Station logos are
   fetched by the main process (images only, size-capped) and handed over as
-  data URLs; game cover art is cached as local files. Addresses from a
+  data URLs. Addresses from a
   directory listing or a playlist file can't point at the local network: each
   one is checked as written and by what its name resolves to, on every
   redirect. A name could still change its answer between the check and the
   connection, so treat this as a strong filter rather than a hard boundary.
-- **Lyrics, game art, the radio directory and calendar feeds** are plain
+- **Lyrics, the radio directory and calendar feeds** are plain
   HTTPS GETs from the main process; responses are parsed as data (JSON,
   iCalendar, images) and size-limited, never run. Calendar subscription
   links are secrets that grant read access to a calendar: they're stored in
@@ -52,10 +52,15 @@ reproduce it, and the eDEX version.
   out. Reading a feed runs in short slices with limits on its size and time,
   so a hostile one can't hold up the app.
 - **The game library** reads the Steam, Epic and Xbox launchers' own
-  manifest files and launches games only through the launchers' documented
-  URIs (`steam://rungameid/…`, `com.epicgames.launcher://apps/…`) or the
-  app's registered Xbox / Store identity; identifiers are checked against a
-  strict pattern before use.
+  manifest files and launches their games only through the launchers'
+  documented URIs (`steam://rungameid/…`, `com.epicgames.launcher://apps/…`)
+  or the app's registered Xbox / Store identity; identifiers are checked
+  against a strict pattern before use. Games you add start as a double-click
+  on the shortcut or program you chose would. Icons come from the files a
+  shortcut or game names, read by the native helper without resolving the
+  shortcut, and never from a network path, a mapped network drive or a link
+  that leads to one: a shortcut can name any server, and looking at it would
+  send this PC's sign-in hash there. Nothing is downloaded.
 - Every file operation goes through one path policy (`src/main/lib/paths.js`):
   links are resolved before checks, credential stores and token files are
   never readable, system folders and network paths are never written. eDEX's

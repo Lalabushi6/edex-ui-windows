@@ -10,7 +10,7 @@ import { emit, booted } from "../core/bus.js";
 import { allCommands } from "../core/commands.js";
 import { openModal, toast, contextMenu, copyText, cleanError } from "../core/ui.js";
 import { openUrl } from "../core/links.js";
-import { loadGames, launchGame, gameArt, gameMenu } from "./games.js";
+import { loadGames, launchGame, gameIcon, gameMenu, ensureIcons, addGame, onGames } from "./games.js";
 import { profiles, switchProfile } from "./profiles.js";
 import { evaluate, looksLikeMath, formatNumber } from "./calc.js";
 import { convert, parseDuration } from "./convert.js";
@@ -138,7 +138,7 @@ export function togglePinnedApp(id) {
 
 const FILTERS = [["all", "All"], ["apps", "Apps"], ["games", "Games"], ["windows", "Windows"], ["files", "Files"], ["commands", "Commands"]];
 const GROUP_WEIGHT = { Pinned: 220, Apps: 200, Games: 190, "Open windows": 150, Commands: 100, Workspaces: 95, "Windows Settings": 80, Themes: 60 };
-const GAME_SOURCE = { steam: "Steam game", epic: "Epic Games game", xbox: "Xbox game" };
+const GAME_SOURCE = { steam: "Steam game", epic: "Epic Games game", xbox: "Xbox game", added: "Game" };
 
 export function openLauncher(opts = {}) {
   if (openInstance) {
@@ -192,6 +192,7 @@ export function openLauncher(opts = {}) {
       clearTimeout(indexTimer);
       clearTimeout(iconTimer);
       iconObserver.disconnect();
+      offGames?.();
     }
   });
 
@@ -307,6 +308,7 @@ export function openLauncher(opts = {}) {
           { label: "Open", icon: "external", run: () => { close(); launchApp(a); } },
           { label: "Run as administrator", icon: "lock", run: () => { close(); launchApp(a, { admin: true }); } },
           { label: pinned.has(a.id) ? "Unpin from dock" : "Pin to dock", icon: "pin", run: () => { togglePinnedApp(a.id); refresh(); } },
+          { label: "Add to games", icon: "gamepad", run: () => { addGame({ app: a.id }).then((g) => g && refresh()); } },
           { label: "Open file location", icon: "folder", run: () => { close(); api.apps.reveal(a.id).catch((err) => toast(cleanError(err), { level: "warn" })); } }
         ])
       }));
@@ -319,7 +321,7 @@ export function openLauncher(opts = {}) {
 
     if (want("games") && games.length) {
       const items = games.map((g) => ({
-        key: `game:${g.id}`, title: g.name, sub: GAME_SOURCE[g.source] || "Game", art: gameArt(g), icon: "gamepad",
+        key: `game:${g.id}`, title: g.name, sub: g.missing ? `${GAME_SOURCE[g.source] || "Game"} · not found` : GAME_SOURCE[g.source] || "Game", game: g, icon: "gamepad",
         run: () => launchGame(g),
         alt: () => api.games.reveal(g.id).catch((e) => toast(cleanError(e), { level: "warn" })),
         menu: (e) => gameMenu(e, g, close)
@@ -416,7 +418,8 @@ export function openLauncher(opts = {}) {
         menu: (e) => contextMenu(e, [
           { label: "Open", icon: "external", run: () => { close(); launchApp(a); } },
           { label: "Run as administrator", icon: "lock", run: () => { close(); launchApp(a, { admin: true }); } },
-          { label: "Pin to dock", icon: "pin", run: () => { togglePinnedApp(a.id); refresh(); } }
+          { label: "Pin to dock", icon: "pin", run: () => { togglePinnedApp(a.id); refresh(); } },
+          { label: "Add to games", icon: "gamepad", run: () => { addGame({ app: a.id }); } }
         ])
       })));
     }
@@ -444,6 +447,7 @@ export function openLauncher(opts = {}) {
     const frag = document.createDocumentFragment();
     let group = null;
     const wantExeIcons = [];
+    const wantGameIcons = [];
     iconObserver.disconnect();
     iconQueue.clear();
     results.slice(0, MAX_SHOWN).forEach((r, i) => {
@@ -466,8 +470,10 @@ export function openLauncher(opts = {}) {
         const url = cache.exeIcons.get(r.exe);
         iconBox.append(url ? h("img", { src: url, alt: "" }) : icon("window"));
         if (!cache.exeIcons.has(r.exe)) wantExeIcons.push([r.exe, iconBox]);
-      } else if (r.art) {
-        iconBox.append(h("img", { class: "game-thumb", src: r.art, alt: "" }));
+      } else if (r.game) {
+        iconBox.append(gameIcon(r.game, "game-thumb"));
+        iconBox.dataset.game = r.game.id;
+        wantGameIcons.push(r.game.id);
       } else if (r.swatch) {
         iconBox.append(h("span", { class: "theme-swatch", style: { background: `rgb(${r.swatch.join(",")})`, color: `rgb(${r.swatch.join(",")})` } }));
       } else iconBox.append(icon(r.icon || "file"));
@@ -494,7 +500,18 @@ export function openLauncher(opts = {}) {
         for (const [p, box] of wantExeIcons) if (map[p] && box.isConnected) box.replaceChildren(h("img", { src: map[p], alt: "" }));
       });
     }
+    // Game icons for the rows shown, made once if they don't exist yet.
+    if (wantGameIcons.length) ensureIcons(wantGameIcons, () => !closed);
   }
+
+  // Icons that arrive while the launcher is open replace the plain ones.
+  const offGames = onGames((_list, kind) => {
+    if (closed || kind !== "icons") return;
+    for (const box of list.querySelectorAll(".result-icon[data-game]")) {
+      const g = games.find((x) => x.id === box.dataset.game);
+      if (g?.icon && box.querySelector("img")?.getAttribute("src") !== fmt.fileUrl(g.icon)) box.replaceChildren(gameIcon(g, "game-thumb"));
+    }
+  });
 
   // App icons load only for results scrolled into (or near) view.
   const iconQueue = new Set();

@@ -62,11 +62,10 @@ Internet radio stations are listed by the community
 community-run station database. The streams themselves, station names and
 logos belong to their stations.
 
-Game names and cover art come from the Steam, Epic Games and Xbox
-launchers installed on your PC (and, for art missing from their caches,
-from Steam's and Epic's image servers). They are trademarks and artwork of
-their respective owners; eDEX-UI isn't affiliated with Valve, Epic Games or
-Microsoft.
+Game names and icons come from the Steam, Epic Games and Xbox launchers
+installed on your PC, and from the games' own shortcuts and programs. They are
+trademarks and artwork of their respective owners; eDEX-UI isn't affiliated
+with Valve, Epic Games or Microsoft.
 
 The optional Spotify view uses the [Spotify Web API](https://developer.spotify.com/documentation/web-api)
 with the user's own developer app, under the Spotify Developer Terms; cover

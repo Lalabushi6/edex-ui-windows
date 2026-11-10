@@ -37,7 +37,7 @@ import { openUpdates, initUpdates } from "./shell/updates.js";
 import { editWallpaperArt, mountWallpaper } from "./shell/wallpaper.js";
 import { clearBrowsingData } from "./workspace/browser.js";
 import { initNotices } from "./shell/notices.js";
-import { openGameLibrary, loadGames } from "./shell/games.js";
+import { openGameLibrary, openAddGame, loadGames } from "./shell/games.js";
 import { openBenchmark, markStartup } from "./shell/benchmark.js";
 import { initProfiles, switchProfile, newProfileDialog, captureProfile, activeProfile } from "./shell/profiles.js";
 
@@ -148,7 +148,8 @@ async function registerCommands() {
   cmd("wallpaper.edit", "Edit ASCII wallpaper art…", () => editWallpaperArt(), { icon: "edit", keywords: "ascii art wallpaper nfo block letters" });
   cmd("updates.check", "Check for updates", () => openUpdates(), { icon: "update", keywords: "update upgrade new version release github download" });
   cmd("games.open", "Games", () => openGameLibrary(), { keys: "Ctrl+Shift+G", icon: "gamepad", keywords: "games library steam epic xbox game pass play" });
-  cmd("games.rescan", "Rescan game library", () => loadGames(true).then((l) => toast(`${l.length} games found`, { level: "ok" })), { icon: "refresh", keywords: "games steam epic xbox refresh" });
+  cmd("games.add", "Add a game", () => openAddGame(), { icon: "plus", keywords: "games library add shortcut program exe" });
+  cmd("games.rescan", "Rescan game library", () => loadGames(true).then((l) => toast(`${l.length} game${l.length === 1 ? "" : "s"} in the library`, { level: "ok" })), { icon: "refresh", keywords: "games steam epic xbox refresh" });
   cmd("settings.games", "Game mode settings", () => openSettings("games"), { icon: "gamepad", keywords: "game mode quiet focus gaming" });
   cmd("gamemode.toggle", "Game mode: on / auto", () => {
     const next = settings.get("gameMode") === "on" ? "auto" : "on";

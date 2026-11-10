@@ -25,6 +25,9 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
+using EdexDrawing = System.Drawing;
+using EdexImaging = System.Drawing.Imaging;
+using EdexDrawing2D = System.Drawing.Drawing2D;
 
 [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IEdexAudioEndpointVolume {
@@ -1707,6 +1710,390 @@ public static class EdexDisk {
         return sb.ToString();
     }
 }
+
+// -- Game library: shortcuts and square icons ------------------------------------
+[ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexImageFactory {
+    [PreserveSig] int GetImage(EdexSize size, int flags, out IntPtr bitmap);
+}
+[StructLayout(LayoutKind.Sequential)]
+struct EdexSize { public int cx; public int cy; }
+
+[ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IEdexShellLink {
+    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder file, int cch, IntPtr findData, uint flags);
+    void GetIDList(out IntPtr pidl);
+    void SetIDList(IntPtr pidl);
+    void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder name, int cch);
+    void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+    void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder dir, int cch);
+    void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string dir);
+    void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder args, int cch);
+    void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string args);
+    void GetHotkey(out short key);
+    void SetHotkey(short key);
+    void GetShowCmd(out int cmd);
+    void SetShowCmd(int cmd);
+    void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int cch, out int index);
+    void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int index);
+    void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string rel, uint reserved);
+    void Resolve(IntPtr hwnd, uint flags);
+    void SetPath([MarshalAs(UnmanagedType.LPWStr)] string file);
+}
+[ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+class EdexShellLinkObject { }
+
+// Reads shortcuts without resolving them (nothing is searched for or contacted),
+// and makes the library's icons: the icon a shortcut names (file and index), else
+// a program's own icon, decoded at its real size and centred on a square canvas so
+// nothing is stretched or cropped. Network paths and missing drives are never
+// touched. Shell parse names (Store games) go through the shell's image factory.
+public static class EdexGames {
+    [DllImport("kernel32.dll")] static extern uint GetLogicalDrives();
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern uint GetDriveType(string root);
+    [DllImport("kernel32.dll")] static extern uint SetErrorMode(uint mode);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr LoadLibraryEx(string path, IntPtr file, uint flags);
+    [DllImport("kernel32.dll")] static extern bool FreeLibrary(IntPtr module);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindResource(IntPtr module, IntPtr name, IntPtr type);
+    [DllImport("kernel32.dll")] static extern IntPtr LoadResource(IntPtr module, IntPtr res);
+    [DllImport("kernel32.dll")] static extern IntPtr LockResource(IntPtr data);
+    [DllImport("kernel32.dll")] static extern uint SizeofResource(IntPtr module, IntPtr res);
+    delegate bool EnumResNameProc(IntPtr module, IntPtr type, IntPtr name, IntPtr param);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool EnumResourceNames(IntPtr module, IntPtr type, EnumResNameProc cb, IntPtr param);
+    [DllImport("user32.dll")] static extern IntPtr CreateIconFromResourceEx(byte[] bits, uint size, bool icon, uint version, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint count);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHDefExtractIcon(string file, int index, uint flags, out IntPtr large, out IntPtr small, uint size);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHCreateItemFromParsingName(string path, IntPtr bindCtx, ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IEdexImageFactory factory);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+    [DllImport("gdi32.dll", EntryPoint = "GetObjectW")] static extern int GetDibSection(IntPtr obj, int size, ref DIBSECTION ds);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct BITMAP { public int bmType, bmWidth, bmHeight, bmWidthBytes; public ushort bmPlanes, bmBitsPixel; public IntPtr bmBits; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct BITMAPINFOHEADER { public uint biSize; public int biWidth, biHeight; public ushort biPlanes, biBitCount; public uint biCompression, biSizeImage; public int biXPelsPerMeter, biYPelsPerMeter; public uint biClrUsed, biClrImportant; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct DIBSECTION { public BITMAP dsBm; public BITMAPINFOHEADER dsBmih; public uint dsBitfields0, dsBitfields1, dsBitfields2; public IntPtr dshSection; public uint dsOffset; }
+
+    const int MaxImageFile = 16 * 1024 * 1024;
+    static bool quiet;
+
+    // No "insert a disk" or "file not found" message boxes from this process.
+    static void Quiet() {
+        if (quiet) return;
+        SetErrorMode(0x8001); // SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX
+        quiet = true;
+    }
+
+    static string I(int n) { return n.ToString(CultureInfo.InvariantCulture); }
+
+    // Letter -> GetDriveType for every drive Windows knows (2 removable, 3 fixed,
+    // 4 network, 5 optical, 6 RAM disk). Nothing is read from the drives.
+    public static string DriveTypes() {
+        uint mask = GetLogicalDrives();
+        var sb = new StringBuilder("{");
+        for (int i = 0; i < 26; i++) {
+            if ((mask & (1u << i)) == 0) continue;
+            string letter = ((char)('A' + i)).ToString();
+            if (sb.Length > 1) sb.Append(',');
+            sb.Append('"').Append(letter).Append("\":").Append(GetDriveType(letter + ":\\").ToString(CultureInfo.InvariantCulture));
+        }
+        return sb.Append('}').ToString();
+    }
+
+    // A local file that may be read: a drive letter that exists and isn't a
+    // network drive, and the file is there.
+    static bool Reachable(string path) {
+        if (string.IsNullOrEmpty(path) || path.Length < 4) return false;
+        if (path[1] != ':' || (path[2] != '\\' && path[2] != '/')) return false;
+        uint type = GetDriveType(path.Substring(0, 2) + "\\");
+        if (type == 0 || type == 1 || type == 4) return false; // unknown, no such drive, network
+        return File.Exists(path);
+    }
+
+    static string Expand(string s) { return string.IsNullOrEmpty(s) ? "" : Environment.ExpandEnvironmentVariables(s); }
+
+    public static string Links(string[] paths) {
+        Quiet();
+        var sb = new StringBuilder("{");
+        foreach (var p in paths) {
+            if (string.IsNullOrEmpty(p)) continue;
+            if (sb.Length > 1) sb.Append(',');
+            sb.Append(EdexNative.Q(p)).Append(':').Append(Link(p));
+        }
+        return sb.Append('}').ToString();
+    }
+
+    static string Link(string path) {
+        if (!Reachable(path)) return "null";
+        object obj = null;
+        try {
+            obj = new EdexShellLinkObject();
+            ((System.Runtime.InteropServices.ComTypes.IPersistFile)obj).Load(path, 0); // STGM_READ
+            var link = (IEdexShellLink)obj;
+            var target = new StringBuilder(1024);
+            var args = new StringBuilder(4096);
+            var dir = new StringBuilder(1024);
+            var icon = new StringBuilder(1024);
+            int index = 0;
+            try { link.GetPath(target, target.Capacity, IntPtr.Zero, 0); } catch { target.Length = 0; }
+            try { link.GetArguments(args, args.Capacity); } catch { args.Length = 0; }
+            try { link.GetWorkingDirectory(dir, dir.Capacity); } catch { dir.Length = 0; }
+            try { link.GetIconLocation(icon, icon.Capacity, out index); } catch { icon.Length = 0; index = 0; }
+            return "{\"target\":" + EdexNative.Q(Expand(target.ToString())) + ",\"args\":" + EdexNative.Q(args.ToString()) +
+                ",\"dir\":" + EdexNative.Q(Expand(dir.ToString())) + ",\"icon\":" + EdexNative.Q(Expand(icon.ToString())) +
+                ",\"index\":" + I(index) + "}";
+        } catch {
+            return "null";
+        } finally {
+            if (obj != null) Marshal.ReleaseComObject(obj);
+        }
+    }
+
+    // Tries each source in turn (file + icon index, or a shell: name) and saves the
+    // first icon found as a square PNG at outPath. Returns the source used and the
+    // image's real size, or used -1 when none of them has an icon.
+    public static string Extract(string outPath, int size, string[] files, int[] indexes) {
+        Quiet();
+        if (size < 16 || size > 512) size = 256;
+        for (int i = 0; files != null && i < files.Length; i++) {
+            string f = files[i];
+            if (string.IsNullOrEmpty(f)) continue;
+            int index = indexes != null && i < indexes.Length ? indexes[i] : 0;
+            EdexDrawing.Bitmap bmp = null;
+            try {
+                bmp = f.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) ? FromShell(f, size) : FromFile(f, index, size);
+                if (bmp == null) continue;
+                int w = bmp.Width, h = bmp.Height;
+                SaveSquare(bmp, size, outPath);
+                return "{\"used\":" + I(i) + ",\"w\":" + I(w) + ",\"h\":" + I(h) + "}";
+            } catch {
+            } finally {
+                if (bmp != null) bmp.Dispose();
+            }
+        }
+        return "{\"used\":-1}";
+    }
+
+    static EdexDrawing.Bitmap FromFile(string path, int index, int size) {
+        if (!Reachable(path)) return null;
+        var head = new byte[4];
+        long length;
+        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
+            length = fs.Length;
+            if (fs.Read(head, 0, 4) < 4) return null;
+        }
+        if (head[0] == 0x4D && head[1] == 0x5A) return FromModule(path, index, size); // "MZ"
+        // An .ico (or a picture) holds one icon, so only index 0 names it.
+        if (index != 0 || length > MaxImageFile) return null;
+        byte[] data = File.ReadAllBytes(path);
+        if (head[0] == 0 && head[1] == 0 && head[2] == 1 && head[3] == 0) return FromIco(data, size);
+        using (var ms = new MemoryStream(data))
+        using (var img = EdexDrawing.Image.FromStream(ms)) {
+            if ((long)img.Width * img.Height > 4096L * 4096L) return null;
+            return new EdexDrawing.Bitmap(img);
+        }
+    }
+
+    // Icon groups in a program or library. A positive index counts groups in the
+    // order Windows lists them; a negative one is a resource ID (as in shortcuts).
+    static EdexDrawing.Bitmap FromModule(string path, int index, int size) {
+        IntPtr module = LoadLibraryEx(path, IntPtr.Zero, 0x22); // AS_DATAFILE | AS_IMAGE_RESOURCE
+        if (module != IntPtr.Zero) {
+            try {
+                var names = new List<object>();
+                EnumResNameProc cb = delegate(IntPtr m, IntPtr t, IntPtr name, IntPtr p) {
+                    long v = name.ToInt64();
+                    if ((v >> 16) == 0) names.Add((int)v); else names.Add(Marshal.PtrToStringUni(name));
+                    return true;
+                };
+                EnumResourceNames(module, (IntPtr)14, cb, IntPtr.Zero); // RT_GROUP_ICON
+                GC.KeepAlive(cb);
+                if (names.Count > 0) {
+                    object group = null;
+                    if (index >= 0) { if (index < names.Count) group = names[index]; }
+                    else foreach (var n in names) if (n is int && (int)n == -index) { group = n; break; }
+                    if (group == null) return null;
+                    byte[] dir = Resource(module, group, 14);
+                    if (dir == null || dir.Length < 6) return null;
+                    int count = BitConverter.ToUInt16(dir, 4);
+                    var images = new List<byte[]>();
+                    for (int i = 0; i < count && 6 + i * 14 + 14 <= dir.Length; i++) {
+                        byte[] img = Resource(module, (int)BitConverter.ToUInt16(dir, 6 + i * 14 + 12), 3); // RT_ICON
+                        if (img != null) images.Add(img);
+                    }
+                    return Best(images, size);
+                }
+            } finally {
+                FreeLibrary(module);
+            }
+        }
+        // Icons this reader can't see (16-bit icon libraries, system files whose
+        // resources live elsewhere): the shell's own extractor, at the size asked.
+        if (ExtractIconEx(path, -1, null, null, 0) == 0) return null;
+        IntPtr large, small;
+        if (SHDefExtractIcon(path, index, 0, out large, out small, (uint)(size | (16 << 16))) != 0) return null;
+        if (small != IntPtr.Zero) DestroyIcon(small);
+        if (large == IntPtr.Zero) return null;
+        try {
+            using (var icon = EdexDrawing.Icon.FromHandle(large)) return icon.ToBitmap();
+        } finally {
+            DestroyIcon(large);
+        }
+    }
+
+    static byte[] Resource(IntPtr module, object name, int type) {
+        IntPtr namePtr;
+        bool alloc = false;
+        if (name is int) namePtr = (IntPtr)(int)name;
+        else { namePtr = Marshal.StringToHGlobalUni((string)name); alloc = true; }
+        try {
+            IntPtr res = FindResource(module, namePtr, (IntPtr)type);
+            if (res == IntPtr.Zero) return null;
+            uint len = SizeofResource(module, res);
+            IntPtr data = LoadResource(module, res);
+            if (data == IntPtr.Zero || len == 0 || len > MaxImageFile) return null;
+            IntPtr p = LockResource(data);
+            if (p == IntPtr.Zero) return null;
+            var bytes = new byte[len];
+            Marshal.Copy(p, bytes, 0, (int)len);
+            return bytes;
+        } finally {
+            if (alloc) Marshal.FreeHGlobal(namePtr);
+        }
+    }
+
+    static EdexDrawing.Bitmap FromIco(byte[] data, int size) {
+        if (data.Length < 6) return null;
+        int count = BitConverter.ToUInt16(data, 4);
+        var images = new List<byte[]>();
+        for (int i = 0; i < count && 6 + i * 16 + 16 <= data.Length; i++) {
+            int len = BitConverter.ToInt32(data, 6 + i * 16 + 8);
+            int off = BitConverter.ToInt32(data, 6 + i * 16 + 12);
+            if (len <= 0 || off < 0 || (long)off + len > data.Length) continue;
+            var img = new byte[len];
+            Buffer.BlockCopy(data, off, img, 0, len);
+            images.Add(img);
+        }
+        return Best(images, size);
+    }
+
+    static int BigEndian(byte[] b, int at) { return (b[at] << 24) | (b[at + 1] << 16) | (b[at + 2] << 8) | b[at + 3]; }
+
+    // The real size of one icon image: from its PNG header, else from its bitmap
+    // header (whose height counts the transparency mask too).
+    static bool Measure(byte[] img, out int w, out int h, out int bpp, out bool png) {
+        w = 0; h = 0; bpp = 0; png = false;
+        if (img.Length >= 24 && img[0] == 0x89 && img[1] == 0x50 && img[2] == 0x4E && img[3] == 0x47) {
+            w = BigEndian(img, 16); h = BigEndian(img, 20); bpp = 32; png = true;
+        } else if (img.Length >= 40 && BitConverter.ToInt32(img, 0) >= 40) {
+            w = BitConverter.ToInt32(img, 4); h = Math.Abs(BitConverter.ToInt32(img, 8)) / 2; bpp = BitConverter.ToUInt16(img, 14);
+        } else return false;
+        return w > 0 && h > 0 && w <= 4096 && h <= 4096;
+    }
+
+    // The smallest image at least as big as the size asked for, else the biggest;
+    // then the one with the most colours.
+    static bool Better(int w, int h, int bpp, int pw, int ph, int pbpp, int size) {
+        int s = Math.Max(w, h), ps = Math.Max(pw, ph);
+        bool big = s >= size, pbig = ps >= size;
+        if (big != pbig) return big;
+        if (s != ps) return big ? s < ps : s > ps;
+        return bpp > pbpp;
+    }
+
+    static EdexDrawing.Bitmap Best(List<byte[]> images, int size) {
+        byte[] pick = null;
+        int pw = 0, ph = 0, pbpp = 0;
+        bool ppng = false;
+        foreach (var img in images) {
+            int w, h, bpp;
+            bool png;
+            if (!Measure(img, out w, out h, out bpp, out png)) continue;
+            if (pick == null || Better(w, h, bpp, pw, ph, pbpp, size)) { pick = img; pw = w; ph = h; pbpp = bpp; ppng = png; }
+        }
+        if (pick == null) return null;
+        if (ppng) {
+            using (var ms = new MemoryStream(pick))
+            using (var img = EdexDrawing.Image.FromStream(ms)) return new EdexDrawing.Bitmap(img);
+        }
+        // Made at its own size, so a non-square image keeps its shape.
+        IntPtr hIcon = CreateIconFromResourceEx(pick, (uint)pick.Length, true, 0x00030000, pw, ph, 0);
+        if (hIcon == IntPtr.Zero) return null;
+        try {
+            using (var icon = EdexDrawing.Icon.FromHandle(hIcon)) return icon.ToBitmap();
+        } finally {
+            DestroyIcon(hIcon);
+        }
+    }
+
+    static EdexDrawing.Bitmap FromShell(string name, int size) {
+        Guid iid = typeof(IEdexImageFactory).GUID;
+        IEdexImageFactory factory;
+        if (SHCreateItemFromParsingName(name, IntPtr.Zero, ref iid, out factory) != 0 || factory == null) return null;
+        IntPtr hbm = IntPtr.Zero;
+        try {
+            var sz = new EdexSize();
+            sz.cx = size;
+            sz.cy = size;
+            if (factory.GetImage(sz, 0x4, out hbm) != 0 || hbm == IntPtr.Zero) return null; // SIIGBF_ICONONLY
+            return FromDib(hbm);
+        } finally {
+            if (hbm != IntPtr.Zero) DeleteObject(hbm);
+            Marshal.ReleaseComObject(factory);
+        }
+    }
+
+    // A 32-bit DIB section with its alpha kept (Image.FromHbitmap drops it).
+    static EdexDrawing.Bitmap FromDib(IntPtr hbm) {
+        var ds = new DIBSECTION();
+        if (GetDibSection(hbm, Marshal.SizeOf(typeof(DIBSECTION)), ref ds) == 0) return null;
+        int w = ds.dsBm.bmWidth, h = ds.dsBm.bmHeight;
+        if (w <= 0 || h <= 0) return null;
+        if (ds.dsBm.bmBitsPixel != 32 || ds.dsBm.bmBits == IntPtr.Zero) return EdexDrawing.Image.FromHbitmap(hbm);
+        bool topDown = ds.dsBmih.biHeight < 0;
+        var bmp = new EdexDrawing.Bitmap(w, h, EdexImaging.PixelFormat.Format32bppPArgb);
+        var bd = bmp.LockBits(new EdexDrawing.Rectangle(0, 0, w, h), EdexImaging.ImageLockMode.WriteOnly, EdexImaging.PixelFormat.Format32bppPArgb);
+        try {
+            var row = new byte[w * 4];
+            for (int y = 0; y < h; y++) {
+                int src = topDown ? y : h - 1 - y;
+                Marshal.Copy(new IntPtr(ds.dsBm.bmBits.ToInt64() + (long)src * ds.dsBm.bmWidthBytes), row, 0, row.Length);
+                Marshal.Copy(row, 0, new IntPtr(bd.Scan0.ToInt64() + (long)y * bd.Stride), row.Length);
+            }
+        } finally {
+            bmp.UnlockBits(bd);
+        }
+        return bmp;
+    }
+
+    // Centres the image on a transparent square as wide as its longer side (at most
+    // `max`), scaling down only, never stretching one side. Written to a temporary
+    // file first, so a half-written PNG is never in the cache.
+    static void SaveSquare(EdexDrawing.Bitmap src, int max, string outPath) {
+        int w = src.Width, h = src.Height;
+        int side = Math.Min(max, Math.Max(w, h));
+        double k = (double)side / Math.Max(w, h);
+        int dw = Math.Max(1, (int)Math.Round(w * k)), dh = Math.Max(1, (int)Math.Round(h * k));
+        bool scaled = dw != w || dh != h;
+        string tmp = outPath + ".tmp";
+        using (var canvas = new EdexDrawing.Bitmap(side, side, EdexImaging.PixelFormat.Format32bppArgb)) {
+            using (var g = EdexDrawing.Graphics.FromImage(canvas)) {
+                g.Clear(EdexDrawing.Color.Transparent);
+                g.CompositingMode = EdexDrawing2D.CompositingMode.SourceCopy;
+                g.InterpolationMode = scaled ? EdexDrawing2D.InterpolationMode.HighQualityBicubic : EdexDrawing2D.InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = scaled ? EdexDrawing2D.PixelOffsetMode.HighQuality : EdexDrawing2D.PixelOffsetMode.Half;
+                using (var attrs = new EdexImaging.ImageAttributes()) {
+                    attrs.SetWrapMode(EdexDrawing2D.WrapMode.TileFlipXY);
+                    g.DrawImage(src, new EdexDrawing.Rectangle((side - dw) / 2, (side - dh) / 2, dw, dh), 0, 0, w, h, EdexDrawing.GraphicsUnit.Pixel, attrs);
+                }
+            }
+            canvas.Save(tmp, EdexImaging.ImageFormat.Png);
+        }
+        if (File.Exists(outPath)) File.Delete(outPath);
+        File.Move(tmp, outPath);
+    }
+}
 '@
 
 function Write-Line([string]$text) {
@@ -2028,6 +2415,15 @@ while ($true) {
             'bluetoothRadio' { $data = Set-BluetoothRadio ([bool]$a.on) }
             'searchIndex'  { $data = Search-Index $a }
             'xboxGames'    { $data = Get-XboxGames }
+            'driveTypes'   { $data = [EdexGames]::DriveTypes() }
+            'shortcuts'    { $data = [EdexGames]::Links([string[]]@($a.paths | Where-Object { $_ -ne $null })) }
+            'gameIcons' {
+                $parts = New-Object System.Collections.Generic.List[string]
+                foreach ($it in @($a.items)) {
+                    $parts.Add([EdexGames]::Extract([string]$it.out, [int]$a.size, [string[]]@($it.files), [int[]]@($it.indexes)))
+                }
+                $data = '[' + ($parts -join ',') + ']'
+            }
             'properties' { $data = if ([EdexNative]::Properties([string]$a.path)) { 'true' } else { 'false' } }
             'lock'      { $data = if ([EdexNative]::Lock()) { 'true' } else { 'false' } }
             'sleep'     { $data = if ([EdexNative]::Sleep()) { 'true' } else { 'false' } }

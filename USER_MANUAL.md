@@ -146,8 +146,8 @@ Press `Ctrl+Shift+Space` (from anywhere in Windows) or click the search bar.
 `Enter` opens, `Ctrl+Enter` reveals the file location (or closes a window),
 `Tab` cycles the All / Apps / Games / Windows / Files / Commands filters,
 right-click a result for more (pin to dock, run as administrator, open file
-location). Games show with their cover art; workspaces show as "Workspace:
-name".
+location, add an app to your games). Games show with their icons;
+workspaces show as "Workspace: name".
 
 ## 6. Dock
 
@@ -172,18 +172,60 @@ ones that were minimised.
 
 **Game library**: `Ctrl+Shift+G`, the dock's games button, or the launcher
 ("Games"). It finds the games installed through **Steam**, the **Epic Games
-Launcher** and the **Xbox app** (PC Game Pass and Microsoft Store games),
-with their cover art, in a full-screen grid: type to search, filter by
-store, click to play (each game starts through its own launcher, so
-sign-in, updates and cloud saves work as usual). Right-click a game to pin
-it to the dock, open its install folder or rescan. Recently played games
-come first. Cover art comes from the launchers' own caches; art that isn't
-cached is downloaded once from Steam's or Epic's image servers while
-Outbound lookups are on.
+Launcher** and the **Xbox app** (PC Game Pass and Microsoft Store games), and
+shows them with any games you've added, in a grid of square icons. Type to
+search, filter by store (or *Added*), click to play, or move with the arrow
+keys and press `Enter`. Steam, Epic and Xbox games start through their own
+launcher, so sign-in, updates and cloud saves work as usual. Recently played
+games come first.
+
+**Adding a game**: anything else — a game from GOG, Battle.net, an emulator, a
+game with its own installer — can be added in three ways:
+
+- **Add game** in the library lists your apps (Start menu and desktop); pick
+  one. **Browse for a program…** there picks a game's `.exe` instead.
+- Drag a game's shortcut (`.lnk` or `.url`) or program (`.exe`) onto the
+  library.
+- In the launcher, right-click an app → **Add to games**.
+
+An added shortcut starts the way a double-click on it would, with its own
+arguments and folder. Shortcuts and programs on a network drive can't be
+added.
+
+**Icons**: every game has a square icon, in this order:
+
+1. the icon its shortcut names (the icon you'd set under the shortcut's
+   Properties → Change Icon, or a `.url` file's `IconFile`); for Steam and Epic
+   games that's the shortcut the launcher put in the Start menu or on the
+   desktop, and for Xbox games their Start menu entry;
+2. otherwise the icon of the game's program itself;
+3. otherwise a plain game icon.
+
+An icon that isn't square is centred on the square, never stretched or cut.
+Each icon is made once, at up to 256 pixels so it stays sharp on high-DPI
+screens, and kept in `game-icons` in eDEX's data folder. It's made again only
+when the shortcut or the program changes. Nothing is downloaded, and nothing
+runs while the library is closed: icons are made the first time a game is
+shown. eDEX never reads an icon from a network path or a drive that isn't
+connected.
+
+**Right-click a game** to play it, pin it to the dock, open its install folder
+(or show an added shortcut or program in its folder), rename it, hide it
+(Steam, Epic and Xbox games) or remove it (games you added), or rescan.
+Hidden games stay out of the library, the launcher and game mode;
+Settings → Games shows them again.
+
+A game whose shortcut, program or drive is gone says **Not found** or **Drive
+not connected**, and starting it explains why instead of showing Windows'
+broken-shortcut message.
+
+The library looks for newly installed games when you open it (at most every
+ten minutes) and when you press **Rescan**. Once, shortly after eDEX starts, it
+also reads Steam's and Epic's lists so game mode knows about new games.
 
 **Game mode** (Settings → Games): while a game is in front — one from the
-library, or anything else Windows reports as running full-screen on
-Direct3D — eDEX rests:
+library (including the ones you added, but not hidden ones), or anything else
+Windows reports as running full-screen on Direct3D — eDEX rests:
 
 - panel refreshes and animations stop (the globe, the visualizer, effects);
 - the multi-monitor HUD hides;
@@ -835,7 +877,8 @@ Open with `Ctrl+,` or the gear icon. Changes apply immediately.
   smoothing, sensitivity), the Spotify connection, synced lyrics and the
   music library's folders (see section 12).
 - **Games**: game mode (Automatic / On / Off), holding notifications during
-  games, and rescanning the library (see section 7).
+  games, rescanning the library and showing hidden games again (see
+  section 7).
 - **Calendar**: calendar subscriptions (see section 15).
 - **Web & apps**: opening web links in eDEX, clearing browsing data, app
   tabs and opening apps inside eDEX (see sections 9 and 10).
@@ -866,7 +909,6 @@ With **Outbound lookups** on (Settings → Privacy), eDEX contacts:
 | Weather | api.open-meteo.com (approximate coordinates only) | at most every 20 minutes |
 | Update check | api.github.com (this project's latest release) | at most once a day, if "Check automatically" is on |
 | Synced lyrics | lrclib.net (title, artist, album and length of the song) | once per song while lyrics are shown; answers are remembered |
-| Game cover art | Steam's (steamstatic.com) and Epic's image servers | once per game whose art isn't in its launcher's cache |
 | Radio: popular stations | radio-browser.info | when you open the Radio view |
 | Calendar subscriptions | the links you added | about every 30 minutes |
 
@@ -897,8 +939,9 @@ confirm it, because anything printed there can try to steer the answer. **New
 chat** starts clean.
 
 Whole-PC search, the disk map, Bluetooth, Now playing, the mixer, the game
-library (read from the launchers' files on this PC) and the music library
-all work locally; they send nothing anywhere. The notification history
+library (read from the launchers' files and your shortcuts on this PC; icons
+come from those files too) and the music library all work locally; they send
+nothing anywhere. The notification history
 (notifications.json, two weeks) stays in eDEX's data folder.
 
 ## 20. Updates and portable use
@@ -967,8 +1010,15 @@ Explorer).
   run one at a time. Turning the live wallpaper off and on, or restarting
   Explorer, rebuilds it; turning it off always brings your wallpaper back.
 - **Game mode doesn't start for a game**: games outside Steam, Epic and the
-  Xbox app are only noticed when they run full-screen on Direct3D. Use the
+  Xbox app are only noticed when they run full-screen on Direct3D, unless you
+  add them to the library (section 7). Hidden games never count. Use the
   launcher's "Game mode: on / auto" to turn it on by hand.
+- **A game shows the plain icon**: its shortcut names no icon (or one that
+  isn't there) and its program has none, or the files are on a network drive
+  or a drive that isn't connected, which eDEX never reads. For a Steam game
+  without a shortcut, eDEX picks the program in its folder named most like the
+  game; let Steam create a desktop shortcut for the game and press **Rescan**
+  to use that shortcut's icon instead.
 - **No lyrics found**: lyrics need Outbound lookups (Settings → Privacy),
   and LRCLIB doesn't have every song; a `.lrc` file next to the song always
   works.

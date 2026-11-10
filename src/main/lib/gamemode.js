@@ -4,7 +4,8 @@
 // notification centre.
 //
 // "A game" is a program running from a game in the library (Steam, Epic,
-// Xbox) or anything Windows reports as running full-screen Direct3D.
+// Xbox, or one you added; hidden games don't count) or anything Windows
+// reports as running full-screen Direct3D.
 // Setting gameMode: "auto" (detect), "on" (always), "off".
 "use strict";
 

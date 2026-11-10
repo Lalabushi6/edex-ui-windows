@@ -152,9 +152,11 @@ locked down.
 
 ### Games
 - **Game library** (`Ctrl+Shift+G`): your installed Steam, Epic Games and Xbox
-  (PC Game Pass) games with their cover art, in a full-screen grid, in the
-  launcher's *Games* filter and pinnable to the dock. Click to play; games
-  start through their own launcher.
+  (PC Game Pass) games, plus any other game you add (drag its shortcut or
+  program onto the library), in a grid of square icons, in the launcher's
+  *Games* filter and pinnable to the dock. Each icon is the one the game's
+  shortcut names, or else the game's program icon, made once and kept on this
+  PC. Click to play; launcher games start through their own launcher.
 - **Game mode**: while a game runs (one from the library, or anything
   full-screen on Direct3D), eDEX goes quiet: animations and panel refreshes
   stop, the multi-monitor HUD hides, the screen saver and live wallpaper hold
@@ -480,8 +482,8 @@ where a maximised window covers it, on battery and during games. Turn it off
 and your normal wallpaper is back.
 
 #### Can eDEX keep out of the way while I game?
-That's game mode. When a game from the library (Steam, Epic or Xbox), or
-anything else running full screen on Direct3D, is in front, eDEX stops its
+That's game mode. When a game from the library (Steam, Epic, Xbox or one you
+added), or anything else running full screen on Direct3D, is in front, eDEX stops its
 animations and refreshes, hides the HUD on other displays, holds the screen
 saver and live wallpaper back and keeps notifications in the bell instead of
 popping them up. Settings → Games can also turn it on by hand or off
@@ -521,8 +523,7 @@ Only if you let it. With **Outbound lookups** on (the default), the world-view
 globe looks up your approximate location from your public IP and checks
 latency to a few public sites, the weather widget fetches a forecast, eDEX
 checks GitHub for a new release once a day, lyrics are looked up on LRCLIB
-(the song's title, artist, album and length), game cover art missing from your
-launchers' caches is fetched from Steam's and Epic's image servers, the radio
+(the song's title, artist, album and length), the radio
 view lists popular stations from Radio Browser, and calendar subscriptions
 refresh every half hour. Turn it off under Settings → Privacy and eDEX makes
 no outbound requests of its own. Pages you open in browser tabs, radio
@@ -709,8 +710,9 @@ src/main/            Electron main process
                      browser tabs, app tabs, Spotify, updates, games, lyrics, radio, music
                      library, calendar feeds, extras
   lib/               protocols, path policy, cache, JSON store, telemetry, icon service,
-                     takeover, screen time, alerts, notification centre, screen saver,
-                     live wallpaper, game mode, portable mode, audio tags, iCalendar parser
+                     game icons, shortcuts, takeover, screen time, alerts, notification centre,
+                     screen saver, live wallpaper, game mode, portable mode, audio tags,
+                     iCalendar parser
   native/bridge.ps1  long-lived PowerShell helper for Win32 / Core Audio / WinRT / Windows Search;
                      a second instance handles slow calls (media sessions, Bluetooth, search, disk scans)
 src/renderer/        UI (ES modules served from app://edex)
@@ -807,8 +809,8 @@ docs/                PUBLISHING.md (GitHub and releases)
 - **Internet radio** streams reach the interface only through the
   `edexradio:` protocol: the main process fetches the station (http/https
   only), resolves .pls / .m3u links and strips the stream's title metadata,
-  so the interface's CSP stays closed to the internet. Station logos and game
-  covers arrive as data / local files, never as remote images. A directory
+  so the interface's CSP stays closed to the internet. Station logos arrive as
+  data URLs, never as remote images. A directory
   listing or playlist file can't point eDEX at your local network; only a
   station you add yourself can live there.
 - **Calendar links** are kept in settings like your other preferences and
@@ -831,8 +833,7 @@ falling back to ipinfo.io) and checks latency to google.com and twelve public
 sites; the weather widget fetches a forecast for that approximate location
 from open-meteo.com; once a day eDEX asks api.github.com for the latest
 release; lyrics are looked up on lrclib.net (title, artist, album and
-length of what's playing); missing game covers come from Steam's
-(steamstatic.com) and Epic's image servers; the radio view's popular list
+length of what's playing); the radio view's popular list
 comes from radio-browser.info; and calendar subscriptions refresh from the
 links you added. Turn all of this off under Settings → Privacy. Browser
 tabs, radio stations and station search, Spotify (accounts.spotify.com,

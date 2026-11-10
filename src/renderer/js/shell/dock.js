@@ -9,7 +9,7 @@ import { emit } from "../core/bus.js";
 import { toast, contextMenu, cleanError } from "../core/ui.js";
 import { openLauncher, loadAppsCached, appIcons, exeIcons, launchApp, togglePinnedApp } from "./launcher.js";
 import { openSnapPicker, snapWindow } from "./arrange.js";
-import { openGameLibrary, loadGames, launchGame, gameArt, gameMenu, onGames } from "./games.js";
+import { openGameLibrary, loadGames, launchGame, gameIcon, gameMenu, onGames, ensureIcons } from "./games.js";
 
 const api = window.edex;
 
@@ -44,17 +44,18 @@ export function initDock(root) {
     if (!ids.length) { pins.replaceChildren(); return; }
     const apps = await loadAppsCached();
     const byId = new Map(apps.map((a) => [a.id, a]));
-    // Pinned games ("game:steam:620") show their cover art.
+    // Pinned games ("game:steam:620") show their square icon. One that has
+    // none yet is made once, here, for the pinned games only.
     const games = ids.some((id) => id.startsWith("game:")) ? await loadGames() : [];
     const gameById = new Map(games.map((g) => [`game:${g.id}`, g]));
     const list = ids.map((id) => byId.get(id)).filter(Boolean);
     const icons = await appIcons(list.filter((a) => a.hasIcon).map((a) => a.id));
-    const gameButtons = ids.filter((id) => gameById.has(id)).map((id) => {
-      const g = gameById.get(id);
-      const art = gameArt(g);
-      return h("button", { class: "dock-app dock-game", type: "button", title: `${g.name} (game)`, onclick: () => launchGame(g), oncontextmenu: (e) => gameMenu(e, g) },
-        art ? h("img", { src: art, alt: "" }) : icon("gamepad"));
-    });
+    const pinnedGames = ids.filter((id) => gameById.has(id)).map((id) => gameById.get(id));
+    const gameButtons = pinnedGames.map((g) => h("button", {
+      class: `dock-app dock-game${g.missing ? " missing" : ""}`, type: "button", title: `${g.name} (game)`,
+      onclick: () => launchGame(g), oncontextmenu: (e) => gameMenu(e, g)
+    }, gameIcon(g, "dock-game-icon")));
+    ensureIcons(pinnedGames.map((g) => g.id));
     pins.replaceChildren(...gameButtons, ...list.map((app) => h("button", {
       class: "dock-app", type: "button", title: app.name,
       onclick: () => launchApp(app),
