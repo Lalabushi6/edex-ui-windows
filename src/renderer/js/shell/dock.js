@@ -16,6 +16,7 @@ const api = window.edex;
 export function initDock(root) {
   const start = h("button", { class: "icon-btn dock-start", type: "button", title: "Apps (Ctrl+Shift+Space)", onclick: () => openLauncher({ filter: "apps" }) }, icon("apps"));
   const gamesBtn = h("button", { class: "icon-btn dock-start", type: "button", title: "Games (Ctrl+Shift+G)", onclick: () => openGameLibrary() }, icon("gamepad"));
+  const titanBtn = h("button", { class: "icon-btn dock-start", type: "button", title: "Titan Protocol (Ctrl+Shift+O)", onclick: () => runCommand("titan.open") }, icon("titan"));
   const pins = h("div", { class: "dock-pins" });
   const wins = h("div", { class: "dock-windows" });
   const kbBtn = h("button", { class: "icon-btn", type: "button", title: "On-screen keyboard (Ctrl+Shift+K)", onclick: () => settings.set({ showKeyboard: !settings.get("showKeyboard") }) }, icon("keyboard"));
@@ -35,7 +36,7 @@ export function initDock(root) {
     kbBtn,
     h("button", { class: "icon-btn", type: "button", title: "Process manager", onclick: () => runCommand("processes.open") }, icon("process")),
     h("button", { class: "icon-btn", type: "button", title: "Hide eDEX (show the Windows desktop)", onclick: () => api.app.hide() }, icon("minimize")));
-  root.append(start, gamesBtn, pins, h("div", { class: "dock-sep" }), wins, tray);
+  root.append(start, gamesBtn, titanBtn, pins, h("div", { class: "dock-sep" }), wins, tray);
   settings.watch("showKeyboard", (v) => kbBtn.classList.toggle("active", !!v));
   kbBtn.classList.toggle("active", !!settings.get("showKeyboard"));
 

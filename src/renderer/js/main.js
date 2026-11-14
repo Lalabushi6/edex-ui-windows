@@ -133,6 +133,21 @@ async function registerCommands() {
   }, { icon: "desktop", keywords: "fullscreen taskbar hide windows desktop shell replace kiosk" });
   cmd("ai.open", "Ask Claude", () => openAiPanel({}), { keys: "Ctrl+Shift+J", icon: "ai", keywords: "ai assistant chat claude help question" });
   cmd("disk.open", "Disk usage map", () => workspace.openDisk(), { icon: "disk", keywords: "storage space analyzer treemap sunburst large files folders windirstat" });
+  // Titan Protocol (the life-tracking sub-app): opening it, each page, and
+  // its own command palette while its tab is in front.
+  cmd("titan.open", "Titan Protocol", () => workspace.openTitan(), { keys: "Ctrl+Shift+O", icon: "titan", keywords: "titan life os productivity discipline engines habits goals journal focus pomodoro workout gym sleep weight nutrition calories budget money expenses tracker" });
+  const titanActive = () => workspace?.active?.type === "titan";
+  cmd("titan.palette", "Titan: command palette", () => workspace.active.palette(), { keys: "Ctrl+K", icon: "titan", when: titanActive, enabled: titanActive });
+  for (const [page, title, iconName, keywords] of [
+    ["dashboard", "Dashboard", "gauge", "score overview"], ["command", "Command Center", "command", "all tasks today"], ["analytics", "Analytics", "chart", "trends stats"],
+    ["body", "Body engine", "heart", "fitness"], ["mind", "Mind engine", "brain", "learning reading"], ["money", "Money engine", "coin", "finance"], ["general", "General engine", "layers", "other"],
+    ["habits", "Habits", "flame", "streaks"], ["journal", "Journal", "book", "diary notes"], ["goals", "Goals", "target", "targets deadline"],
+    ["focus", "Focus timer", "timer", "pomodoro deep work"], ["body/workouts", "Workouts", "dumbbell", "gym exercise sets"], ["body/sleep", "Sleep tracker", "moon", "bedtime"],
+    ["body/weight", "Weight tracker", "scale", "kg"], ["body/nutrition", "Nutrition", "food", "calories macros meals"], ["money/cashflow", "Finance tracker", "wallet", "expenses income spending loans"],
+    ["money/deep-work", "Deep work", "bolt", "earnings freelance"], ["money/budgets", "Budgets", "flag", "spending limits"], ["settings", "Settings & backups", "gear", "import export"]
+  ]) {
+    cmd(`titan.page.${page.replace("/", ".")}`, `Titan: ${title}`, () => workspace.openTitan({ page }), { icon: iconName, keywords: `titan protocol ${keywords}` });
+  }
   cmd("widgets.command", "New command widget…", () => editCommandWidget(), { icon: "terminal", keywords: "custom widget script output panel powershell" });
   cmd("idle.show", "Show idle screen", () => showIdleScreen(), { icon: "moon", keywords: "screensaver idle clock matrix" });
   cmd("saver.start", "Start screen saver", () => api.saver.start().catch((e) => toast(cleanError(e), { level: "warn" })), { icon: "saver", keywords: "screensaver idle lock away blank screen all monitors" });

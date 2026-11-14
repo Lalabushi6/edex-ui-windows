@@ -15,10 +15,11 @@ import { DiskTab } from "./disk.js";
 import { BrowserTab } from "./browser.js";
 import { WallpaperTab } from "./wallpaper.js";
 import { AppTab } from "./apptab.js";
+import { TitanTab } from "./titan.js";
 import { editWallpaperArt } from "../shell/wallpaper.js";
 
-const TYPES = { terminal: TerminalTab, files: ExplorerTab, processes: ProcessesTab, media: MediaTab, disk: DiskTab, browser: BrowserTab, ascii: WallpaperTab, app: AppTab };
-const TYPE_ICON = { terminal: "terminal", files: "folder", processes: "process", media: "audio", disk: "disk", browser: "globe", ascii: "wallpaper", app: "apptab" };
+const TYPES = { terminal: TerminalTab, files: ExplorerTab, processes: ProcessesTab, media: MediaTab, disk: DiskTab, browser: BrowserTab, ascii: WallpaperTab, app: AppTab, titan: TitanTab };
+const TYPE_ICON = { terminal: "terminal", files: "folder", processes: "process", media: "audio", disk: "disk", browser: "globe", ascii: "wallpaper", app: "apptab", titan: "titan" };
 const MAX_TABS = 16;     // eDEX's own tabs
 const MAX_APP_TABS = 24; // app windows shown as tabs
 
@@ -47,6 +48,7 @@ export class Workspace {
     on("open-terminal", ({ cwd, shell } = {}) => this.add("terminal", { cwd, shell }));
     on("open-processes", (opts = {}) => this.openProcesses(opts));
     on("open-disk", (opts = {}) => this.openDisk(opts));
+    on("open-titan", (opts = {}) => this.openTitan(opts));
     // { paths?, play?, focus? } — queue files/folders in the media player.
     on("open-media", async ({ paths, play = true, focus = true } = {}) => {
       if (paths?.length) await addPaths(paths, { play });
@@ -289,7 +291,7 @@ export class Workspace {
   updateCaption() {
     const tab = this.active;
     if (!tab) return;
-    const kind = { terminal: "TERMINAL", files: "FILESYSTEM", processes: "PROCESSES", media: "MEDIA", disk: "DISK USAGE", browser: "BROWSER", ascii: "WALLPAPER", app: "APPLICATION" }[tab.type] || "WORKSPACE";
+    const kind = { terminal: "TERMINAL", files: "FILESYSTEM", processes: "PROCESSES", media: "MEDIA", disk: "DISK USAGE", browser: "BROWSER", ascii: "WALLPAPER", app: "APPLICATION", titan: "TITAN PROTOCOL" }[tab.type] || "WORKSPACE";
     const first = this.visibleTabs().find((t) => t.type === "terminal");
     setText(document.getElementById("work-title-a"), kind);
     setText(document.getElementById("work-title-b"), tab === first && !tab.customLabel ? "MAIN SHELL" : String(tab.label).toUpperCase());
@@ -359,6 +361,17 @@ export class Workspace {
     const tab = this.visibleTabs().find((t) => t.type === "media");
     if (tab) { this.activate(tab); return tab; }
     return this.add("media");
+  }
+
+  // { page? } — Titan Protocol, on that page ("body/sleep" …) when given.
+  async openTitan({ page } = {}) {
+    const tab = this.visibleTabs().find((t) => t.type === "titan");
+    if (tab) {
+      this.activate(tab);
+      if (page) tab.go(page);
+      return tab;
+    }
+    return this.add("titan", page ? { page } : {});
   }
 
   activeTerminal() {
@@ -476,6 +489,7 @@ export class Workspace {
       { label: "Process manager", icon: "process", run: () => this.openProcesses() },
       { label: "Media player", icon: "audio", hint: "Ctrl+Shift+M", run: () => this.openMedia() },
       { label: "Disk usage", icon: "disk", run: () => this.openDisk() },
+      { label: "Titan Protocol", icon: "titan", hint: "Ctrl+Shift+O", run: () => this.openTitan() },
       { label: "ASCII wallpaper", icon: "wallpaper", run: () => this.openWallpaper() }
     ]);
   }

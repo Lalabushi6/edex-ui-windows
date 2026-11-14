@@ -305,6 +305,12 @@ contextBridge.exposeInMainWorld("edex", {
     load: invoke("notes:load"),
     save: invoke("notes:save")
   },
+  titan: {
+    load: invoke("titan:load"),
+    save: invoke("titan:save"),
+    export: invoke("titan:export"),
+    import: invoke("titan:import")
+  },
   kb: {
     list: invoke("kb:list"),
     get: invoke("kb:get"),

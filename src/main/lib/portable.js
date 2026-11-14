@@ -16,7 +16,7 @@ const DATA_DIR = "eDEX-UI Data";
 // Files worth carrying over from this PC's profile on a first portable run.
 // Chromium state, caches and the compiled helper are rebuilt on their own;
 // encrypted keys only open on the Windows account that saved them.
-const CARRY = ["settings.json", "notes.json", "tasks.json", "arrangements.json", "screentime.json", "themes", "keyboards"];
+const CARRY = ["settings.json", "notes.json", "tasks.json", "titan.json", "arrangements.json", "screentime.json", "themes", "keyboards"];
 
 let state = { portable: false, dir: null, exe: null, fresh: false, reason: null };
 

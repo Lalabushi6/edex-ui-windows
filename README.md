@@ -293,6 +293,13 @@ locked down.
   terminal output. Choose Claude Opus 5.5, Sonnet 5.5 or Haiku 5.5.
 - **Weather** with a four-day forecast, **notes** (auto-saved), **clipboard
   history** (memory only, never written to disk) and **quick links**.
+- **Titan Protocol** (`Ctrl+Shift+O`): a life-tracking "OS" in a tab. Four
+  engines (Body, Mind, Money, General) score your daily main and secondary
+  tasks into a Titan Score, with a dashboard, command center, analytics,
+  habits with streaks, a journal, goals, a focus timer, workouts, sleep,
+  weight, nutrition targets, cashflow, deep-work earnings and budgets. Data
+  stays on this PC, and backups are compatible with the Titan Protocol
+  desktop app.
 
 ### Look and feel
 - **The eDEX-UI look**: the original's grid backdrop, "PANEL / SYSTEM"
@@ -405,6 +412,7 @@ locked down.
 | `Ctrl+Shift+K` | On-screen keyboard |
 | `Ctrl+Shift+M` | Media player (in it: `E` equalizer, `V` visualizer, `L` lyrics) |
 | `Ctrl+Shift+G` | Game library |
+| `Ctrl+Shift+O` | Titan Protocol (in it: `Ctrl+K` its command palette) |
 | `Ctrl+Shift+J` | Ask Claude (AI assistant) |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |

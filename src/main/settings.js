@@ -36,7 +36,7 @@ const workspace = () => (v, d) => {
   if (v === null) return null;
   if (!v || !Array.isArray(v.tabs)) return d;
   const tabs = v.tabs.slice(0, 40).map((t) => ({
-    type: ["terminal", "files", "processes", "media", "disk", "browser", "ascii", "app"].includes(t?.type) ? t.type : "terminal",
+    type: ["terminal", "files", "processes", "media", "disk", "browser", "ascii", "app", "titan"].includes(t?.type) ? t.type : "terminal",
     shell: typeof t?.shell === "string" ? t.shell.slice(0, 32) : undefined,
     // Tabs reopen by themselves, so a network folder is never one to come back to.
     cwd: typeof t?.cwd === "string" && !isUncPath(t.cwd) ? t.cwd.slice(0, 1024) : undefined,
@@ -44,6 +44,8 @@ const workspace = () => (v, d) => {
     url: t?.type === "browser" && typeof t.url === "string" && /^https?:\/\//i.test(t.url) ? t.url.slice(0, 4096) : undefined,
     exe: t?.type === "app" && typeof t.exe === "string" ? t.exe.slice(0, 1024) : undefined,
     title: t?.type === "app" && typeof t.title === "string" ? t.title.slice(0, 200) : undefined,
+    // The Titan Protocol page the tab was on ("dashboard", "body/sleep" …).
+    page: t?.type === "titan" && typeof t.page === "string" && /^[a-z]{1,16}(\/[a-z-]{1,16})?$/.test(t.page) ? t.page : undefined,
     splits: t?.type === "terminal" && Array.isArray(t.splits)
       ? t.splits.slice(0, 3).map((s) => ({ shell: typeof s?.shell === "string" ? s.shell.slice(0, 32) : undefined }))
       : undefined,

@@ -44,6 +44,7 @@ const { registerRadio } = require("./ipc/radio");
 const { registerLibrary } = require("./ipc/library");
 const { registerCalendarFeeds } = require("./ipc/calfeeds");
 const { registerBenchmark } = require("./ipc/benchmark");
+const { registerTitan } = require("./ipc/titan");
 const { Hud } = require("./hud");
 const { Screensaver } = require("./lib/screensaver");
 const { Notices } = require("./lib/notices");
@@ -95,6 +96,7 @@ function start() {
   let lyrics;
   let library;
   let calfeeds;
+  let titan;
   let livewall;
   let profileTimer;
   let lastHotkeyFailures = "";
@@ -135,7 +137,7 @@ function start() {
         type: "question", buttons: ["Copy them to the drive", "Start fresh"], defaultId: 0, cancelId: 1, noLink: true,
         title: "eDEX-UI portable",
         message: "Copy your eDEX settings from this PC?",
-        detail: `This portable copy keeps everything in "${portable.DATA_DIR}" next to the .exe. eDEX is also installed on this PC: copy its settings, notes, tasks, themes and keyboard layouts to the drive?`
+        detail: `This portable copy keeps everything in "${portable.DATA_DIR}" next to the .exe. eDEX is also installed on this PC: copy its settings, notes, tasks, Titan Protocol data, themes and keyboard layouts to the drive?`
       }).catch(() => ({ response: 1 }));
       if (response === 0) portable.copyFromPc();
     }
@@ -262,6 +264,7 @@ function start() {
     registerRadio({ windows, settings });
     library = registerLibrary({ settings, windows });
     calfeeds = registerCalendarFeeds({ settings, windows });
+    titan = registerTitan({ windows });
     registerBenchmark({ settings, telemetry, bridge, aux, portable, startup, browser });
     livewall = new LiveWallpaper({ settings, windows, bridge, gameMode });
     // Development runs can poke these from the main-process inspector.
@@ -284,8 +287,9 @@ function start() {
     const win = windows.create();
     win.once("ready-to-show", () => { startup.readyToShow = Date.now(); });
     // Shutting down, restarting or signing out ends eDEX without a quit, so
-    // will-quit never runs: save screen time while there's still time.
-    win.on("session-end", () => screenTime?.flush());
+    // will-quit never runs: save screen time and Titan Protocol while there's
+    // still time.
+    win.on("session-end", () => { screenTime?.flush(); titan?.flush(); });
     recovering.finally(() => takeover.attach(win));
     hud.attach(win);
     browser.attach(win);
@@ -501,6 +505,7 @@ function start() {
     games?.flush();
     lyrics?.flush();
     library?.flush();
+    titan?.flush();
     calfeeds?.stop();
     appTabs?.stop();
     notices?.flush();

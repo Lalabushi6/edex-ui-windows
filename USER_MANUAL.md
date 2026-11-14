@@ -770,6 +770,59 @@ that fills the screen) or a program keeps the display on (video playback,
 calls); turn **Not during videos or full-screen apps** off if it never
 starts. Starting it by hand (Preview, the tray, the launcher) never locks.
 
+### Titan Protocol (life tracker)
+
+**Titan Protocol** is a personal "life OS" that runs as a tab inside eDEX:
+`Ctrl+Shift+O`, the dock's pentagon button, the ⌄ new-tab menu, or type
+"titan" in the launcher (every page is listed there too, such as "Titan:
+Sleep tracker"). Inside it, `Ctrl+K` opens its own command palette for
+jumping to a page or adding a task, habit, goal, expense or meal. A short
+walkthrough shows the first time; Settings → Replay onboarding shows it
+again.
+
+- **Four engines**: Body, Mind, Money and General. Each has *main* tasks
+  (2 points) and *secondary* tasks (1 point). A day's score is the share of
+  points you earn; 60% or more is a *consistent day*. A task can be set to
+  fewer than 7 days a week: once its weekly goal is met it stops counting
+  for the rest of the week, so rest days don't cost anything. A task doesn't
+  count on days before you created it. Each engine page has the day score,
+  a calendar coloured red / yellow / green by score, consistency and streaks,
+  and the task lists; pick any past day to fill it in.
+- **Titan Score**: the average of the engines you're using today.
+  **Dashboard** shows it with each engine, a radar, the week against last
+  week, a 7-day trend and a planner (engines at risk, open main tasks and the
+  next best action). **Command Center** lists every engine's tasks for a day
+  with a 2- or 3-month calendar; **Analytics** has the trend over 7 days to a
+  year, engine averages, a 12-week heatmap, weekly averages, streaks and your
+  most and least reliable tasks.
+- **Habits** with streaks that forgive one missed day a week, and 12 weeks of
+  history; **Journal** (one entry a day, saved as you type, searchable);
+  **Goals** with a deadline and tasks, where a *daily* goal task is also a
+  main task in the engine you pick (ticking either one ticks both).
+- **Focus timer**: focus / break / long-break blocks, a daily target and the
+  last 7 days. Blocks keep running while you use the rest of eDEX; the
+  remaining time shows in Titan's status line, and a notification says when a
+  block ends.
+- **Body tools**: **Workouts** (65 exercises and 10 starter templates; start
+  a workout, log sets of weight × reps, history with volume), **Sleep**
+  (bedtime, wake time, quality, 14-day chart), **Weight** (daily kg, 7- and
+  30-day change, trend) and **Nutrition** (a profile that works out calorie
+  and macro targets with the Mifflin-St Jeor equation, and meals per day).
+- **Money tools**: **Cashflow** (expenses as needs or wants, income, money
+  borrowed and repaid, day and month summaries, top categories), **Deep
+  work** (focused-work tasks; side-hustle and freelance ones record what they
+  earned) and **Budgets** (monthly limits per category). Currency: USD, EUR,
+  GBP or INR.
+
+Everything is kept on this PC in `titan.json` in eDEX's data folder (and
+carried along by the portable build). Settings → **Export data** writes a
+backup in the same format as the Titan Protocol desktop app
+(`titan-backup-YYYY-MM-DD.json`), so you can import your data from that app,
+or take it back there; **Import data** replaces everything after asking.
+Titan follows the eDEX theme, or its own *Cyberpunk* or *Black metallic*
+accent. Its code loads the first time you open it, and nothing of it runs
+while its tab is hidden, except the end of a running focus block.
+
 ## 16. Performance
 
 eDEX is built to stay out of the way:
@@ -840,6 +893,7 @@ yourself if you want to compare PCs.
 | `Ctrl+Shift+K` | On-screen keyboard |
 | `Ctrl+Shift+M` | Media player |
 | `Ctrl+Shift+G` | Game library |
+| `Ctrl+Shift+O` | Titan Protocol (in it: `Ctrl+K` its command palette) |
 | `Ctrl+Shift+J` | Ask Claude (AI assistant) |
 | `Ctrl+Shift+S` | Export a system snapshot (JSON, saved to Documents) |
 | `Ctrl+,` | Settings |
